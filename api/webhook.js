@@ -1,507 +1,382 @@
-
-// VoiceTask AI - API كامل لـ Vercel
 // ============================================================
-// ضع هذه المتغيرات في Vercel Environment Variables:
-//
-// ANTHROPIC_API_KEY    = مفتاح Claude API
-// TWILIO_ACCOUNT_SID   = Twilio SID
+// VoiceTask AI - Vercel Webhook Handler
+// Version: 2.0.0
+// ============================================================
+// Environment Variables Required:
+// ANTHROPIC_API_KEY    = Claude API Key
+// TWILIO_ACCOUNT_SID   = Twilio Account SID
 // TWILIO_AUTH_TOKEN    = Twilio Auth Token
 // TWILIO_WHATSAPP_FROM = whatsapp:+14155238886
-// SUPABASE_URL         = https://qsoljimpylngqwaqrjsk.supabase.co
+// SUPABASE_URL         = https://xxxx.supabase.co
 // SUPABASE_KEY         = Supabase Secret Key
-// YOUR_WHATSAPP        = whatsapp:+966XXXXXXXXX (رقمك)
+// YOUR_WHATSAPP        = whatsapp:+966XXXXXXXXX
+// OPENAI_API_KEY       = OpenAI API Key (for Whisper)
 // ============================================================
 
+"use strict";
 const https = require("https");
 
-// ============================================================
-// دالة إرسال واتساب عبر Twilio
-// ============================================================
 async function sendWhatsApp(to, message) {
   const accountSid = process.env.TWILIO_ACCOUNT_SID;
-  const authToken = process.env.TWILIO_AUTH_TOKEN;
-  const from = process.env.TWILIO_WHATSAPP_FROM;
-
-  const body = new URLSearchParams({
-    To: to,
-    From: from,
-    Body: message,
-  }).toString();
-
+  const authToken  = process.env.TWILIO_AUTH_TOKEN;
+  const from       = process.env.TWILIO_WHATSAPP_FROM;
+  const body = new URLSearchParams({ To: to, From: from, Body: message }).toString();
   return new Promise((resolve, reject) => {
-    const options = {
-      hostname: "api.twilio.com",
-      path: `/2010-04-01/Accounts/${accountSid}/Messages.json`,
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-        Authorization:
-          "Basic " +
-          Buffer.from(`${accountSid}:${authToken}`).toString("base64"),
+    const req = https.request(
+      {
+        hostname: "api.twilio.com",
+        path: `/2010-04-01/Accounts/${accountSid}/Messages.json`,
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          Authorization: "Basic " + Buffer.from(`${accountSid}:${authToken}`).toString("base64"),
+        },
       },
-    };
-
-    const req = https.request(options, (res) => {
-      let data = "";
-      res.on("data", (chunk) => (data += chunk));
-      res.on("end", () => resolve(JSON.parse(data)));
-    });
-
+      (res) => {
+        let data = "";
+        res.on("data", (c) => (data += c));
+        res.on("end", () => { try { resolve(JSON.parse(data)); } catch (e) { resolve({}); } });
+      }
+    );
     req.on("error", reject);
     req.write(body);
     req.end();
   });
 }
 
-// ============================================================
-// دالة تحليل النص عبر Claude
-// ============================================================
+async function transcribeAudio(mediaUrl) {
+  const accountSid = process.env.TWILIO_ACCOUNT_SID;
+  const authToken  = process.env.TWILIO_AUTH_TOKEN;
+
+  const audioBuffer = await new Promise((resolve, reject) => {
+    const parsedUrl = new URL(mediaUrl);
+    const req = https.request(
+      {
+        hostname: parsedUrl.hostname,
+        path: parsedUrl.pathname + parsedUrl.search,
+        method: "GET",
+        headers: {
+          Authorization: "Basic " + Buffer.from(`${accountSid}:${authToken}`).toString("base64"),
+        },
+      },
+      (res) => {
+        if (res.statusCode === 301 || res.statusCode === 302) {
+          const redirectUrl = new URL(res.headers.location);
+          const redirectReq = https.request(
+            { hostname: redirectUrl.hostname, path: redirectUrl.pathname + redirectUrl.search, method: "GET" },
+            (r) => {
+              const chunks = [];
+              r.on("data", (c) => chunks.push(c));
+              r.on("end", () => resolve(Buffer.concat(chunks)));
+            }
+          );
+          redirectReq.on("error", reject);
+          redirectReq.end();
+        } else {
+          const chunks = [];
+          res.on("data", (c) => chunks.push(c));
+          res.on("end", () => resolve(Buffer.concat(chunks)));
+        }
+      }
+    );
+    req.on("error", reject);
+    req.end();
+  });
+
+  const boundary = "VoiceTask" + Date.now();
+  const CRLF = "\r\n";
+  const formBody = Buffer.concat([
+    Buffer.from(
+      `--${boundary}${CRLF}` +
+      `Content-Disposition: form-data; name="file"; filename="audio.ogg"${CRLF}` +
+      `Content-Type: audio/ogg${CRLF}${CRLF}`
+    ),
+    audioBuffer,
+    Buffer.from(
+      `${CRLF}--${boundary}${CRLF}` +
+      `Content-Disposition: form-data; name="model"${CRLF}${CRLF}` +
+      `whisper-1${CRLF}` +
+      `--${boundary}${CRLF}` +
+      `Content-Disposition: form-data; name="language"${CRLF}${CRLF}` +
+      `ar${CRLF}` +
+      `--${boundary}--${CRLF}`
+    ),
+  ]);
+
+  return new Promise((resolve, reject) => {
+    const req = https.request(
+      {
+        hostname: "api.openai.com",
+        path: "/v1/audio/transcriptions",
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+          "Content-Type": `multipart/form-data; boundary=${boundary}`,
+          "Content-Length": formBody.length,
+        },
+      },
+      (res) => {
+        let data = "";
+        res.on("data", (c) => (data += c));
+        res.on("end", () => {
+          try { resolve(JSON.parse(data).text || ""); }
+          catch (e) { reject(new Error("Whisper parse error: " + data)); }
+        });
+      }
+    );
+    req.on("error", reject);
+    req.write(formBody);
+    req.end();
+  });
+}
+
 async function analyzeWithClaude(text) {
-  const today = new Date().toISOString().split("T")[0];
-  const tomorrow = new Date(Date.now() + 86400000).toISOString().split("T")[0];
-  const dayAfter = new Date(Date.now() + 172800000).toISOString().split("T")[0];
-
-  const days = {
-    الأحد: 0, الاثنين: 1, الثلاثاء: 2, الأربعاء: 3,
-    الخميس: 4, الجمعة: 5, السبت: 6,
-  };
-
-  const now = new Date();
+  const now      = new Date();
+  const today    = now.toISOString().split("T")[0];
+  const tomorrow = new Date(now.getTime() + 86400000).toISOString().split("T")[0];
+  const dayAfter = new Date(now.getTime() + 172800000).toISOString().split("T")[0];
+  const dayNames = ["الأحد","الاثنين","الثلاثاء","الأربعاء","الخميس","الجمعة","السبت"];
   const dayDates = {};
-  for (const [name, dayNum] of Object.entries(days)) {
-    const diff = (dayNum - now.getDay() + 7) % 7 || 7;
+  dayNames.forEach((name, i) => {
+    const diff = (i - now.getDay() + 7) % 7 || 7;
     const d = new Date(now);
     d.setDate(d.getDate() + diff);
     dayDates[name] = d.toISOString().split("T")[0];
-  }
+  });
 
-  const systemPrompt = `أنت مساعد ذكي لاستخراج المهام من النصوص العربية والإنجليزية.
-اليوم: ${today}
-غداً: ${tomorrow}
-بعد غد: ${dayAfter}
+  const systemPrompt = `أنت مساعد ذكي متخصص في استخراج المهام من النصوص العربية والإنجليزية.
+التواريخ: اليوم=${today}, غداً=${tomorrow}, بعد غد=${dayAfter}
 أيام الأسبوع: ${JSON.stringify(dayDates)}
-
-قواعد مهمة:
-- "بكرة" أو "غداً" = ${tomorrow}
-- "اليوم" = ${today}
-- إذا ذُكر يوم من الأسبوع استخدم التاريخ المقابل
-- إذا لم يُذكر وقت استخدم "09:00"
-- الأولوية: high للعاجل/المهم، medium للعادي، low للاختياري
-- استخرج اسم الشخص إذا ذُكر
-- استخرج اسم المشروع إذا ذُكر
-
-أجب فقط بـ JSON صالح بدون أي نص إضافي:
-{
-  "tasks": [
-    {
-      "title": "عنوان المهمة",
-      "date": "YYYY-MM-DD",
-      "time": "HH:MM",
-      "priority": "high|medium|low",
-      "person": "اسم الشخص أو null",
-      "project": "اسم المشروع أو null",
-      "notes": "ملاحظات إضافية أو null",
-      "recurring": "daily|weekly|monthly أو null"
-    }
-  ]
-}`;
+قواعد: إذا لم يُذكر وقت استخدم "09:00"، إذا لم يُذكر تاريخ استخدم اليوم.
+أجب فقط بـ JSON صالح:
+{"tasks":[{"title":"","date":"YYYY-MM-DD","time":"HH:MM","priority":"high|medium|low","person":null,"project":null,"notes":null}]}`;
 
   return new Promise((resolve, reject) => {
     const bodyData = JSON.stringify({
       model: "claude-sonnet-4-20250514",
       max_tokens: 1000,
       system: systemPrompt,
-      messages: [
-        {
-          role: "user",
-          content: `استخرج المهام من هذا النص:\n"${text}"`,
+      messages: [{ role: "user", content: `استخرج المهام من:\n"${text}"` }],
+    });
+    const req = https.request(
+      {
+        hostname: "api.anthropic.com",
+        path: "/v1/messages",
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": process.env.ANTHROPIC_API_KEY,
+          "anthropic-version": "2023-06-01",
         },
-      ],
-    });
-
-    const options = {
-      hostname: "api.anthropic.com",
-      path: "/v1/messages",
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": process.env.ANTHROPIC_API_KEY,
-        "anthropic-version": "2023-06-01",
       },
-    };
-
-    const req = https.request(options, (res) => {
-      let data = "";
-      res.on("data", (chunk) => (data += chunk));
-      res.on("end", () => {
-        try {
-          const response = JSON.parse(data);
-          const text = response.content?.map((b) => b.text || "").join("") || "{}";
-          const clean = text.replace(/```json|```/g, "").trim();
-          resolve(JSON.parse(clean));
-        } catch (e) {
-          reject(new Error("فشل في تحليل رد Claude: " + e.message));
-        }
-      });
-    });
-
-    req.on("error", reject);
-    req.write(bodyData);
-    req.end();
-  });
-}
-
-// ============================================================
-// دالة حفظ المهام في Supabase
-// ============================================================
-async function saveTaskToSupabase(task) {
-  return new Promise((resolve, reject) => {
-    const bodyData = JSON.stringify({
-      title: task.title,
-      date: task.date,
-      time: task.time,
-      priority: task.priority || "medium",
-      status: "new",
-      person: task.person || null,
-      project: task.project || null,
-      description: task.notes || null,
-    });
-
-    const url = new URL(
-      `${process.env.SUPABASE_URL}/rest/v1/tasks`
+      (res) => {
+        let data = "";
+        res.on("data", (c) => (data += c));
+        res.on("end", () => {
+          try {
+            const response = JSON.parse(data);
+            const rawText = response.content?.map((b) => b.text || "").join("") || "{}";
+            resolve(JSON.parse(rawText.replace(/```json|```/g, "").trim()));
+          } catch (e) { reject(new Error("Claude parse error: " + e.message)); }
+        });
+      }
     );
-
-    const options = {
-      hostname: url.hostname,
-      path: url.pathname,
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        apikey: process.env.SUPABASE_KEY,
-        Authorization: `Bearer ${process.env.SUPABASE_KEY}`,
-        Prefer: "return=representation",
-      },
-    };
-
-    const req = https.request(options, (res) => {
-      let data = "";
-      res.on("data", (chunk) => (data += chunk));
-      res.on("end", () => {
-        try {
-          resolve(JSON.parse(data));
-        } catch (e) {
-          resolve([]);
-        }
-      });
-    });
-
     req.on("error", reject);
     req.write(bodyData);
     req.end();
   });
 }
 
-// ============================================================
-// دالة جلب مهام اليوم من Supabase
-// ============================================================
+async function saveTaskToSupabase(task) {
+  const bodyData = JSON.stringify({
+    title: task.title, date: task.date, time: task.time,
+    priority: task.priority || "medium", status: "new",
+    person: task.person || null, project: task.project || null,
+    description: task.notes || null,
+  });
+  const url = new URL(`${process.env.SUPABASE_URL}/rest/v1/tasks`);
+  return new Promise((resolve, reject) => {
+    const req = https.request(
+      {
+        hostname: url.hostname, path: url.pathname, method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          apikey: process.env.SUPABASE_KEY,
+          Authorization: `Bearer ${process.env.SUPABASE_KEY}`,
+          Prefer: "return=representation",
+        },
+      },
+      (res) => {
+        let data = "";
+        res.on("data", (c) => (data += c));
+        res.on("end", () => { try { resolve(JSON.parse(data)); } catch (e) { resolve([]); } });
+      }
+    );
+    req.on("error", reject);
+    req.write(bodyData);
+    req.end();
+  });
+}
+
 async function getTodayTasks() {
   const today = new Date().toISOString().split("T")[0];
-
-  return new Promise((resolve, reject) => {
-    const url = new URL(
-      `${process.env.SUPABASE_URL}/rest/v1/tasks?date=eq.${today}&order=time.asc`
-    );
-
-    const options = {
-      hostname: url.hostname,
-      path: url.pathname + url.search,
-      method: "GET",
-      headers: {
-        apikey: process.env.SUPABASE_KEY,
-        Authorization: `Bearer ${process.env.SUPABASE_KEY}`,
+  const url = new URL(`${process.env.SUPABASE_URL}/rest/v1/tasks?date=eq.${today}&order=time.asc`);
+  return new Promise((resolve) => {
+    const req = https.request(
+      {
+        hostname: url.hostname, path: url.pathname + url.search, method: "GET",
+        headers: { apikey: process.env.SUPABASE_KEY, Authorization: `Bearer ${process.env.SUPABASE_KEY}` },
       },
-    };
-
-    const req = https.request(options, (res) => {
-      let data = "";
-      res.on("data", (chunk) => (data += chunk));
-      res.on("end", () => {
-        try {
-          resolve(JSON.parse(data));
-        } catch (e) {
-          resolve([]);
-        }
-      });
-    });
-
+      (res) => {
+        let data = "";
+        res.on("data", (c) => (data += c));
+        res.on("end", () => { try { resolve(JSON.parse(data)); } catch (e) { resolve([]); } });
+      }
+    );
     req.on("error", () => resolve([]));
     req.end();
   });
 }
 
-// ============================================================
-// دالة جلب مهام الأسبوع من Supabase
-// ============================================================
 async function getWeekTasks() {
   const today = new Date().toISOString().split("T")[0];
   const nextWeek = new Date(Date.now() + 7 * 86400000).toISOString().split("T")[0];
-
-  return new Promise((resolve, reject) => {
-    const url = new URL(
-      `${process.env.SUPABASE_URL}/rest/v1/tasks?date=gte.${today}&date=lte.${nextWeek}&order=date.asc,time.asc`
-    );
-
-    const options = {
-      hostname: url.hostname,
-      path: url.pathname + url.search,
-      method: "GET",
-      headers: {
-        apikey: process.env.SUPABASE_KEY,
-        Authorization: `Bearer ${process.env.SUPABASE_KEY}`,
+  const url = new URL(`${process.env.SUPABASE_URL}/rest/v1/tasks?date=gte.${today}&date=lte.${nextWeek}&order=date.asc,time.asc`);
+  return new Promise((resolve) => {
+    const req = https.request(
+      {
+        hostname: url.hostname, path: url.pathname + url.search, method: "GET",
+        headers: { apikey: process.env.SUPABASE_KEY, Authorization: `Bearer ${process.env.SUPABASE_KEY}` },
       },
-    };
-
-    const req = https.request(options, (res) => {
-      let data = "";
-      res.on("data", (chunk) => (data += chunk));
-      res.on("end", () => {
-        try {
-          resolve(JSON.parse(data));
-        } catch (e) {
-          resolve([]);
-        }
-      });
-    });
-
+      (res) => {
+        let data = "";
+        res.on("data", (c) => (data += c));
+        res.on("end", () => { try { resolve(JSON.parse(data)); } catch (e) { resolve([]); } });
+      }
+    );
     req.on("error", () => resolve([]));
     req.end();
   });
 }
 
-// ============================================================
-// دالة تنسيق رسالة المهام
-// ============================================================
 function formatTasksMessage(tasks) {
-  if (!tasks || tasks.length === 0) {
-    return "✅ تم استلام رسالتك ولكن لم أجد مهام واضحة.\n\nجرب مثلاً:\n\"فكرني أكلم أحمد بكرة الساعة 10\"";
-  }
-
+  if (!tasks || tasks.length === 0)
+    return "✅ تم استلام رسالتك ولكن لم أجد مهام واضحة.\n\n💡 جرب:\n\"فكرني أكلم أحمد بكرة الساعة 10\"";
   const priorityEmoji = { high: "🔴", medium: "🟡", low: "🟢" };
   const priorityLabel = { high: "عالية", medium: "متوسطة", low: "منخفضة" };
-
-  let message = `✅ *تم استخراج ${tasks.length} مهمة بنجاح!*\n\n`;
-
+  let msg = `✅ *تم استخراج ${tasks.length} مهمة بنجاح!*\n\n`;
   tasks.forEach((task, i) => {
     const emoji = priorityEmoji[task.priority] || "🟡";
-    message += `*${i + 1}️⃣ ${task.title}*\n`;
-    message += `📅 ${task.date} ⏰ ${task.time}\n`;
-    message += `${emoji} أولوية ${priorityLabel[task.priority] || "متوسطة"}`;
-    if (task.person) message += ` | 👤 ${task.person}`;
-    if (task.project) message += ` | 📁 ${task.project}`;
-    if (task.notes) message += `\n📝 ${task.notes}`;
-    message += "\n\n";
+    msg += `*${i + 1}️⃣ ${task.title}*\n📅 ${task.date}  ⏰ ${task.time}\n`;
+    msg += `${emoji} أولوية ${priorityLabel[task.priority] || "متوسطة"}`;
+    if (task.person)  msg += `  |  👤 ${task.person}`;
+    if (task.project) msg += `  |  📁 ${task.project}`;
+    if (task.notes)   msg += `\n📝 ${task.notes}`;
+    msg += "\n\n";
   });
-
-  message += "─────────────────\n";
-  message += "💡 *الأوامر المتاحة:*\n";
-  message += "• اكتب *جدولي اليوم* لعرض مهام اليوم\n";
-  message += "• اكتب *جدولي الأسبوع* لعرض الأسبوع\n";
-  message += "• اكتب *مهمة جديدة* لإضافة مهمة";
-
-  return message;
+  msg += "─────────────────\n💡 *الأوامر:*\n• *جدولي اليوم*\n• *جدولي الأسبوع*\n• *مساعدة*";
+  return msg;
 }
 
-// ============================================================
-// دالة تنسيق ملخص اليوم
-// ============================================================
 function formatDailySummary(tasks) {
-  const today = new Date().toLocaleDateString("ar-SA", {
-    weekday: "long",
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
-
-  if (!tasks || tasks.length === 0) {
-    return `📋 *ملخص يومك*\n${today}\n\nلا توجد مهام اليوم 🎉\nاستمتع بيومك!`;
-  }
-
+  if (!tasks || tasks.length === 0) return "📋 *ملخص يومك*\n\nلا توجد مهام اليوم 🎉";
   const done = tasks.filter((t) => t.status === "done").length;
   const inprogress = tasks.filter((t) => t.status === "inprogress").length;
   const late = tasks.filter((t) => t.status === "late").length;
   const newTasks = tasks.filter((t) => t.status === "new").length;
-
-  let message = `📋 *ملخص يومك*\n${today}\n\n`;
-  message += `✅ مكتملة: ${done}\n`;
-  message += `⏳ قيد التنفيذ: ${inprogress}\n`;
-  message += `🆕 جديدة: ${newTasks}\n`;
-  if (late > 0) message += `🔴 متأخرة: ${late}\n`;
-  message += "\n*مهام اليوم:*\n";
-
-  tasks.forEach((task, i) => {
-    const statusEmoji =
-      task.status === "done" ? "✅" :
-      task.status === "inprogress" ? "⏳" :
-      task.status === "late" ? "🔴" : "📌";
-    message += `${statusEmoji} ${task.title} - ${task.time}\n`;
+  let msg = `📋 *ملخص يومك* — ${tasks.length} مهمة\n\n`;
+  msg += `✅ ${done}  |  ⏳ ${inprogress}  |  🆕 ${newTasks}`;
+  if (late > 0) msg += `  |  🔴 ${late}`;
+  msg += "\n\n*المهام:*\n";
+  tasks.forEach((t) => {
+    const s = t.status === "done" ? "✅" : t.status === "inprogress" ? "⏳" : t.status === "late" ? "🔴" : "📌";
+    msg += `${s} ${t.title} — ${t.time}\n`;
   });
-
-  return message;
+  return msg;
 }
 
-// ============================================================
-// دالة تنسيق ملخص الأسبوع
-// ============================================================
 function formatWeeklySummary(tasks) {
-  if (!tasks || tasks.length === 0) {
-    return "📅 *ملخص الأسبوع*\n\nلا توجد مهام هذا الأسبوع 🎉";
-  }
-
+  if (!tasks || tasks.length === 0) return "📅 *ملخص الأسبوع*\n\nلا توجد مهام 🎉";
   const grouped = {};
-  tasks.forEach((task) => {
-    if (!grouped[task.date]) grouped[task.date] = [];
-    grouped[task.date].push(task);
-  });
-
-  let message = `📅 *ملخص الأسبوع*\nإجمالي ${tasks.length} مهمة\n\n`;
-
+  tasks.forEach((t) => { if (!grouped[t.date]) grouped[t.date] = []; grouped[t.date].push(t); });
+  let msg = `📅 *ملخص الأسبوع* — ${tasks.length} مهمة\n\n`;
   for (const [date, dayTasks] of Object.entries(grouped)) {
-    const dayName = new Date(date).toLocaleDateString("ar-SA", { weekday: "long" });
-    message += `*${dayName} ${date}*\n`;
-    dayTasks.forEach((task) => {
-      message += `  • ${task.title} - ${task.time}\n`;
-    });
-    message += "\n";
+    const dayName = new Date(date + "T12:00:00").toLocaleDateString("ar-SA", { weekday: "long" });
+    msg += `*${dayName} ${date}*\n`;
+    dayTasks.forEach((t) => { msg += `  • ${t.title} — ${t.time}\n`; });
+    msg += "\n";
   }
-
-  return message;
+  return msg;
 }
 
-// ============================================================
-// معالج الرسائل الواردة من واتساب
-// ============================================================
-async function handleIncomingMessage(from, body, mediaUrl) {
+async function handleIncomingMessage(from, body) {
   const text = (body || "").trim();
-  const lowerText = text.toLowerCase();
-
-  // أوامر عرض الجداول
-  if (
-    lowerText.includes("جدولي اليوم") ||
-    lowerText.includes("مهام اليوم") ||
-    lowerText === "اليوم"
-  ) {
-    const tasks = await getTodayTasks();
-    return formatDailySummary(tasks);
-  }
-
-  if (
-    lowerText.includes("جدولي الأسبوع") ||
-    lowerText.includes("مهام الأسبوع") ||
-    lowerText === "الأسبوع"
-  ) {
-    const tasks = await getWeekTasks();
-    return formatWeeklySummary(tasks);
-  }
-
-  // أمر المساعدة
-  if (lowerText === "مساعدة" || lowerText === "help" || lowerText === "؟") {
-    return `🤖 *VoiceTask AI - المساعد الذكي*\n\n*كيف تستخدمني:*\n\n📝 أرسل أي رسالة فيها مهام مثل:\n"فكرني أكلم أحمد بكرة الساعة 10"\n\n*الأوامر:*\n• *جدولي اليوم* - مهام اليوم\n• *جدولي الأسبوع* - مهام الأسبوع\n• *مساعدة* - هذه القائمة`;
-  }
-
-  // تحليل النص واستخراج المهام
+  const lower = text.toLowerCase();
+  if (lower.includes("جدولي اليوم") || lower.includes("مهام اليوم") || lower === "اليوم")
+    return formatDailySummary(await getTodayTasks());
+  if (lower.includes("جدولي الأسبوع") || lower.includes("مهام الأسبوع") || lower === "الأسبوع")
+    return formatWeeklySummary(await getWeekTasks());
+  if (lower === "مساعدة" || lower === "help" || lower === "؟")
+    return "🤖 *VoiceTask AI*\n\n📝 أرسل مهامك نصاً أو صوتاً!\n\n*الأوامر:*\n• *جدولي اليوم*\n• *جدولي الأسبوع*\n• *مساعدة*";
   if (text.length > 3) {
     const result = await analyzeWithClaude(text);
     const tasks = result.tasks || [];
-
-    // حفظ المهام في Supabase
     for (const task of tasks) {
-      try {
-        await saveTaskToSupabase(task);
-      } catch (e) {
-        console.error("خطأ في حفظ المهمة:", e.message);
-      }
+      try { await saveTaskToSupabase(task); } catch (e) { console.error("Supabase:", e.message); }
     }
-
     return formatTasksMessage(tasks);
   }
-
-  return "أهلاً! أرسل لي مهامك وسأنظمها لك 😊\nاكتب *مساعدة* لمعرفة الأوامر المتاحة.";
+  return "أهلاً! أرسل لي مهامك 😊\nاكتب *مساعدة* للأوامر.";
 }
 
-// ============================================================
-// الدالة الرئيسية - Vercel Handler
-// ============================================================
 module.exports = async (req, res) => {
-  // السماح بـ CORS
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  if (req.method === "OPTIONS") return res.status(200).end();
+  if (req.method === "GET") return res.status(200).json({ status: "✅ VoiceTask AI يعمل!", version: "2.0.0", time: new Date().toISOString() });
+  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
-  if (req.method === "OPTIONS") {
-    return res.status(200).end();
-  }
-
-  // التحقق من صحة الطلب
-  if (req.method === "GET") {
-    return res.status(200).json({
-      status: "✅ VoiceTask AI يعمل بنجاح!",
-      version: "1.0.0",
-      time: new Date().toISOString(),
-    });
-  }
-
-  if (req.method !== "POST") {
-    return res.status(405).json({ error: "Method not allowed" });
-  }
+  const TwiML = `<?xml version="1.0" encoding="UTF-8"?><Response></Response>`;
 
   try {
-    // استقبال بيانات Twilio
-    const body = req.body || {};
-    const from = body.From || "";
-    const messageBody = body.Body || "";
+    const body     = req.body || {};
+    const from     = body.From      || "";
+    const msgBody  = body.Body      || "";
     const mediaUrl = body.MediaUrl0 || null;
-    const numMedia = parseInt(body.NumMedia || "0");
+    const numMedia = parseInt(body.NumMedia || "0", 10);
 
-    console.log(`📨 رسالة من: ${from}`);
-    console.log(`📝 المحتوى: ${messageBody}`);
-
-    // التحقق من الرقم المصرح له
     const yourNumber = process.env.YOUR_WHATSAPP;
-    if (yourNumber && from !== yourNumber) {
-      console.log(`⚠️ رقم غير مصرح: ${from}`);
-      return res.status(200).send(`<?xml version="1.0" encoding="UTF-8"?><Response></Response>`);
-    }
+    if (yourNumber && from !== yourNumber) return res.status(200).send(TwiML);
 
-    // معالجة الرسالة
     let replyMessage = "";
 
     if (numMedia > 0 && mediaUrl) {
-      replyMessage = "🎤 تم استلام الرسالة الصوتية!\n⏳ جاري المعالجة...\n\n*ملاحظة:* لتفعيل تحويل الصوت، أضف OpenAI Whisper API لاحقاً.\n\nالآن يمكنك إرسال نص المهمة مباشرة.";
+      try {
+        await sendWhatsApp(from, "🎤 تم استلام رسالتك الصوتية!\n⏳ جاري تحويل الصوت إلى نص...");
+        const transcribedText = await transcribeAudio(mediaUrl);
+        if (transcribedText && transcribedText.length > 3) {
+          await sendWhatsApp(from, `📝 *تم تحويل الصوت:*\n"${transcribedText}"`);
+          replyMessage = await handleIncomingMessage(from, transcribedText);
+        } else {
+          replyMessage = "⚠️ لم أتمكن من فهم الرسالة الصوتية.\nحاول مرة أخرى أو أرسل نصاً.";
+        }
+      } catch (e) {
+        console.error("Whisper error:", e.message);
+        replyMessage = "⚠️ حدث خطأ في تحويل الصوت.\nأرسل رسالتك نصاً.";
+      }
     } else {
-      replyMessage = await handleIncomingMessage(from, messageBody, mediaUrl);
+      replyMessage = await handleIncomingMessage(from, msgBody);
     }
 
-    // إرسال الرد عبر Twilio
     await sendWhatsApp(from, replyMessage);
-
-    // رد Twilio
-    res.status(200).send(`<?xml version="1.0" encoding="UTF-8"?><Response></Response>`);
+    return res.status(200).send(TwiML);
 
   } catch (error) {
-    console.error("❌ خطأ:", error.message);
-
-    // إرسال رسالة خطأ للمستخدم
+    console.error("❌ Error:", error.message);
     try {
       const from = req.body?.From || process.env.YOUR_WHATSAPP;
-      if (from) {
-        await sendWhatsApp(
-          from,
-          "⚠️ حدث خطأ مؤقت. حاول مرة أخرى بعد قليل."
-        );
-      }
-    } catch (e) {
-      console.error("فشل إرسال رسالة الخطأ:", e.message);
-    }
-
-    res.status(200).send(`<?xml version="1.0" encoding="UTF-8"?><Response></Response>`);
+      if (from) await sendWhatsApp(from, "⚠️ حدث خطأ مؤقت. حاول مرة أخرى.");
+    } catch (_) {}
+    return res.status(200).send(TwiML);
   }
 };
