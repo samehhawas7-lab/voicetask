@@ -1,6 +1,6 @@
 // ============================================================
 // VoiceTask AI - Vercel Webhook Handler
-// Version: 2.0.0
+// Version: 2.1.0
 // ============================================================
 // Environment Variables Required:
 // ANTHROPIC_API_KEY    = Claude API Key
@@ -16,11 +16,15 @@
 "use strict";
 const https = require("https");
 
+// ============================================================
+// 1. TWILIO - Send WhatsApp Message
+// ============================================================
 async function sendWhatsApp(to, message) {
   const accountSid = process.env.TWILIO_ACCOUNT_SID;
   const authToken  = process.env.TWILIO_AUTH_TOKEN;
   const from       = process.env.TWILIO_WHATSAPP_FROM;
   const body = new URLSearchParams({ To: to, From: from, Body: message }).toString();
+
   return new Promise((resolve, reject) => {
     const req = https.request(
       {
@@ -44,45 +48,43 @@ async function sendWhatsApp(to, message) {
   });
 }
 
+// ============================================================
+// 2. OPENAI WHISPER - Transcribe Voice Message
+// ============================================================
 async function transcribeAudio(mediaUrl) {
   const accountSid = process.env.TWILIO_ACCOUNT_SID;
   const authToken  = process.env.TWILIO_AUTH_TOKEN;
 
+  // Step 1: Download audio from Twilio (with redirect support)
   const audioBuffer = await new Promise((resolve, reject) => {
-    const parsedUrl = new URL(mediaUrl);
-    const req = https.request(
-      {
-        hostname: parsedUrl.hostname,
-        path: parsedUrl.pathname + parsedUrl.search,
-        method: "GET",
-        headers: {
-          Authorization: "Basic " + Buffer.from(`${accountSid}:${authToken}`).toString("base64"),
+    function fetchUrl(url, redirectCount) {
+      if (redirectCount > 5) return reject(new Error("Too many redirects"));
+      const parsedUrl = new URL(url);
+      const req = https.request(
+        {
+          hostname: parsedUrl.hostname,
+          path: parsedUrl.pathname + parsedUrl.search,
+          method: "GET",
+          headers: {
+            Authorization: "Basic " + Buffer.from(`${accountSid}:${authToken}`).toString("base64"),
+          },
         },
-      },
-      (res) => {
-        if (res.statusCode === 301 || res.statusCode === 302) {
-          const redirectUrl = new URL(res.headers.location);
-          const redirectReq = https.request(
-            { hostname: redirectUrl.hostname, path: redirectUrl.pathname + redirectUrl.search, method: "GET" },
-            (r) => {
-              const chunks = [];
-              r.on("data", (c) => chunks.push(c));
-              r.on("end", () => resolve(Buffer.concat(chunks)));
-            }
-          );
-          redirectReq.on("error", reject);
-          redirectReq.end();
-        } else {
+        (res) => {
+          if (res.statusCode === 301 || res.statusCode === 302 || res.statusCode === 303) {
+            return fetchUrl(res.headers.location, redirectCount + 1);
+          }
           const chunks = [];
           res.on("data", (c) => chunks.push(c));
           res.on("end", () => resolve(Buffer.concat(chunks)));
         }
-      }
-    );
-    req.on("error", reject);
-    req.end();
+      );
+      req.on("error", reject);
+      req.end();
+    }
+    fetchUrl(mediaUrl, 0);
   });
 
+  // Step 2: Send to Whisper API
   const boundary = "VoiceTask" + Date.now();
   const CRLF = "\r\n";
   const formBody = Buffer.concat([
@@ -119,8 +121,11 @@ async function transcribeAudio(mediaUrl) {
         let data = "";
         res.on("data", (c) => (data += c));
         res.on("end", () => {
-          try { resolve(JSON.parse(data).text || ""); }
-          catch (e) { reject(new Error("Whisper parse error: " + data)); }
+          try {
+            const parsed = JSON.parse(data);
+            if (parsed.error) reject(new Error(parsed.error.message));
+            else resolve(parsed.text || "");
+          } catch (e) { reject(new Error("Whisper parse error: " + data)); }
         });
       }
     );
@@ -130,11 +135,15 @@ async function transcribeAudio(mediaUrl) {
   });
 }
 
+// ============================================================
+// 3. ANTHROPIC CLAUDE - Extract Tasks from Text
+// ============================================================
 async function analyzeWithClaude(text) {
   const now      = new Date();
   const today    = now.toISOString().split("T")[0];
   const tomorrow = new Date(now.getTime() + 86400000).toISOString().split("T")[0];
   const dayAfter = new Date(now.getTime() + 172800000).toISOString().split("T")[0];
+
   const dayNames = ["الأحد","الاثنين","الثلاثاء","الأربعاء","الخميس","الجمعة","السبت"];
   const dayDates = {};
   dayNames.forEach((name, i) => {
@@ -145,19 +154,44 @@ async function analyzeWithClaude(text) {
   });
 
   const systemPrompt = `أنت مساعد ذكي متخصص في استخراج المهام من النصوص العربية والإنجليزية.
-التواريخ: اليوم=${today}, غداً=${tomorrow}, بعد غد=${dayAfter}
-أيام الأسبوع: ${JSON.stringify(dayDates)}
-قواعد: إذا لم يُذكر وقت استخدم "09:00"، إذا لم يُذكر تاريخ استخدم اليوم.
-أجب فقط بـ JSON صالح:
-{"tasks":[{"title":"","date":"YYYY-MM-DD","time":"HH:MM","priority":"high|medium|low","person":null,"project":null,"notes":null}]}`;
+
+التواريخ المرجعية:
+- اليوم: ${today}
+- غداً / بكرة: ${tomorrow}
+- بعد غد: ${dayAfter}
+- أيام الأسبوع: ${JSON.stringify(dayDates)}
+
+قواعد مهمة:
+1. إذا لم يُذكر وقت استخدم "09:00"
+2. إذا لم يُذكر تاريخ استخدم اليوم
+3. الأولوية: high=عاجل/مهم، medium=عادي، low=اختياري
+4. استخرج اسم الشخص إن وُجد
+5. استخرج اسم المشروع إن وُجد
+6. الأرقام العربية (١٢٣) تساوي الأرقام الإنجليزية (123)
+
+أجب فقط بـ JSON صالح بدون أي نص إضافي:
+{
+  "tasks": [
+    {
+      "title": "عنوان المهمة",
+      "date": "YYYY-MM-DD",
+      "time": "HH:MM",
+      "priority": "high|medium|low",
+      "person": "اسم أو null",
+      "project": "مشروع أو null",
+      "notes": "ملاحظات أو null"
+    }
+  ]
+}`;
 
   return new Promise((resolve, reject) => {
     const bodyData = JSON.stringify({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 1000,
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 1024,
       system: systemPrompt,
-      messages: [{ role: "user", content: `استخرج المهام من:\n"${text}"` }],
+      messages: [{ role: "user", content: `استخرج المهام من النص التالي:\n"${text}"` }],
     });
+
     const req = https.request(
       {
         hostname: "api.anthropic.com",
@@ -175,9 +209,13 @@ async function analyzeWithClaude(text) {
         res.on("end", () => {
           try {
             const response = JSON.parse(data);
+            if (response.error) return reject(new Error("Claude error: " + response.error.message));
             const rawText = response.content?.map((b) => b.text || "").join("") || "{}";
-            resolve(JSON.parse(rawText.replace(/```json|```/g, "").trim()));
-          } catch (e) { reject(new Error("Claude parse error: " + e.message)); }
+            const clean = rawText.replace(/```json|```/g, "").trim();
+            resolve(JSON.parse(clean));
+          } catch (e) {
+            reject(new Error("Claude parse error: " + e.message));
+          }
         });
       }
     );
@@ -187,23 +225,34 @@ async function analyzeWithClaude(text) {
   });
 }
 
+// ============================================================
+// 4. SUPABASE - Save Task
+// ============================================================
 async function saveTaskToSupabase(task) {
   const bodyData = JSON.stringify({
-    title: task.title, date: task.date, time: task.time,
-    priority: task.priority || "medium", status: "new",
-    person: task.person || null, project: task.project || null,
-    description: task.notes || null,
+    title:       task.title,
+    date:        task.date,
+    time:        task.time,
+    priority:    task.priority || "medium",
+    status:      "new",
+    person:      task.person  || null,
+    project:     task.project || null,
+    description: task.notes   || null,
   });
+
   const url = new URL(`${process.env.SUPABASE_URL}/rest/v1/tasks`);
+
   return new Promise((resolve, reject) => {
     const req = https.request(
       {
-        hostname: url.hostname, path: url.pathname, method: "POST",
+        hostname: url.hostname,
+        path:     url.pathname,
+        method:   "POST",
         headers: {
           "Content-Type": "application/json",
-          apikey: process.env.SUPABASE_KEY,
-          Authorization: `Bearer ${process.env.SUPABASE_KEY}`,
-          Prefer: "return=representation",
+          apikey:         process.env.SUPABASE_KEY,
+          Authorization:  `Bearer ${process.env.SUPABASE_KEY}`,
+          Prefer:         "return=representation",
         },
       },
       (res) => {
@@ -218,14 +267,23 @@ async function saveTaskToSupabase(task) {
   });
 }
 
+// ============================================================
+// 5. SUPABASE - Get Today Tasks
+// ============================================================
 async function getTodayTasks() {
   const today = new Date().toISOString().split("T")[0];
   const url = new URL(`${process.env.SUPABASE_URL}/rest/v1/tasks?date=eq.${today}&order=time.asc`);
+
   return new Promise((resolve) => {
     const req = https.request(
       {
-        hostname: url.hostname, path: url.pathname + url.search, method: "GET",
-        headers: { apikey: process.env.SUPABASE_KEY, Authorization: `Bearer ${process.env.SUPABASE_KEY}` },
+        hostname: url.hostname,
+        path:     url.pathname + url.search,
+        method:   "GET",
+        headers: {
+          apikey:        process.env.SUPABASE_KEY,
+          Authorization: `Bearer ${process.env.SUPABASE_KEY}`,
+        },
       },
       (res) => {
         let data = "";
@@ -238,15 +296,26 @@ async function getTodayTasks() {
   });
 }
 
+// ============================================================
+// 6. SUPABASE - Get Week Tasks
+// ============================================================
 async function getWeekTasks() {
-  const today = new Date().toISOString().split("T")[0];
+  const today    = new Date().toISOString().split("T")[0];
   const nextWeek = new Date(Date.now() + 7 * 86400000).toISOString().split("T")[0];
-  const url = new URL(`${process.env.SUPABASE_URL}/rest/v1/tasks?date=gte.${today}&date=lte.${nextWeek}&order=date.asc,time.asc`);
+  const url = new URL(
+    `${process.env.SUPABASE_URL}/rest/v1/tasks?date=gte.${today}&date=lte.${nextWeek}&order=date.asc,time.asc`
+  );
+
   return new Promise((resolve) => {
     const req = https.request(
       {
-        hostname: url.hostname, path: url.pathname + url.search, method: "GET",
-        headers: { apikey: process.env.SUPABASE_KEY, Authorization: `Bearer ${process.env.SUPABASE_KEY}` },
+        hostname: url.hostname,
+        path:     url.pathname + url.search,
+        method:   "GET",
+        headers: {
+          apikey:        process.env.SUPABASE_KEY,
+          Authorization: `Bearer ${process.env.SUPABASE_KEY}`,
+        },
       },
       (res) => {
         let data = "";
@@ -259,82 +328,160 @@ async function getWeekTasks() {
   });
 }
 
+// ============================================================
+// 7. FORMAT - Tasks Message
+// ============================================================
 function formatTasksMessage(tasks) {
-  if (!tasks || tasks.length === 0)
-    return "✅ تم استلام رسالتك ولكن لم أجد مهام واضحة.\n\n💡 جرب:\n\"فكرني أكلم أحمد بكرة الساعة 10\"";
+  if (!tasks || tasks.length === 0) {
+    return (
+      "✅ تم استلام رسالتك ولكن لم أجد مهام واضحة.\n\n" +
+      "💡 جرب مثلاً:\n" +
+      "\"فكرني أكلم أحمد بكرة الساعة 10\"\n" +
+      "\"اجتماع مع الفريق الخميس الساعة 2\""
+    );
+  }
+
   const priorityEmoji = { high: "🔴", medium: "🟡", low: "🟢" };
   const priorityLabel = { high: "عالية", medium: "متوسطة", low: "منخفضة" };
+
   let msg = `✅ *تم استخراج ${tasks.length} مهمة بنجاح!*\n\n`;
+
   tasks.forEach((task, i) => {
     const emoji = priorityEmoji[task.priority] || "🟡";
-    msg += `*${i + 1}️⃣ ${task.title}*\n📅 ${task.date}  ⏰ ${task.time}\n`;
+    msg += `*${i + 1}️⃣ ${task.title}*\n`;
+    msg += `📅 ${task.date}  ⏰ ${task.time}\n`;
     msg += `${emoji} أولوية ${priorityLabel[task.priority] || "متوسطة"}`;
     if (task.person)  msg += `  |  👤 ${task.person}`;
     if (task.project) msg += `  |  📁 ${task.project}`;
     if (task.notes)   msg += `\n📝 ${task.notes}`;
     msg += "\n\n";
   });
-  msg += "─────────────────\n💡 *الأوامر:*\n• *جدولي اليوم*\n• *جدولي الأسبوع*\n• *مساعدة*";
+
+  msg += "─────────────────\n";
+  msg += "💡 *الأوامر المتاحة:*\n";
+  msg += "• *جدولي اليوم* - عرض مهام اليوم\n";
+  msg += "• *جدولي الأسبوع* - عرض مهام الأسبوع\n";
+  msg += "• *مساعدة* - قائمة الأوامر";
+
   return msg;
 }
 
+// ============================================================
+// 8. FORMAT - Daily Summary
+// ============================================================
 function formatDailySummary(tasks) {
-  if (!tasks || tasks.length === 0) return "📋 *ملخص يومك*\n\nلا توجد مهام اليوم 🎉";
-  const done = tasks.filter((t) => t.status === "done").length;
+  if (!tasks || tasks.length === 0) {
+    return "📋 *ملخص يومك*\n\nلا توجد مهام اليوم 🎉\nاستمتع بيومك!";
+  }
+
+  const done       = tasks.filter((t) => t.status === "done").length;
   const inprogress = tasks.filter((t) => t.status === "inprogress").length;
-  const late = tasks.filter((t) => t.status === "late").length;
-  const newTasks = tasks.filter((t) => t.status === "new").length;
+  const late       = tasks.filter((t) => t.status === "late").length;
+  const newTasks   = tasks.filter((t) => t.status === "new").length;
+
   let msg = `📋 *ملخص يومك* — ${tasks.length} مهمة\n\n`;
-  msg += `✅ ${done}  |  ⏳ ${inprogress}  |  🆕 ${newTasks}`;
-  if (late > 0) msg += `  |  🔴 ${late}`;
+  msg += `✅ مكتملة: ${done}  |  ⏳ قيد التنفيذ: ${inprogress}  |  🆕 جديدة: ${newTasks}`;
+  if (late > 0) msg += `  |  🔴 متأخرة: ${late}`;
   msg += "\n\n*المهام:*\n";
-  tasks.forEach((t) => {
-    const s = t.status === "done" ? "✅" : t.status === "inprogress" ? "⏳" : t.status === "late" ? "🔴" : "📌";
-    msg += `${s} ${t.title} — ${t.time}\n`;
+
+  tasks.forEach((task) => {
+    const s =
+      task.status === "done"       ? "✅" :
+      task.status === "inprogress" ? "⏳" :
+      task.status === "late"       ? "🔴" : "📌";
+    msg += `${s} ${task.title} — ${task.time}\n`;
   });
+
   return msg;
 }
 
+// ============================================================
+// 9. FORMAT - Weekly Summary
+// ============================================================
 function formatWeeklySummary(tasks) {
-  if (!tasks || tasks.length === 0) return "📅 *ملخص الأسبوع*\n\nلا توجد مهام 🎉";
+  if (!tasks || tasks.length === 0) {
+    return "📅 *ملخص الأسبوع*\n\nلا توجد مهام هذا الأسبوع 🎉";
+  }
+
   const grouped = {};
-  tasks.forEach((t) => { if (!grouped[t.date]) grouped[t.date] = []; grouped[t.date].push(t); });
+  tasks.forEach((task) => {
+    if (!grouped[task.date]) grouped[task.date] = [];
+    grouped[task.date].push(task);
+  });
+
   let msg = `📅 *ملخص الأسبوع* — ${tasks.length} مهمة\n\n`;
+
   for (const [date, dayTasks] of Object.entries(grouped)) {
     const dayName = new Date(date + "T12:00:00").toLocaleDateString("ar-SA", { weekday: "long" });
     msg += `*${dayName} ${date}*\n`;
-    dayTasks.forEach((t) => { msg += `  • ${t.title} — ${t.time}\n`; });
+    dayTasks.forEach((task) => { msg += `  • ${task.title} — ${task.time}\n`; });
     msg += "\n";
   }
+
   return msg;
 }
 
+// ============================================================
+// 10. ROUTER - Handle Incoming Message
+// ============================================================
 async function handleIncomingMessage(from, body) {
-  const text = (body || "").trim();
+  const text  = (body || "").trim();
   const lower = text.toLowerCase();
-  if (lower.includes("جدولي اليوم") || lower.includes("مهام اليوم") || lower === "اليوم")
+
+  if (lower.includes("جدولي اليوم") || lower.includes("مهام اليوم") || lower === "اليوم") {
     return formatDailySummary(await getTodayTasks());
-  if (lower.includes("جدولي الأسبوع") || lower.includes("مهام الأسبوع") || lower === "الأسبوع")
+  }
+
+  if (lower.includes("جدولي الأسبوع") || lower.includes("مهام الأسبوع") || lower === "الأسبوع") {
     return formatWeeklySummary(await getWeekTasks());
-  if (lower === "مساعدة" || lower === "help" || lower === "؟")
-    return "🤖 *VoiceTask AI*\n\n📝 أرسل مهامك نصاً أو صوتاً!\n\n*الأوامر:*\n• *جدولي اليوم*\n• *جدولي الأسبوع*\n• *مساعدة*";
+  }
+
+  if (lower === "مساعدة" || lower === "help" || lower === "؟") {
+    return (
+      "🤖 *VoiceTask AI — المساعد الذكي*\n\n" +
+      "*كيف تستخدمني:*\n" +
+      "📝 أرسل مهامك نصاً أو صوتاً، مثل:\n" +
+      "\"فكرني أكلم أحمد بكرة الساعة 10\"\n\n" +
+      "*الأوامر:*\n" +
+      "• *جدولي اليوم* — مهام اليوم\n" +
+      "• *جدولي الأسبوع* — مهام الأسبوع\n" +
+      "• *مساعدة* — هذه القائمة"
+    );
+  }
+
   if (text.length > 3) {
     const result = await analyzeWithClaude(text);
-    const tasks = result.tasks || [];
+    const tasks  = result.tasks || [];
     for (const task of tasks) {
-      try { await saveTaskToSupabase(task); } catch (e) { console.error("Supabase:", e.message); }
+      try { await saveTaskToSupabase(task); }
+      catch (e) { console.error("Supabase error:", e.message); }
     }
     return formatTasksMessage(tasks);
   }
-  return "أهلاً! أرسل لي مهامك 😊\nاكتب *مساعدة* للأوامر.";
+
+  return "أهلاً! أرسل لي مهامك وسأنظمها لك 😊\nاكتب *مساعدة* لمعرفة الأوامر المتاحة.";
 }
 
+// ============================================================
+// 11. MAIN - Vercel Serverless Handler
+// ============================================================
 module.exports = async (req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+
   if (req.method === "OPTIONS") return res.status(200).end();
-  if (req.method === "GET") return res.status(200).json({ status: "✅ VoiceTask AI يعمل!", version: "2.0.0", time: new Date().toISOString() });
-  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
+
+  if (req.method === "GET") {
+    return res.status(200).json({
+      status:  "✅ VoiceTask AI يعمل بنجاح!",
+      version: "2.1.0",
+      time:    new Date().toISOString(),
+    });
+  }
+
+  if (req.method !== "POST") {
+    return res.status(405).json({ error: "Method not allowed" });
+  }
 
   const TwiML = `<?xml version="1.0" encoding="UTF-8"?><Response></Response>`;
 
@@ -345,8 +492,14 @@ module.exports = async (req, res) => {
     const mediaUrl = body.MediaUrl0 || null;
     const numMedia = parseInt(body.NumMedia || "0", 10);
 
+    console.log(`📨 From: ${from} | Media: ${numMedia} | Body: ${msgBody}`);
+
+    // Authorization check
     const yourNumber = process.env.YOUR_WHATSAPP;
-    if (yourNumber && from !== yourNumber) return res.status(200).send(TwiML);
+    if (yourNumber && from !== yourNumber) {
+      console.warn(`⛔ Unauthorized: ${from}`);
+      return res.status(200).send(TwiML);
+    }
 
     let replyMessage = "";
 
@@ -354,15 +507,17 @@ module.exports = async (req, res) => {
       try {
         await sendWhatsApp(from, "🎤 تم استلام رسالتك الصوتية!\n⏳ جاري تحويل الصوت إلى نص...");
         const transcribedText = await transcribeAudio(mediaUrl);
+        console.log(`🎙️ Transcribed: ${transcribedText}`);
+
         if (transcribedText && transcribedText.length > 3) {
           await sendWhatsApp(from, `📝 *تم تحويل الصوت:*\n"${transcribedText}"`);
           replyMessage = await handleIncomingMessage(from, transcribedText);
         } else {
-          replyMessage = "⚠️ لم أتمكن من فهم الرسالة الصوتية.\nحاول مرة أخرى أو أرسل نصاً.";
+          replyMessage = "⚠️ لم أتمكن من فهم الرسالة الصوتية.\nحاول مرة أخرى أو أرسل رسالة نصية.";
         }
       } catch (e) {
         console.error("Whisper error:", e.message);
-        replyMessage = "⚠️ حدث خطأ في تحويل الصوت.\nأرسل رسالتك نصاً.";
+        replyMessage = "⚠️ حدث خطأ في تحويل الصوت.\nأرسل رسالتك نصاً وسأنجز المهمة فوراً.";
       }
     } else {
       replyMessage = await handleIncomingMessage(from, msgBody);
@@ -372,10 +527,10 @@ module.exports = async (req, res) => {
     return res.status(200).send(TwiML);
 
   } catch (error) {
-    console.error("❌ Error:", error.message);
+    console.error("❌ Handler error:", error.message);
     try {
       const from = req.body?.From || process.env.YOUR_WHATSAPP;
-      if (from) await sendWhatsApp(from, "⚠️ حدث خطأ مؤقت. حاول مرة أخرى.");
+      if (from) await sendWhatsApp(from, "⚠️ حدث خطأ مؤقت. حاول مرة أخرى بعد قليل.");
     } catch (_) {}
     return res.status(200).send(TwiML);
   }
