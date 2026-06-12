@@ -1,6 +1,6 @@
 // ============================================================
 // VoiceTask AI - Vercel Webhook Handler
-// Version: 3.1.1 (fix: fetch actual media file with .ogg suffix)
+// Version: 3.1.2 (voice fix: follow XML media Uri)
 // ============================================================
 
 "use strict";
@@ -49,48 +49,69 @@ async function sendWhatsApp(to, message) {
 }
 
 // ============================================================
-// 2. OPENAI WHISPER - Transcribe Voice
+// 2. OPENAI WHISPER - Transcribe Voice (XML Uri follow)
 // ============================================================
+function downloadBuffer(options) {
+  return new Promise((resolve, reject) => {
+    const req = https.request(options, (res) => {
+      if (res.statusCode === 301 || res.statusCode === 302 || res.statusCode === 303 || res.statusCode === 307) {
+        const loc = new URL(res.headers.location);
+        const redirectOptions = {
+          hostname: loc.hostname,
+          path: loc.pathname + loc.search,
+          method: "GET",
+        };
+        return downloadBuffer(redirectOptions).then(resolve).catch(reject);
+      }
+      const chunks = [];
+      res.on("data", (c) => chunks.push(c));
+      res.on("end", () => resolve(Buffer.concat(chunks)));
+    });
+    req.on("error", reject);
+    req.end();
+  });
+}
+
 async function transcribeAudio(mediaUrl) {
   const accountSid = process.env.TWILIO_ACCOUNT_SID;
   const authToken  = process.env.TWILIO_AUTH_TOKEN;
+  const authHeader = "Basic " + Buffer.from(`${accountSid}:${authToken}`).toString("base64");
 
-  const audioBuffer = await new Promise((resolve, reject) => {
-    function fetchUrl(url, redirectCount) {
-      if (redirectCount > 5) return reject(new Error("Too many redirects"));
-      const parsedUrl = new URL(url);
-      const req = https.request(
-        {
-          hostname: parsedUrl.hostname,
-          path: parsedUrl.pathname + parsedUrl.search,
-          method: "GET",
-          headers: {
-            Authorization: "Basic " + Buffer.from(`${accountSid}:${authToken}`).toString("base64"),
-          },
-        },
-        (res) => {
-          if (res.statusCode === 301 || res.statusCode === 302 || res.statusCode === 303) {
-            return fetchUrl(res.headers.location, redirectCount + 1);
-          }
-          const chunks = [];
-          res.on("data", (c) => chunks.push(c));
-          res.on("end", () => resolve(Buffer.concat(chunks)));
-        }
-      );
-      req.on("error", reject);
-      req.end();
-    }
-    fetchUrl(mediaUrl + ".ogg", 0);
+  // الخطوة 1: تحميل من رابط الميديا
+  const parsedUrl = new URL(mediaUrl);
+  let audioBuffer = await downloadBuffer({
+    hostname: parsedUrl.hostname,
+    path: parsedUrl.pathname + parsedUrl.search,
+    method: "GET",
+    headers: { Authorization: authHeader },
   });
 
-  // تشخيص: التحقق من الملف المُحمَّل
   const fileHead = audioBuffer.slice(0, 4).toString("hex");
   console.log(`Audio downloaded: ${audioBuffer.length} bytes, head: ${fileHead}`);
+
+  // الخطوة 2: إذا رجع XML metadata، استخرج الـ Uri الحقيقي وحمّل منه
+  if (fileHead === "3c3f786d") {
+    const xml = audioBuffer.toString("utf8");
+    const uriMatch = xml.match(/<Uri>([^<]+)<\/Uri>/);
+    if (!uriMatch) throw new Error("XML metadata without Uri");
+    const realPath = uriMatch[1];
+    console.log(`Following media Uri: ${realPath}`);
+
+    audioBuffer = await downloadBuffer({
+      hostname: "api.twilio.com",
+      path: realPath,
+      method: "GET",
+      headers: { Authorization: authHeader },
+    });
+    console.log(`Real audio: ${audioBuffer.length} bytes, head: ${audioBuffer.slice(0, 4).toString("hex")}`);
+  }
+
   if (audioBuffer.length < 1000) {
     console.error("Download too small:", audioBuffer.toString("utf8").slice(0, 300));
     throw new Error("Media download failed - got " + audioBuffer.length + " bytes");
   }
 
+  // الخطوة 3: إرسال إلى Whisper
   const boundary = "VoiceTask" + Date.now();
   const CRLF = "\r\n";
   const formBody = Buffer.concat([
@@ -562,7 +583,7 @@ module.exports = async (req, res) => {
   if (req.method === "GET") {
     return res.status(200).json({
       status:  "✅ VoiceTask AI يعمل بنجاح!",
-      version: "3.1.1",
+      version: "3.1.2",
       riyadhTime: riyadhNow().toISOString(),
     });
   }
