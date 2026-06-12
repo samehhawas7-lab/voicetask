@@ -1,6 +1,6 @@
 // ============================================================
 // VoiceTask AI - Vercel Webhook Handler
-// Version: 3.0.0 (add/update/cancel/done + voice + Riyadh time)
+// Version: 3.1.0 (categories + diagnostics + full features)
 // ============================================================
 
 "use strict";
@@ -49,7 +49,7 @@ async function sendWhatsApp(to, message) {
 }
 
 // ============================================================
-// 2. OPENAI WHISPER - Transcribe Voice (.oga fix)
+// 2. OPENAI WHISPER - Transcribe Voice
 // ============================================================
 async function transcribeAudio(mediaUrl) {
   const accountSid = process.env.TWILIO_ACCOUNT_SID;
@@ -83,6 +83,14 @@ async function transcribeAudio(mediaUrl) {
     fetchUrl(mediaUrl, 0);
   });
 
+  // تشخيص: التحقق من الملف المُحمَّل
+  const fileHead = audioBuffer.slice(0, 4).toString("hex");
+  console.log(`Audio downloaded: ${audioBuffer.length} bytes, head: ${fileHead}`);
+  if (audioBuffer.length < 1000) {
+    console.error("Download too small:", audioBuffer.toString("utf8").slice(0, 300));
+    throw new Error("Media download failed - got " + audioBuffer.length + " bytes");
+  }
+
   const boundary = "VoiceTask" + Date.now();
   const CRLF = "\r\n";
   const formBody = Buffer.concat([
@@ -101,14 +109,6 @@ async function transcribeAudio(mediaUrl) {
       `ar${CRLF}` +
       `--${boundary}--${CRLF}`
     ),
-      // تشخيص: التحقق من نوع الملف المُحمَّل
-  const fileHead = audioBuffer.slice(0, 4).toString("hex");
-  console.log(`Audio downloaded: ${audioBuffer.length} bytes, head: ${fileHead}`);
-  if (audioBuffer.length < 1000) {
-    console.error("Downloaded content too small, likely an error page:", audioBuffer.toString("utf8").slice(0, 300));
-    throw new Error("Media download failed - got " + audioBuffer.length + " bytes");
-  }
-
   ]);
 
   return new Promise((resolve, reject) => {
@@ -186,6 +186,7 @@ async function saveTask(task) {
     time:        task.time,
     priority:    task.priority || "medium",
     status:      "new",
+    category:    task.category || "شخصي",
     person:      task.person  || null,
     project:     task.project || null,
     description: task.notes   || null,
@@ -196,12 +197,11 @@ async function getActiveTasks() {
   const today = riyadhDateStr(riyadhNow());
   return supabaseRequest(
     "GET",
-    `tasks?date=gte.${today}&status=not.in.(done,cancelled)&order=date.asc,time.asc&select=id,title,date,time,person,project,status`
+    `tasks?date=gte.${today}&status=not.in.(done,cancelled)&order=date.asc,time.asc&select=id,title,date,time,person,project,status,category`
   );
 }
 
 async function updateTask(id, fields) {
-  // إعادة تصفير أعلام التذكير عند تغيير الموعد
   if (fields.date || fields.time) {
     fields.reminder_before_sent = false;
     fields.reminder_due_sent = false;
@@ -221,8 +221,16 @@ async function getWeekTasks() {
   return supabaseRequest("GET", `tasks?date=gte.${today}&date=lte.${nextWeek}&status=neq.cancelled&order=date.asc,time.asc`);
 }
 
+async function getTasksByCategory(category) {
+  const today = riyadhDateStr(riyadhNow());
+  return supabaseRequest(
+    "GET",
+    `tasks?date=gte.${today}&status=not.in.(done,cancelled)&category=eq.${encodeURIComponent(category)}&order=date.asc,time.asc`
+  );
+}
+
 // ============================================================
-// 4. CLAUDE - Intent Analysis (add/update/cancel/done/query)
+// 4. CLAUDE - Intent Analysis (with categories)
 // ============================================================
 async function analyzeWithClaude(text, activeTasks) {
   const now      = riyadhNow();
@@ -241,11 +249,13 @@ async function analyzeWithClaude(text, activeTasks) {
 
   const currentTime = String(now.getUTCHours()).padStart(2, "0") + ":" + String(now.getUTCMinutes()).padStart(2, "0");
 
+  const existingCategories = [...new Set(activeTasks.map((t) => t.category).filter(Boolean))];
+
   const tasksContext = activeTasks.length > 0
-    ? activeTasks.map((t) => `- id=${t.id} | "${t.title}" | ${t.date} ${t.time}${t.person ? " | " + t.person : ""}`).join("\n")
+    ? activeTasks.map((t) => `- id=${t.id} | "${t.title}" | ${t.date} ${t.time} | فئة: ${t.category || "شخصي"}${t.person ? " | " + t.person : ""}`).join("\n")
     : "(لا توجد مهام نشطة)";
 
-  const systemPrompt = `أنت مساعد ذكي لإدارة المهام بالعربية والإنجليزية. حلل رسالة المستخدم وحدد نيته.
+  const systemPrompt = `أنت مساعد ذكي لإدارة المهام بالعربية والإنجليزية لمدير عمليات في شركة عقارية. حلل رسالة المستخدم وحدد نيته.
 
 التواريخ المرجعية (بتوقيت الرياض):
 - اليوم: ${today} والساعة الآن: ${currentTime}
@@ -253,34 +263,45 @@ async function analyzeWithClaude(text, activeTasks) {
 - بعد غد: ${dayAfter}
 - أيام الأسبوع: ${JSON.stringify(dayDates)}
 
-المهام النشطة الحالية للمستخدم:
+المهام النشطة الحالية:
 ${tasksContext}
 
+الفئات المستخدمة حالياً: ${JSON.stringify(existingCategories.length ? existingCategories : ["شخصي"])}
+
+نظام الفئات (category):
+- كل مهمة لها فئة. الافتراضي "شخصي" للأمور الشخصية والعائلية
+- إذا ذكر المستخدم إدارة أو قسم أو جهة عمل، استخدمها كفئة، مثل: "إدارة المبيعات"، "إدارة التسويق"، "الموارد البشرية"، "عين أسس"
+- إذا قال "مهمة عمل" بدون تحديد إدارة استخدم "عمل"
+- حاول مطابقة الفئة مع الفئات المستخدمة حالياً إن كانت مشابهة (لا تنشئ "ادارة المبيعات" إذا كانت "إدارة المبيعات" موجودة)
+
 النوايا الممكنة:
-1. "add" — إضافة مهمة/مهام جديدة (فكرني، اجتماع، موعد...)
-2. "update" — تعديل مهمة موجودة (أجّل، غيّر الموعد، عدّل، انقل لـ...)
+1. "add" — إضافة مهمة/مهام جديدة
+2. "update" — تعديل مهمة موجودة (أجّل، غيّر، انقل...)
 3. "cancel" — إلغاء مهمة (ألغي، احذف، شيل...)
 4. "done" — إنجاز مهمة (خلصت، تم، أنجزت...)
-5. "chat" — أي شيء آخر
+5. "category_report" — طلب مهام فئة معينة ("أعطني مهام إدارة المبيعات"، "مهام عين أسس"، "المهام الشخصية")
+6. "chat" — أي شيء آخر
 
 قواعد:
-- لعمليات update/cancel/done: طابق المهمة المقصودة من القائمة أعلاه وأرجع task_id الخاص بها
-- إذا كانت المطابقة غامضة (أكثر من مهمة محتملة) أرجع intent="clarify" مع قائمة candidates بالـ ids
-- إذا لم تجد المهمة المذكورة أرجع intent="not_found" مع reason قصير
+- لعمليات update/cancel/done: طابق المهمة من القائمة وأرجع task_id
+- إذا كانت المطابقة غامضة أرجع intent="clarify" مع candidates
+- إذا لم تجد المهمة أرجع intent="not_found" مع reason
+- لـ category_report: أرجع اسم الفئة في حقل "category" (طابقها مع الفئات الموجودة)
 - "بعد X دقيقة/ساعة" احسبها من ${currentTime} بتاريخ اليوم
-- إذا لم يُذكر وقت لمهمة جديدة استخدم "09:00"، وإذا لم يُذكر تاريخ استخدم اليوم
+- إذا لم يُذكر وقت استخدم "09:00"، وإذا لم يُذكر تاريخ استخدم اليوم
 - الأولوية: high=عاجل، medium=عادي، low=اختياري
 
 أجب فقط بـ JSON صالح بدون أي نص إضافي:
 {
-  "intent": "add|update|cancel|done|clarify|not_found|chat",
-  "tasks": [ { "title": "...", "date": "YYYY-MM-DD", "time": "HH:MM", "priority": "high|medium|low", "person": null, "project": null, "notes": null } ],
+  "intent": "add|update|cancel|done|category_report|clarify|not_found|chat",
+  "tasks": [ { "title": "...", "date": "YYYY-MM-DD", "time": "HH:MM", "priority": "high|medium|low", "category": "شخصي", "person": null, "project": null, "notes": null } ],
   "task_id": 123,
-  "updates": { "date": "YYYY-MM-DD", "time": "HH:MM", "title": "..." },
+  "updates": { "date": "...", "time": "...", "title": "...", "category": "..." },
+  "category": "إدارة المبيعات",
   "candidates": [ {"id": 1, "title": "..."} ],
   "reason": "..."
 }
-ملاحظة: ضمّن فقط الحقول المناسبة للنية. في "updates" ضمّن فقط ما طلب المستخدم تغييره.`;
+ضمّن فقط الحقول المناسبة للنية.`;
 
   return new Promise((resolve, reject) => {
     const bodyData = JSON.stringify({
@@ -329,6 +350,12 @@ ${tasksContext}
 const priorityEmoji = { high: "🔴", medium: "🟡", low: "🟢" };
 const priorityLabel = { high: "عالية", medium: "متوسطة", low: "منخفضة" };
 
+function categoryEmoji(cat) {
+  if (!cat || cat === "شخصي") return "🏠";
+  if (cat === "عمل") return "💼";
+  return "🏢";
+}
+
 function formatTasksMessage(tasks) {
   if (!tasks || tasks.length === 0) {
     return (
@@ -343,9 +370,8 @@ function formatTasksMessage(tasks) {
     const emoji = priorityEmoji[task.priority] || "🟡";
     msg += `*${i + 1}️⃣ ${task.title}*\n`;
     msg += `📅 ${task.date}  ⏰ ${task.time}\n`;
-    msg += `${emoji} أولوية ${priorityLabel[task.priority] || "متوسطة"}`;
+    msg += `${categoryEmoji(task.category)} ${task.category || "شخصي"}  |  ${emoji} ${priorityLabel[task.priority] || "متوسطة"}`;
     if (task.person)  msg += `  |  👤 ${task.person}`;
-    if (task.project) msg += `  |  📁 ${task.project}`;
     if (task.notes)   msg += `\n📝 ${task.notes}`;
     msg += "\n\n";
   });
@@ -361,7 +387,7 @@ function formatDailySummary(tasks) {
   let msg = `📋 *ملخص يومك* — ${tasks.length} مهمة (✅ ${done} مكتملة)\n\n`;
   tasks.forEach((task) => {
     const s = task.status === "done" ? "✅" : "📌";
-    msg += `${s} ${task.title} — ${task.time}\n`;
+    msg += `${s} ${task.title} — ${task.time} ${categoryEmoji(task.category)}\n`;
   });
   return msg;
 }
@@ -381,7 +407,31 @@ function formatWeeklySummary(tasks) {
     msg += `*${dayName} ${date}*\n`;
     dayTasks.forEach((task) => {
       const s = task.status === "done" ? "✅ " : "• ";
-      msg += `  ${s}${task.title} — ${task.time}\n`;
+      msg += `  ${s}${task.title} — ${task.time} ${categoryEmoji(task.category)}\n`;
+    });
+    msg += "\n";
+  }
+  return msg;
+}
+
+function formatCategoryReport(category, tasks) {
+  if (!tasks || tasks.length === 0) {
+    return `${categoryEmoji(category)} *مهام ${category}*\n\nلا توجد مهام نشطة في هذه الفئة 🎉`;
+  }
+  const grouped = {};
+  tasks.forEach((task) => {
+    if (!grouped[task.date]) grouped[task.date] = [];
+    grouped[task.date].push(task);
+  });
+  let msg = `${categoryEmoji(category)} *مهام ${category}* — ${tasks.length} مهمة\n\n`;
+  for (const [date, dayTasks] of Object.entries(grouped)) {
+    const dayName = new Date(date + "T12:00:00").toLocaleDateString("ar-SA", { weekday: "long" });
+    msg += `*${dayName} ${date}*\n`;
+    dayTasks.forEach((task) => {
+      const emoji = priorityEmoji[task.priority] || "🟡";
+      msg += `  ${emoji} ${task.title} — ${task.time}`;
+      if (task.person) msg += ` | 👤 ${task.person}`;
+      msg += "\n";
     });
     msg += "\n";
   }
@@ -407,10 +457,12 @@ async function handleIncomingMessage(from, body) {
     return (
       "🤖 *VoiceTask AI — المساعد الذكي*\n\n" +
       "📝 أرسل مهامك نصاً أو صوتاً 🎤:\n" +
-      "\"فكرني أكلم أحمد بكرة الساعة 10\"\n\n" +
+      "\"فكرني أكلم أحمد بكرة الساعة 10\"\n" +
+      "\"اجتماع إدارة المبيعات الأحد الساعة 11\"\n\n" +
       "✏️ *عدّل:* \"أجّل اجتماع الأحد للساعة 7\"\n" +
       "🗑 *ألغي:* \"ألغي مهمة مراجعة العمولات\"\n" +
-      "✅ *أنجز:* \"خلصت مكالمة خالد\"\n\n" +
+      "✅ *أنجز:* \"خلصت مكالمة خالد\"\n" +
+      "🏢 *فئة:* \"أعطني مهام إدارة المبيعات\"\n\n" +
       "⏰ سأذكرك قبل كل مهمة وعند موعدها\n\n" +
       "*التقارير:*\n" +
       "• *جدولي اليوم* / *جدولي الأسبوع*"
@@ -421,7 +473,6 @@ async function handleIncomingMessage(from, body) {
     return "أهلاً! أرسل لي مهامك وسأنظمها لك 😊\nاكتب *مساعدة* لمعرفة الأوامر.";
   }
 
-  // تحليل النية مع سياق المهام النشطة
   const activeTasks = await getActiveTasks();
   const result = await analyzeWithClaude(text, activeTasks);
 
@@ -447,9 +498,10 @@ async function handleIncomingMessage(from, body) {
       const target = activeTasks.find((t) => t.id === result.task_id);
       await updateTask(result.task_id, result.updates);
       const parts = [];
-      if (result.updates.date)  parts.push(`📅 ${result.updates.date}`);
-      if (result.updates.time)  parts.push(`⏰ ${result.updates.time}`);
-      if (result.updates.title) parts.push(`✏️ ${result.updates.title}`);
+      if (result.updates.date)     parts.push(`📅 ${result.updates.date}`);
+      if (result.updates.time)     parts.push(`⏰ ${result.updates.time}`);
+      if (result.updates.title)    parts.push(`✏️ ${result.updates.title}`);
+      if (result.updates.category) parts.push(`🏢 ${result.updates.category}`);
       return `✏️ *تم تعديل المهمة:*\n*${target ? target.title : "المهمة"}*\n${parts.join("  ")}\n\n🔔 وسيُعاد ضبط تذكيراتها تلقائياً`;
     }
 
@@ -471,6 +523,14 @@ async function handleIncomingMessage(from, body) {
       return `🎉 *أحسنت! تم إنجاز:*\n*${target ? target.title : "المهمة"}*`;
     }
 
+    case "category_report": {
+      if (!result.category) {
+        return "⚠️ لم أحدد الفئة المطلوبة. جرب مثلاً: \"أعطني مهام إدارة المبيعات\"";
+      }
+      const tasks = await getTasksByCategory(result.category);
+      return formatCategoryReport(result.category, tasks);
+    }
+
     case "clarify": {
       const candidates = result.candidates || [];
       let msg = "🤔 وجدت أكثر من مهمة مطابقة، أيها تقصد؟\n\n";
@@ -478,12 +538,12 @@ async function handleIncomingMessage(from, body) {
         const t = activeTasks.find((x) => x.id === c.id);
         msg += `${i + 1}️⃣ ${t ? `${t.title} — ${t.date} ${t.time}` : c.title}\n`;
       });
-      msg += "\nأعد إرسال طلبك مع تحديد المهمة بوضوح (مثلاً بالاسم والتاريخ).";
+      msg += "\nأعد إرسال طلبك مع تحديد المهمة بوضوح.";
       return msg;
     }
 
     case "not_found":
-      return `⚠️ لم أجد المهمة المقصودة في جدولك.\n${result.reason || ""}\n\nاكتب *جدولي الأسبوع* لرؤية مهامك الحالية.`;
+      return `⚠️ لم أجد المهمة المقصودة في جدولك.\n${result.reason || ""}\n\nاكتب *جدولي الأسبوع* لرؤية مهامك.`;
 
     default:
       return "أهلاً! أرسل لي مهامك وسأنظمها لك 😊\nاكتب *مساعدة* لمعرفة الأوامر.";
@@ -502,7 +562,7 @@ module.exports = async (req, res) => {
   if (req.method === "GET") {
     return res.status(200).json({
       status:  "✅ VoiceTask AI يعمل بنجاح!",
-      version: "3.0.0",
+      version: "3.1.0",
       riyadhTime: riyadhNow().toISOString(),
     });
   }
