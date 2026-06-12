@@ -101,6 +101,14 @@ async function transcribeAudio(mediaUrl) {
       `ar${CRLF}` +
       `--${boundary}--${CRLF}`
     ),
+      // تشخيص: التحقق من نوع الملف المُحمَّل
+  const fileHead = audioBuffer.slice(0, 4).toString("hex");
+  console.log(`Audio downloaded: ${audioBuffer.length} bytes, head: ${fileHead}`);
+  if (audioBuffer.length < 1000) {
+    console.error("Downloaded content too small, likely an error page:", audioBuffer.toString("utf8").slice(0, 300));
+    throw new Error("Media download failed - got " + audioBuffer.length + " bytes");
+  }
+
   ]);
 
   return new Promise((resolve, reject) => {
