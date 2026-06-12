@@ -1,20 +1,20 @@
 // ============================================================
 // VoiceTask AI - Vercel Webhook Handler
-// Version: 2.1.0
-// ============================================================
-// Environment Variables Required:
-// ANTHROPIC_API_KEY    = Claude API Key
-// TWILIO_ACCOUNT_SID   = Twilio Account SID
-// TWILIO_AUTH_TOKEN    = Twilio Auth Token
-// TWILIO_WHATSAPP_FROM = whatsapp:+14155238886
-// SUPABASE_URL         = https://xxxx.supabase.co
-// SUPABASE_KEY         = Supabase Secret Key
-// YOUR_WHATSAPP        = whatsapp:+966XXXXXXXXX
-// OPENAI_API_KEY       = OpenAI API Key (for Whisper)
+// Version: 3.0.0 (add/update/cancel/done + voice + Riyadh time)
 // ============================================================
 
 "use strict";
 const https = require("https");
+
+// ============================================================
+// 0. RIYADH TIME HELPERS (UTC+3)
+// ============================================================
+function riyadhNow() {
+  return new Date(Date.now() + 3 * 3600 * 1000);
+}
+function riyadhDateStr(d) {
+  return d.toISOString().split("T")[0];
+}
 
 // ============================================================
 // 1. TWILIO - Send WhatsApp Message
@@ -49,13 +49,12 @@ async function sendWhatsApp(to, message) {
 }
 
 // ============================================================
-// 2. OPENAI WHISPER - Transcribe Voice Message
+// 2. OPENAI WHISPER - Transcribe Voice (.oga fix)
 // ============================================================
 async function transcribeAudio(mediaUrl) {
   const accountSid = process.env.TWILIO_ACCOUNT_SID;
   const authToken  = process.env.TWILIO_AUTH_TOKEN;
 
-  // Step 1: Download audio from Twilio (with redirect support)
   const audioBuffer = await new Promise((resolve, reject) => {
     function fetchUrl(url, redirectCount) {
       if (redirectCount > 5) return reject(new Error("Too many redirects"));
@@ -84,13 +83,12 @@ async function transcribeAudio(mediaUrl) {
     fetchUrl(mediaUrl, 0);
   });
 
-  // Step 2: Send to Whisper API
   const boundary = "VoiceTask" + Date.now();
   const CRLF = "\r\n";
   const formBody = Buffer.concat([
     Buffer.from(
       `--${boundary}${CRLF}` +
-      `Content-Disposition: form-data; name="file"; filename="audio.ogg"${CRLF}` +
+      `Content-Disposition: form-data; name="file"; filename="audio.oga"${CRLF}` +
       `Content-Type: audio/ogg${CRLF}${CRLF}`
     ),
     audioBuffer,
@@ -136,60 +134,152 @@ async function transcribeAudio(mediaUrl) {
 }
 
 // ============================================================
-// 3. ANTHROPIC CLAUDE - Extract Tasks from Text
+// 3. SUPABASE HELPERS
 // ============================================================
-async function analyzeWithClaude(text) {
-  const now      = new Date();
-  const today    = now.toISOString().split("T")[0];
-  const tomorrow = new Date(now.getTime() + 86400000).toISOString().split("T")[0];
-  const dayAfter = new Date(now.getTime() + 172800000).toISOString().split("T")[0];
+function supabaseRequest(method, pathAndQuery, bodyObj, prefer) {
+  const url = new URL(`${process.env.SUPABASE_URL}/rest/v1/${pathAndQuery}`);
+  const bodyData = bodyObj ? JSON.stringify(bodyObj) : null;
+
+  return new Promise((resolve, reject) => {
+    const req = https.request(
+      {
+        hostname: url.hostname,
+        path:     url.pathname + url.search,
+        method,
+        headers: {
+          "Content-Type": "application/json",
+          apikey:         process.env.SUPABASE_KEY,
+          Authorization:  `Bearer ${process.env.SUPABASE_KEY}`,
+          Prefer:         prefer || "return=representation",
+        },
+      },
+      (res) => {
+        let data = "";
+        res.on("data", (c) => (data += c));
+        res.on("end", () => {
+          if (res.statusCode >= 400) {
+            console.error(`Supabase ${method} failed:`, res.statusCode, data);
+            return reject(new Error(`Supabase error: ${data}`));
+          }
+          try { resolve(data ? JSON.parse(data) : []); } catch (e) { resolve([]); }
+        });
+      }
+    );
+    req.on("error", reject);
+    if (bodyData) req.write(bodyData);
+    req.end();
+  });
+}
+
+async function saveTask(task) {
+  return supabaseRequest("POST", "tasks", {
+    title:       task.title,
+    date:        task.date,
+    time:        task.time,
+    priority:    task.priority || "medium",
+    status:      "new",
+    person:      task.person  || null,
+    project:     task.project || null,
+    description: task.notes   || null,
+  });
+}
+
+async function getActiveTasks() {
+  const today = riyadhDateStr(riyadhNow());
+  return supabaseRequest(
+    "GET",
+    `tasks?date=gte.${today}&status=not.in.(done,cancelled)&order=date.asc,time.asc&select=id,title,date,time,person,project,status`
+  );
+}
+
+async function updateTask(id, fields) {
+  // إعادة تصفير أعلام التذكير عند تغيير الموعد
+  if (fields.date || fields.time) {
+    fields.reminder_before_sent = false;
+    fields.reminder_due_sent = false;
+  }
+  return supabaseRequest("PATCH", `tasks?id=eq.${id}`, fields, "return=minimal");
+}
+
+async function getTodayTasks() {
+  const today = riyadhDateStr(riyadhNow());
+  return supabaseRequest("GET", `tasks?date=eq.${today}&status=neq.cancelled&order=time.asc`);
+}
+
+async function getWeekTasks() {
+  const now      = riyadhNow();
+  const today    = riyadhDateStr(now);
+  const nextWeek = riyadhDateStr(new Date(now.getTime() + 7 * 86400000));
+  return supabaseRequest("GET", `tasks?date=gte.${today}&date=lte.${nextWeek}&status=neq.cancelled&order=date.asc,time.asc`);
+}
+
+// ============================================================
+// 4. CLAUDE - Intent Analysis (add/update/cancel/done/query)
+// ============================================================
+async function analyzeWithClaude(text, activeTasks) {
+  const now      = riyadhNow();
+  const today    = riyadhDateStr(now);
+  const tomorrow = riyadhDateStr(new Date(now.getTime() + 86400000));
+  const dayAfter = riyadhDateStr(new Date(now.getTime() + 172800000));
 
   const dayNames = ["الأحد","الاثنين","الثلاثاء","الأربعاء","الخميس","الجمعة","السبت"];
   const dayDates = {};
   dayNames.forEach((name, i) => {
-    const diff = (i - now.getDay() + 7) % 7 || 7;
+    const diff = (i - now.getUTCDay() + 7) % 7 || 7;
     const d = new Date(now);
-    d.setDate(d.getDate() + diff);
-    dayDates[name] = d.toISOString().split("T")[0];
+    d.setUTCDate(d.getUTCDate() + diff);
+    dayDates[name] = riyadhDateStr(d);
   });
 
-  const systemPrompt = `أنت مساعد ذكي متخصص في استخراج المهام من النصوص العربية والإنجليزية.
+  const currentTime = String(now.getUTCHours()).padStart(2, "0") + ":" + String(now.getUTCMinutes()).padStart(2, "0");
 
-التواريخ المرجعية:
-- اليوم: ${today}
+  const tasksContext = activeTasks.length > 0
+    ? activeTasks.map((t) => `- id=${t.id} | "${t.title}" | ${t.date} ${t.time}${t.person ? " | " + t.person : ""}`).join("\n")
+    : "(لا توجد مهام نشطة)";
+
+  const systemPrompt = `أنت مساعد ذكي لإدارة المهام بالعربية والإنجليزية. حلل رسالة المستخدم وحدد نيته.
+
+التواريخ المرجعية (بتوقيت الرياض):
+- اليوم: ${today} والساعة الآن: ${currentTime}
 - غداً / بكرة: ${tomorrow}
 - بعد غد: ${dayAfter}
 - أيام الأسبوع: ${JSON.stringify(dayDates)}
 
-قواعد مهمة:
-1. إذا لم يُذكر وقت استخدم "09:00"
-2. إذا لم يُذكر تاريخ استخدم اليوم
-3. الأولوية: high=عاجل/مهم، medium=عادي، low=اختياري
-4. استخرج اسم الشخص إن وُجد
-5. استخرج اسم المشروع إن وُجد
-6. الأرقام العربية (١٢٣) تساوي الأرقام الإنجليزية (123)
+المهام النشطة الحالية للمستخدم:
+${tasksContext}
+
+النوايا الممكنة:
+1. "add" — إضافة مهمة/مهام جديدة (فكرني، اجتماع، موعد...)
+2. "update" — تعديل مهمة موجودة (أجّل، غيّر الموعد، عدّل، انقل لـ...)
+3. "cancel" — إلغاء مهمة (ألغي، احذف، شيل...)
+4. "done" — إنجاز مهمة (خلصت، تم، أنجزت...)
+5. "chat" — أي شيء آخر
+
+قواعد:
+- لعمليات update/cancel/done: طابق المهمة المقصودة من القائمة أعلاه وأرجع task_id الخاص بها
+- إذا كانت المطابقة غامضة (أكثر من مهمة محتملة) أرجع intent="clarify" مع قائمة candidates بالـ ids
+- إذا لم تجد المهمة المذكورة أرجع intent="not_found" مع reason قصير
+- "بعد X دقيقة/ساعة" احسبها من ${currentTime} بتاريخ اليوم
+- إذا لم يُذكر وقت لمهمة جديدة استخدم "09:00"، وإذا لم يُذكر تاريخ استخدم اليوم
+- الأولوية: high=عاجل، medium=عادي، low=اختياري
 
 أجب فقط بـ JSON صالح بدون أي نص إضافي:
 {
-  "tasks": [
-    {
-      "title": "عنوان المهمة",
-      "date": "YYYY-MM-DD",
-      "time": "HH:MM",
-      "priority": "high|medium|low",
-      "person": "اسم أو null",
-      "project": "مشروع أو null",
-      "notes": "ملاحظات أو null"
-    }
-  ]
-}`;
+  "intent": "add|update|cancel|done|clarify|not_found|chat",
+  "tasks": [ { "title": "...", "date": "YYYY-MM-DD", "time": "HH:MM", "priority": "high|medium|low", "person": null, "project": null, "notes": null } ],
+  "task_id": 123,
+  "updates": { "date": "YYYY-MM-DD", "time": "HH:MM", "title": "..." },
+  "candidates": [ {"id": 1, "title": "..."} ],
+  "reason": "..."
+}
+ملاحظة: ضمّن فقط الحقول المناسبة للنية. في "updates" ضمّن فقط ما طلب المستخدم تغييره.`;
 
   return new Promise((resolve, reject) => {
     const bodyData = JSON.stringify({
       model: "claude-haiku-4-5-20251001",
       max_tokens: 1024,
       system: systemPrompt,
-      messages: [{ role: "user", content: `استخرج المهام من النص التالي:\n"${text}"` }],
+      messages: [{ role: "user", content: `رسالة المستخدم:\n"${text}"` }],
     });
 
     const req = https.request(
@@ -226,126 +316,21 @@ async function analyzeWithClaude(text) {
 }
 
 // ============================================================
-// 4. SUPABASE - Save Task
+// 5. FORMATTERS
 // ============================================================
-async function saveTaskToSupabase(task) {
-  const bodyData = JSON.stringify({
-    title:       task.title,
-    date:        task.date,
-    time:        task.time,
-    priority:    task.priority || "medium",
-    status:      "new",
-    person:      task.person  || null,
-    project:     task.project || null,
-    description: task.notes   || null,
-  });
+const priorityEmoji = { high: "🔴", medium: "🟡", low: "🟢" };
+const priorityLabel = { high: "عالية", medium: "متوسطة", low: "منخفضة" };
 
-  const url = new URL(`${process.env.SUPABASE_URL}/rest/v1/tasks`);
-
-  return new Promise((resolve, reject) => {
-    const req = https.request(
-      {
-        hostname: url.hostname,
-        path:     url.pathname,
-        method:   "POST",
-        headers: {
-          "Content-Type": "application/json",
-          apikey:         process.env.SUPABASE_KEY,
-          Authorization:  `Bearer ${process.env.SUPABASE_KEY}`,
-          Prefer:         "return=representation",
-        },
-      },
-      (res) => {
-        let data = "";
-        res.on("data", (c) => (data += c));
-        res.on("end", () => { try { resolve(JSON.parse(data)); } catch (e) { resolve([]); } });
-      }
-    );
-    req.on("error", reject);
-    req.write(bodyData);
-    req.end();
-  });
-}
-
-// ============================================================
-// 5. SUPABASE - Get Today Tasks
-// ============================================================
-async function getTodayTasks() {
-  const today = new Date().toISOString().split("T")[0];
-  const url = new URL(`${process.env.SUPABASE_URL}/rest/v1/tasks?date=eq.${today}&order=time.asc`);
-
-  return new Promise((resolve) => {
-    const req = https.request(
-      {
-        hostname: url.hostname,
-        path:     url.pathname + url.search,
-        method:   "GET",
-        headers: {
-          apikey:        process.env.SUPABASE_KEY,
-          Authorization: `Bearer ${process.env.SUPABASE_KEY}`,
-        },
-      },
-      (res) => {
-        let data = "";
-        res.on("data", (c) => (data += c));
-        res.on("end", () => { try { resolve(JSON.parse(data)); } catch (e) { resolve([]); } });
-      }
-    );
-    req.on("error", () => resolve([]));
-    req.end();
-  });
-}
-
-// ============================================================
-// 6. SUPABASE - Get Week Tasks
-// ============================================================
-async function getWeekTasks() {
-  const today    = new Date().toISOString().split("T")[0];
-  const nextWeek = new Date(Date.now() + 7 * 86400000).toISOString().split("T")[0];
-  const url = new URL(
-    `${process.env.SUPABASE_URL}/rest/v1/tasks?date=gte.${today}&date=lte.${nextWeek}&order=date.asc,time.asc`
-  );
-
-  return new Promise((resolve) => {
-    const req = https.request(
-      {
-        hostname: url.hostname,
-        path:     url.pathname + url.search,
-        method:   "GET",
-        headers: {
-          apikey:        process.env.SUPABASE_KEY,
-          Authorization: `Bearer ${process.env.SUPABASE_KEY}`,
-        },
-      },
-      (res) => {
-        let data = "";
-        res.on("data", (c) => (data += c));
-        res.on("end", () => { try { resolve(JSON.parse(data)); } catch (e) { resolve([]); } });
-      }
-    );
-    req.on("error", () => resolve([]));
-    req.end();
-  });
-}
-
-// ============================================================
-// 7. FORMAT - Tasks Message
-// ============================================================
 function formatTasksMessage(tasks) {
   if (!tasks || tasks.length === 0) {
     return (
       "✅ تم استلام رسالتك ولكن لم أجد مهام واضحة.\n\n" +
       "💡 جرب مثلاً:\n" +
-      "\"فكرني أكلم أحمد بكرة الساعة 10\"\n" +
-      "\"اجتماع مع الفريق الخميس الساعة 2\""
+      "\"فكرني أكلم أحمد بكرة الساعة 10\""
     );
   }
 
-  const priorityEmoji = { high: "🔴", medium: "🟡", low: "🟢" };
-  const priorityLabel = { high: "عالية", medium: "متوسطة", low: "منخفضة" };
-
   let msg = `✅ *تم استخراج ${tasks.length} مهمة بنجاح!*\n\n`;
-
   tasks.forEach((task, i) => {
     const emoji = priorityEmoji[task.priority] || "🟡";
     msg += `*${i + 1}️⃣ ${task.title}*\n`;
@@ -356,73 +341,47 @@ function formatTasksMessage(tasks) {
     if (task.notes)   msg += `\n📝 ${task.notes}`;
     msg += "\n\n";
   });
-
-  msg += "─────────────────\n";
-  msg += "💡 *الأوامر المتاحة:*\n";
-  msg += "• *جدولي اليوم* - عرض مهام اليوم\n";
-  msg += "• *جدولي الأسبوع* - عرض مهام الأسبوع\n";
-  msg += "• *مساعدة* - قائمة الأوامر";
-
+  msg += "─────────────────\n💡 اكتب *مساعدة* لكل الأوامر";
   return msg;
 }
 
-// ============================================================
-// 8. FORMAT - Daily Summary
-// ============================================================
 function formatDailySummary(tasks) {
   if (!tasks || tasks.length === 0) {
-    return "📋 *ملخص يومك*\n\nلا توجد مهام اليوم 🎉\nاستمتع بيومك!";
+    return "📋 *ملخص يومك*\n\nلا توجد مهام اليوم 🎉";
   }
-
-  const done       = tasks.filter((t) => t.status === "done").length;
-  const inprogress = tasks.filter((t) => t.status === "inprogress").length;
-  const late       = tasks.filter((t) => t.status === "late").length;
-  const newTasks   = tasks.filter((t) => t.status === "new").length;
-
-  let msg = `📋 *ملخص يومك* — ${tasks.length} مهمة\n\n`;
-  msg += `✅ مكتملة: ${done}  |  ⏳ قيد التنفيذ: ${inprogress}  |  🆕 جديدة: ${newTasks}`;
-  if (late > 0) msg += `  |  🔴 متأخرة: ${late}`;
-  msg += "\n\n*المهام:*\n";
-
+  const done = tasks.filter((t) => t.status === "done").length;
+  let msg = `📋 *ملخص يومك* — ${tasks.length} مهمة (✅ ${done} مكتملة)\n\n`;
   tasks.forEach((task) => {
-    const s =
-      task.status === "done"       ? "✅" :
-      task.status === "inprogress" ? "⏳" :
-      task.status === "late"       ? "🔴" : "📌";
+    const s = task.status === "done" ? "✅" : "📌";
     msg += `${s} ${task.title} — ${task.time}\n`;
   });
-
   return msg;
 }
 
-// ============================================================
-// 9. FORMAT - Weekly Summary
-// ============================================================
 function formatWeeklySummary(tasks) {
   if (!tasks || tasks.length === 0) {
     return "📅 *ملخص الأسبوع*\n\nلا توجد مهام هذا الأسبوع 🎉";
   }
-
   const grouped = {};
   tasks.forEach((task) => {
     if (!grouped[task.date]) grouped[task.date] = [];
     grouped[task.date].push(task);
   });
-
   let msg = `📅 *ملخص الأسبوع* — ${tasks.length} مهمة\n\n`;
-
   for (const [date, dayTasks] of Object.entries(grouped)) {
     const dayName = new Date(date + "T12:00:00").toLocaleDateString("ar-SA", { weekday: "long" });
     msg += `*${dayName} ${date}*\n`;
-    dayTasks.forEach((task) => { msg += `  • ${task.title} — ${task.time}\n`; });
+    dayTasks.forEach((task) => {
+      const s = task.status === "done" ? "✅ " : "• ";
+      msg += `  ${s}${task.title} — ${task.time}\n`;
+    });
     msg += "\n";
   }
-
   return msg;
 }
 
 // ============================================================
-// 10. ROUTER - Handle Incoming Message
+// 6. ROUTER
 // ============================================================
 async function handleIncomingMessage(from, body) {
   const text  = (body || "").trim();
@@ -439,31 +398,92 @@ async function handleIncomingMessage(from, body) {
   if (lower === "مساعدة" || lower === "help" || lower === "؟") {
     return (
       "🤖 *VoiceTask AI — المساعد الذكي*\n\n" +
-      "*كيف تستخدمني:*\n" +
-      "📝 أرسل مهامك نصاً أو صوتاً، مثل:\n" +
+      "📝 أرسل مهامك نصاً أو صوتاً 🎤:\n" +
       "\"فكرني أكلم أحمد بكرة الساعة 10\"\n\n" +
-      "*الأوامر:*\n" +
-      "• *جدولي اليوم* — مهام اليوم\n" +
-      "• *جدولي الأسبوع* — مهام الأسبوع\n" +
-      "• *مساعدة* — هذه القائمة"
+      "✏️ *عدّل:* \"أجّل اجتماع الأحد للساعة 7\"\n" +
+      "🗑 *ألغي:* \"ألغي مهمة مراجعة العمولات\"\n" +
+      "✅ *أنجز:* \"خلصت مكالمة خالد\"\n\n" +
+      "⏰ سأذكرك قبل كل مهمة وعند موعدها\n\n" +
+      "*التقارير:*\n" +
+      "• *جدولي اليوم* / *جدولي الأسبوع*"
     );
   }
 
-  if (text.length > 3) {
-    const result = await analyzeWithClaude(text);
-    const tasks  = result.tasks || [];
-    for (const task of tasks) {
-      try { await saveTaskToSupabase(task); }
-      catch (e) { console.error("Supabase error:", e.message); }
-    }
-    return formatTasksMessage(tasks);
+  if (text.length <= 3) {
+    return "أهلاً! أرسل لي مهامك وسأنظمها لك 😊\nاكتب *مساعدة* لمعرفة الأوامر.";
   }
 
-  return "أهلاً! أرسل لي مهامك وسأنظمها لك 😊\nاكتب *مساعدة* لمعرفة الأوامر المتاحة.";
+  // تحليل النية مع سياق المهام النشطة
+  const activeTasks = await getActiveTasks();
+  const result = await analyzeWithClaude(text, activeTasks);
+
+  switch (result.intent) {
+
+    case "add": {
+      const tasks = result.tasks || [];
+      let savedCount = 0;
+      for (const task of tasks) {
+        try { await saveTask(task); savedCount++; }
+        catch (e) { console.error("Save error:", e.message); }
+      }
+      if (tasks.length > 0 && savedCount === 0) {
+        return "⚠️ فهمت مهمتك لكن حدث خطأ أثناء حفظها. حاول مرة أخرى.";
+      }
+      return formatTasksMessage(tasks);
+    }
+
+    case "update": {
+      if (!result.task_id || !result.updates) {
+        return "⚠️ لم أحدد المهمة أو التعديل المطلوب. وضّح أكثر من فضلك.";
+      }
+      const target = activeTasks.find((t) => t.id === result.task_id);
+      await updateTask(result.task_id, result.updates);
+      const parts = [];
+      if (result.updates.date)  parts.push(`📅 ${result.updates.date}`);
+      if (result.updates.time)  parts.push(`⏰ ${result.updates.time}`);
+      if (result.updates.title) parts.push(`✏️ ${result.updates.title}`);
+      return `✏️ *تم تعديل المهمة:*\n*${target ? target.title : "المهمة"}*\n${parts.join("  ")}\n\n🔔 وسيُعاد ضبط تذكيراتها تلقائياً`;
+    }
+
+    case "cancel": {
+      if (!result.task_id) {
+        return "⚠️ لم أحدد المهمة المطلوب إلغاؤها. وضّح أكثر من فضلك.";
+      }
+      const target = activeTasks.find((t) => t.id === result.task_id);
+      await updateTask(result.task_id, { status: "cancelled" });
+      return `🗑 *تم إلغاء المهمة:*\n*${target ? target.title : "المهمة"}*${target ? `\n📅 ${target.date}  ⏰ ${target.time}` : ""}`;
+    }
+
+    case "done": {
+      if (!result.task_id) {
+        return "⚠️ لم أحدد المهمة المنجزة. وضّح أكثر من فضلك.";
+      }
+      const target = activeTasks.find((t) => t.id === result.task_id);
+      await updateTask(result.task_id, { status: "done" });
+      return `🎉 *أحسنت! تم إنجاز:*\n*${target ? target.title : "المهمة"}*`;
+    }
+
+    case "clarify": {
+      const candidates = result.candidates || [];
+      let msg = "🤔 وجدت أكثر من مهمة مطابقة، أيها تقصد؟\n\n";
+      candidates.forEach((c, i) => {
+        const t = activeTasks.find((x) => x.id === c.id);
+        msg += `${i + 1}️⃣ ${t ? `${t.title} — ${t.date} ${t.time}` : c.title}\n`;
+      });
+      msg += "\nأعد إرسال طلبك مع تحديد المهمة بوضوح (مثلاً بالاسم والتاريخ).";
+      return msg;
+    }
+
+    case "not_found":
+      return `⚠️ لم أجد المهمة المقصودة في جدولك.\n${result.reason || ""}\n\nاكتب *جدولي الأسبوع* لرؤية مهامك الحالية.`;
+
+    default:
+      return "أهلاً! أرسل لي مهامك وسأنظمها لك 😊\nاكتب *مساعدة* لمعرفة الأوامر.";
+  }
 }
 
 // ============================================================
-// 11. MAIN - Vercel Serverless Handler
+// 7. MAIN - Vercel Serverless Handler
 // ============================================================
 module.exports = async (req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -474,8 +494,8 @@ module.exports = async (req, res) => {
   if (req.method === "GET") {
     return res.status(200).json({
       status:  "✅ VoiceTask AI يعمل بنجاح!",
-      version: "2.1.0",
-      time:    new Date().toISOString(),
+      version: "3.0.0",
+      riyadhTime: riyadhNow().toISOString(),
     });
   }
 
@@ -494,7 +514,6 @@ module.exports = async (req, res) => {
 
     console.log(`📨 From: ${from} | Media: ${numMedia} | Body: ${msgBody}`);
 
-    // Authorization check
     const yourNumber = process.env.YOUR_WHATSAPP;
     if (yourNumber && from !== yourNumber) {
       console.warn(`⛔ Unauthorized: ${from}`);
