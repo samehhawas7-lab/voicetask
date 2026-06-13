@@ -316,7 +316,7 @@ async function executeIntent(result, user) {
       return `⚠️ *تأكيد التعديل*\n*${t.title}* (الحالي: ${t.date} ${t.time})\nالتغيير: ${parts.join("  ")}\n\nرد: *نعم* للتأكيد │ *لا* للتراجع`;
     }
     case "cancel": {
-      if (!result.task_id) return "⚠ لم أحدد المهمة المطلوب إلغاؤها.";
+      if (!result.task_id) return "⚠️ لم أحدد المهمة المطلوب إلغاؤها.";
       const t = activeTasks.find(x => x.id === result.task_id);
       if (!t) return "⚠️ لم أجد المهمة في قائمتك.";
       await setPending(phone, { type: "cancel", task_id: result.task_id });
