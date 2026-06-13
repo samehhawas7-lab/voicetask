@@ -1,6 +1,6 @@
 // ============================================================
-// VoiceTask AI - Webhook v3.4.1
-// Multi-User + خصوصية محكمة + إخفاء وجود مستخدمين آخرين
+// VoiceTask AI - Webhook v3.4.2
+// Multi-User + خصوصية محكمة + فهم طبيعي + مطابقة أسماء آمنة
 // ============================================================
 
 "use strict";
@@ -24,7 +24,11 @@ function allUsers() { return [getAdmin(), ...getTeam()]; }
 function resolveUser(from) { return allUsers().find(u => u.phone === from) || null; }
 function findUserByName(name) {
   const n = (name || "").trim();
-  return allUsers().find(u => u.name === n || u.name.includes(n) || n.includes(u.name)) || null;
+  if (!n) return null;
+  const exact = allUsers().find(u => u.name === n);
+  if (exact) return exact;
+  const words = n.split(/\s+/);
+  return allUsers().find(u => words.includes(u.name)) || null;
 }
 
 // ---------- TWILIO ----------
@@ -128,7 +132,7 @@ function buildSystemPrompt(activeTasks) {
   const cats = [...new Set(activeTasks.map(t => t.category).filter(Boolean))];
   const ctx = activeTasks.length ? activeTasks.map(t => `- id=${t.id} | "${t.title}" | ${t.date} ${t.time} | فئة: ${t.category || "شخصي"}`).join("\n") : "(لا توجد مهام نشطة)";
 
-  return `أنت مساعد ذكي لإدارة المهام بالعربية والإنجليزية. حلل المدخل (نص/صورة/وثيقة) وحدد النية.
+  return `أنت مساعد ذكي لإدارة المهام بالعربية والإنجليزية. حلل المدخل (نص/صورة/وثيقة) وحدد النية بذكاء من الصياغة الطبيعية مهما اختلفت.
 
 التواريخ المرجعية (بتوقيت الرياض):
 - اليوم: ${today} والساعة الآن: ${currentTime}
@@ -143,13 +147,16 @@ ${ctx}
 
 نظام الفئات: الافتراضي "شخصي". إذا ذُكرت إدارة/قسم استخدمها كفئة. "مهمة عمل" = "عمل".
 
-النوايا: add | update | cancel | done | category_report | clarify | not_found | chat
+النوايا: add | update | cancel | done | list | category_report | clarify | not_found | chat
+- add: إضافة مهمة/مهام جديدة
 - update/cancel/done: طابق المهمة من قائمة هذا المستخدم فقط وأرجع task_id. غامض=clarify مع candidates. غير موجودة=not_found.
-- category_report: أرجع الفئة في "category"
+- list: أي طلب لعرض المهام بأي صياغة ("ايه مهامي"، "رسلي كل المهام"، "وريني جدولي"، "عندي ايه النهاردة"، "مهام الأسبوع"). أرجع "scope": today أو week أو overdue أو all
+- category_report: عرض مهام فئة/إدارة محددة. أرجع الفئة في "category"
+- chat: أي شيء آخر فقط. لا تستخدمها لطلبات العرض.
 - "بعد X دقيقة/ساعة" من ${currentTime}. بدون وقت=09:00، بدون تاريخ=اليوم. الأولوية high/medium/low.
 
 أجب فقط بـ JSON صالح:
-{"intent":"...","tasks":[{"title":"...","date":"YYYY-MM-DD","time":"HH:MM","priority":"medium","category":"شخصي","person":null,"project":null,"notes":null}],"task_id":123,"updates":{},"category":"...","candidates":[{"id":1,"title":"..."}],"reason":"..."}`;
+{"intent":"...","tasks":[{"title":"...","date":"YYYY-MM-DD","time":"HH:MM","priority":"medium","category":"شخصي","person":null,"project":null,"notes":null}],"task_id":123,"updates":{},"scope":"all","category":"...","candidates":[{"id":1,"title":"..."}],"reason":"..."}`;
 }
 function callClaude(systemPrompt, userContent) {
   return new Promise((resolve, reject) => {
@@ -201,11 +208,12 @@ function formatDaily(tasks) {
   return msg.trim();
 }
 function weekByDay(list) { const g = {}; list.forEach(t => { (g[t.date] = g[t.date] || []).push(t); }); let s = ""; for (const [d, dt] of Object.entries(g)) { s += `_${dayName(d)} ${d}_\n`; dt.forEach(t => { s += `${taskLine(t)}\n`; }); } return s; }
-function formatWeekly(tasks) {
-  if (!tasks || !tasks.length) return "📅 *جدول الأسبوع* — لا مهام 🎉";
+function formatWeekly(tasks, title) {
+  const head = title || "جدول الأسبوع";
+  if (!tasks || !tasks.length) return `📅 *${head}* — لا مهام 🎉`;
   const personal = tasks.filter(t => (t.category || "شخصي") === "شخصي");
   const work = tasks.filter(t => (t.category || "شخصي") !== "شخصي");
-  let msg = `📅 *جدول الأسبوع* — ${tasks.length} مهمة\n\n`;
+  let msg = `📅 *${head}* — ${tasks.length} مهمة\n\n`;
   if (work.length) msg += `💼 *العمل والإدارات* (${work.length})\n${weekByDay(work)}\n`;
   if (personal.length) msg += `🏠 *الشخصية* (${personal.length})\n${weekByDay(personal)}`;
   return msg.trim();
@@ -308,7 +316,7 @@ async function executeIntent(result, user) {
       return `⚠️ *تأكيد التعديل*\n*${t.title}* (الحالي: ${t.date} ${t.time})\nالتغيير: ${parts.join("  ")}\n\nرد: *نعم* للتأكيد │ *لا* للتراجع`;
     }
     case "cancel": {
-      if (!result.task_id) return "⚠️ لم أحدد المهمة المطلوب إلغاؤها.";
+      if (!result.task_id) return "⚠ لم أحدد المهمة المطلوب إلغاؤها.";
       const t = activeTasks.find(x => x.id === result.task_id);
       if (!t) return "⚠️ لم أجد المهمة في قائمتك.";
       await setPending(phone, { type: "cancel", task_id: result.task_id });
@@ -320,6 +328,13 @@ async function executeIntent(result, user) {
       if (!t) return "⚠️ لم أجد المهمة في قائمتك.";
       await updateTaskOwned(result.task_id, phone, { status: "done" });
       return `🎉 *أحسنت! أُنجزت:* ${t.title}`;
+    }
+    case "list": {
+      const sc = result.scope || "all";
+      if (sc === "today") return formatDaily(await getTodayFor(phone));
+      if (sc === "week") return formatWeekly(await getWeekFor(phone));
+      if (sc === "overdue") return formatOverdue(await getOverdueFor(phone));
+      return formatWeekly(await getActiveTasksFor(phone), "كل مهامك");
     }
     case "category_report": {
       if (!result.category) return "⚠️ حدد الفئة، مثلاً: \"مهام إدارة المبيعات\"";
@@ -366,7 +381,7 @@ async function handleTextMessage(text, user) {
     const mTeam = t.match(/^مهام\s+(.+)$/);
     if (mTeam) {
       const target = findUserByName(mTeam[1]);
-      if (target) return `👤 *مهام ${target.name}*\n\n` + formatDaily(await getActiveForPhoneAdmin(target.phone)).replace(/^☀️.*\n/, "");
+      if (target) return formatWeekly(await getActiveForPhoneAdmin(target.phone), `مهام ${target.name}`);
     }
   }
 
@@ -403,7 +418,7 @@ module.exports = async (req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   if (req.method === "OPTIONS") return res.status(200).end();
-  if (req.method === "GET") return res.status(200).json({ status: "✅ VoiceTask AI يعمل بنجاح!", version: "3.4.1", riyadhTime: riyadhNow().toISOString() });
+  if (req.method === "GET") return res.status(200).json({ status: "✅ VoiceTask AI يعمل بنجاح!", version: "3.4.2", riyadhTime: riyadhNow().toISOString() });
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
   const TwiML = `<?xml version="1.0" encoding="UTF-8"?><Response></Response>`;
