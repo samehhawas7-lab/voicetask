@@ -1,5 +1,5 @@
 // ============================================================
-// VoiceTask AI - Reminders Engine v2.2.0
+// VoiceTask AI - Reminders Engine v2.3.0
 // Multi-User: تذكيرات وملخصات معزولة لكل مستخدم + تقرير صحة للأدمن فقط
 // ============================================================
 
@@ -68,6 +68,41 @@ function supabaseRequest(method, pathAndQuery, bodyObj, prefer) {
 async function getState(key) { try { const r = await supabaseRequest("GET", `system_state?key=eq.${encodeURIComponent(key)}&select=value`); return r.length ? r[0].value : null; } catch (e) { return null; } }
 async function setState(key, value) { try { await supabaseRequest("POST", "system_state", { key, value: String(value) }, "resolution=merge-duplicates,return=minimal"); } catch (e) { console.error("setState:", e.message); } }
 function patchTask(id, fields) { return supabaseRequest("PATCH", `tasks?id=eq.${id}`, fields, "return=minimal"); }
+
+// ---------- RECURRING SPAWN (توليد المهام الدورية) ----------
+const DOW_IDX = { SU: 0, MO: 1, TU: 2, WE: 3, TH: 4, FR: 5, SA: 6 };
+async function logSpawn(rule, taskId) {
+  try { await supabaseRequest("POST", "audit_log", { task_id: taskId || null, action: "recurring_spawn", changed_by: rule.user_phone, actor_name: "النظام", after_data: { title: rule.title, rule_id: rule.id }, source: "system" }, "return=minimal"); } catch (e) {}
+}
+async function spawnRecurringTasks() {
+  const now = riyadhNow(), today = riyadhDateStr(now);
+  const dow = now.getUTCDay();          // يوم الأسبوع الحالي (بتوقيت الرياض المُزاح)
+  const dom = now.getUTCDate();         // يوم الشهر
+  let spawned = 0;
+  let rules;
+  try { rules = await supabaseRequest("GET", "recurring_rules?active=eq.true"); } catch (e) { return 0; }
+
+  for (const r of rules) {
+    if (r.last_spawned === today) continue;           // حارس: تم التوليد اليوم بالفعل
+    let due = false;
+    if (r.freq === "daily") due = true;
+    else if (r.freq === "weekly") due = (DOW_IDX[r.day_of_week] === dow);
+    else if (r.freq === "monthly") due = (Number(r.day_of_month || 1) === dom);
+    if (!due) continue;
+
+    // تفادي التكرار: تأكد أنه لا توجد مهمة بنفس العنوان لنفس المستخدم في نفس اليوم
+    try {
+      const exists = await supabaseRequest("GET", `tasks?${UP(r.user_phone)}&date=eq.${today}&title=eq.${encodeURIComponent(r.title)}&select=id`);
+      if (exists.length) { await supabaseRequest("PATCH", `recurring_rules?id=eq.${r.id}`, { last_spawned: today }, "return=minimal"); continue; }
+      const row = await supabaseRequest("POST", "tasks", { title: r.title, date: today, time: r.time || "09:00", priority: r.priority || "medium", status: "new", category: r.category || "شخصي", person: r.person || null, parent_id: r.id, user_phone: r.user_phone });
+      const newId = Array.isArray(row) && row[0] ? row[0].id : null;
+      await supabaseRequest("PATCH", `recurring_rules?id=eq.${r.id}`, { last_spawned: today }, "return=minimal");
+      await logSpawn(r, newId);
+      spawned++;
+    } catch (e) { console.error("spawn:", e.message); }
+  }
+  return spawned;
+}
 
 // ---------- 1. REMINDERS + FOLLOW-UP (per user) ----------
 async function processReminders() {
@@ -189,7 +224,8 @@ module.exports = async (req, res) => {
       await sendWhatsApp(getAdmin().phone, await buildHealthReport());
       return res.status(200).json({ ok: true, action: "health report sent to admin" });
     }
-    const r = { reminders: 0, morning: false, overdue: false, weekly: false };
+    const r = { recurring: 0, reminders: 0, morning: false, overdue: false, weekly: false };
+    r.recurring = await spawnRecurringTasks();   // أولاً: ولّد المهام الدورية المستحقة اليوم
     r.reminders = await processReminders();
     r.morning = await morningSummary();
     r.overdue = await overdueCheck();
