@@ -1,5 +1,5 @@
 // ============================================================
-// VoiceTask AI - Webhook v3.4.2
+// VoiceTask AI - Webhook v3.5.0
 // Multi-User + خصوصية محكمة + فهم طبيعي + مطابقة أسماء آمنة
 // ============================================================
 
@@ -72,10 +72,11 @@ async function downloadMedia(mediaUrl) {
 // ---------- WHISPER ----------
 async function transcribeBuffer(audioBuffer) {
   const boundary = "VoiceTask" + Date.now(), CRLF = "\r\n";
+  const hint = "مهمة، موعد، تذكير، اجتماع، اتصال، غداً، بكرة، الساعة، صباحاً، مساءً، يوم الأحد الاثنين الثلاثاء الأربعاء الخميس الجمعة السبت، أجّل، خلصت، ألغِ، كل أسبوع، عاجل.";
   const formBody = Buffer.concat([
     Buffer.from(`--${boundary}${CRLF}Content-Disposition: form-data; name="file"; filename="audio.oga"${CRLF}Content-Type: audio/ogg${CRLF}${CRLF}`),
     audioBuffer,
-    Buffer.from(`${CRLF}--${boundary}${CRLF}Content-Disposition: form-data; name="model"${CRLF}${CRLF}whisper-1${CRLF}--${boundary}${CRLF}Content-Disposition: form-data; name="language"${CRLF}${CRLF}ar${CRLF}--${boundary}--${CRLF}`),
+    Buffer.from(`${CRLF}--${boundary}${CRLF}Content-Disposition: form-data; name="model"${CRLF}${CRLF}whisper-1${CRLF}--${boundary}${CRLF}Content-Disposition: form-data; name="language"${CRLF}${CRLF}ar${CRLF}--${boundary}${CRLF}Content-Disposition: form-data; name="prompt"${CRLF}${CRLF}${hint}${CRLF}--${boundary}${CRLF}Content-Disposition: form-data; name="temperature"${CRLF}${CRLF}0${CRLF}--${boundary}--${CRLF}`),
   ]);
   return new Promise((resolve, reject) => {
     const req = https.request({ hostname: "api.openai.com", path: "/v1/audio/transcriptions", method: "POST", headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}`, "Content-Type": `multipart/form-data; boundary=${boundary}`, "Content-Length": formBody.length } },
@@ -120,6 +121,36 @@ async function getStatsFor(phone) { const now = riyadhNow(), today = riyadhDateS
 async function getActiveForPhoneAdmin(phone) { const today = riyadhDateStr(riyadhNow()); return supabaseRequest("GET", `tasks?${UP(phone)}&date=gte.${today}&status=not.in.(done,cancelled)&order=date.asc,time.asc`); }
 async function getAllActiveAdmin() { const today = riyadhDateStr(riyadhNow()); return supabaseRequest("GET", `tasks?date=gte.${today}&status=not.in.(done,cancelled)&order=date.asc,time.asc&select=id,title,date,time,category,priority,status,user_phone`); }
 
+// ---------- AUDIT LOG (سجل التغييرات) ----------
+async function logChange({ taskId, action, user, before, after, source }) {
+  try {
+    await supabaseRequest("POST", "audit_log", {
+      task_id: taskId || null, action, changed_by: user.phone, actor_name: user.name,
+      before_data: before || null, after_data: after || null, source: source || "whatsapp"
+    }, "return=minimal");
+  } catch (e) { console.error("audit:", e.message); }
+}
+
+// ---------- RECURRING RULES (قواعد التكرار) ----------
+const DOW = { "الأحد": "SU", "الاثنين": "MO", "الإثنين": "MO", "الثلاثاء": "TU", "الأربعاء": "WE", "الخميس": "TH", "الجمعة": "FR", "السبت": "SA" };
+const DOW_AR = { SU: "الأحد", MO: "الاثنين", TU: "الثلاثاء", WE: "الأربعاء", TH: "الخميس", FR: "الجمعة", SA: "السبت" };
+async function saveRecurringRule(r, phone) {
+  return supabaseRequest("POST", "recurring_rules", {
+    user_phone: phone, title: r.title, freq: r.freq, day_of_week: r.day_of_week || null,
+    day_of_month: r.day_of_month || null, time: r.time || "09:00", category: r.category || "شخصي",
+    priority: r.priority || "medium", person: r.person || null, active: true
+  });
+}
+async function getRecurringFor(phone) { return supabaseRequest("GET", `recurring_rules?${UP(phone)}&active=eq.true&order=created_at.desc`); }
+async function deactivateRecurring(id, phone) { return supabaseRequest("PATCH", `recurring_rules?id=eq.${id}&${UP(phone)}`, { active: false }, "return=minimal"); }
+
+// ---------- RENAME CATEGORY (إعادة تسمية فئة) ----------
+async function renameCategory(phone, oldCat, newCat) {
+  const rows = await supabaseRequest("GET", `tasks?${UP(phone)}&category=eq.${encodeURIComponent(oldCat)}&status=neq.cancelled&select=id`);
+  await supabaseRequest("PATCH", `tasks?${UP(phone)}&category=eq.${encodeURIComponent(oldCat)}`, { category: newCat }, "return=minimal");
+  return rows.length;
+}
+
 // ---------- CLAUDE ----------
 function buildSystemPrompt(activeTasks) {
   const now = riyadhNow(), today = riyadhDateStr(now);
@@ -147,16 +178,19 @@ ${ctx}
 
 نظام الفئات: الافتراضي "شخصي". إذا ذُكرت إدارة/قسم استخدمها كفئة. "مهمة عمل" = "عمل".
 
-النوايا: add | update | cancel | done | list | category_report | clarify | not_found | chat
-- add: إضافة مهمة/مهام جديدة
-- update/cancel/done: طابق المهمة من قائمة هذا المستخدم فقط وأرجع task_id. غامض=clarify مع candidates. غير موجودة=not_found.
-- list: أي طلب لعرض المهام بأي صياغة ("ايه مهامي"، "رسلي كل المهام"، "وريني جدولي"، "عندي ايه النهاردة"، "مهام الأسبوع"). أرجع "scope": today أو week أو overdue أو all
+النوايا: add | recurring | update | cancel | done | list | category_report | rename_category | list_recurring | clarify | not_found | chat
+- add: إضافة مهمة/مهام جديدة لمرة واحدة
+- recurring: مهمة متكررة بصيغة "كل [يوم]" أو "كل يوم" أو "كل شهر" (مثل: "اجتماع كل خميس الساعة 4"، "تمرين كل يوم 6 صباحاً"، "تقرير أول كل شهر"). أرجعها في "recurring": {"title":"...","freq":"weekly|daily|monthly","day_of_week":"TH","day_of_month":null,"time":"16:00","category":"...","priority":"medium","person":null}. أيام الأسبوع بالرمز: SU MO TU WE TH FR SA
+- update/cancel/done: طابق المهمة من قائمة هذا المستخدم فقط وأرجع task_id. **مهم للمطابقة:** افهم القصد حتى لو الكلمات مختلفة عن العنوان المسجّل (مثلاً "اجتماع المبيعات"="اجتماع مع إدارة المبيعات"، "الفجر"="اصحي لصلاة الفجر"). طابق بالكلمة المميزة أو الوقت أو الفئة. لو في تطابق واحد واضح أرجع task_id مباشرة. غامض (أكثر من تطابق)=clarify مع candidates. غير موجودة فعلاً=not_found.
+- list: أي طلب لعرض المهام بأي صياغة. أرجع "scope": today أو week أو overdue أو all
 - category_report: عرض مهام فئة/إدارة محددة. أرجع الفئة في "category"
+- rename_category: تغيير اسم فئة (مثل: "غيّر فئة حنان إلى المنزل"، "خلي اسم العمل شغل"). أرجع "old_category" و "new_category"
+- list_recurring: عرض المهام المتكررة ("مهامي المتكررة"، "التكرارات")
 - chat: أي شيء آخر فقط. لا تستخدمها لطلبات العرض.
 - "بعد X دقيقة/ساعة" من ${currentTime}. بدون وقت=09:00، بدون تاريخ=اليوم. الأولوية high/medium/low.
 
 أجب فقط بـ JSON صالح:
-{"intent":"...","tasks":[{"title":"...","date":"YYYY-MM-DD","time":"HH:MM","priority":"medium","category":"شخصي","person":null,"project":null,"notes":null}],"task_id":123,"updates":{},"scope":"all","category":"...","candidates":[{"id":1,"title":"..."}],"reason":"..."}`;
+{"intent":"...","tasks":[{"title":"...","date":"YYYY-MM-DD","time":"HH:MM","priority":"medium","category":"شخصي","person":null,"project":null,"notes":null}],"recurring":{"title":"...","freq":"weekly","day_of_week":"TH","day_of_month":null,"time":"16:00","category":"شخصي","priority":"medium","person":null},"task_id":123,"updates":{},"scope":"all","category":"...","old_category":"...","new_category":"...","candidates":[{"id":1,"title":"..."}],"reason":"..."}`;
 }
 function callClaude(systemPrompt, userContent) {
   return new Promise((resolve, reject) => {
@@ -181,8 +215,8 @@ function dayName(s) { return new Date(s + "T12:00:00").toLocaleDateString("ar-SA
 function taskLine(t) { let s = ` ${pEmoji[t.priority] || "🟡"} ${t.time} ${t.title} ${catEmoji(t.category)}`; const cn = catName(t.category); if (cn) s += ` ${cn}`; return s; }
 
 function menuText(isAdmin) {
-  let m = "🤖 *VoiceTask — القائمة*\n\n1️⃣ جدول اليوم\n2️⃣ جدول الأسبوع\n3️⃣ المهام المتأخرة\n4️⃣ إحصائياتي\n5️⃣ فئاتي\n6️⃣ مساعدة";
-  if (isAdmin) m += "\n\n👑 *للمدير الأعلى:*\n• مهام الفريق\n• مهام [اسم الشخص]";
+  let m = "🤖 *VoiceTask — القائمة*\n\n1️⃣ جدول اليوم\n2️⃣ جدول الأسبوع\n3️⃣ المهام المتأخرة\n4️⃣ إحصائياتي\n5️⃣ فئاتي\n6️⃣ مساعدة\n\n🔁 *التكرارات* — مهامك المتكررة";
+  if (isAdmin) m += "\n\n👑 *للمدير الأعلى:*\n• مهام الفريق\n• مهام [اسم الشخص]\n• سجل التغييرات";
   m += "\n\n💬 رد برقم أو اكتب/سجّل طلبك";
   return m;
 }
@@ -249,9 +283,18 @@ function formatCategoriesList(tasks) {
   Object.entries(byCat).sort((a, b) => b[1] - a[1]).forEach(([c, n]) => { msg += `${catEmoji(c)} ${c} — ${n} مهمة\n`; });
   return msg + "\n💬 اكتب: \"مهام [اسم الفئة]\"";
 }
+function formatRecurring(rules) {
+  if (!rules || !rules.length) return "🔁 *المهام المتكررة* — لا يوجد\n\n💡 مثال: \"اجتماع كل خميس الساعة 4\"";
+  let msg = `🔁 *المهام المتكررة* — ${rules.length}\n\n`;
+  rules.forEach((r) => {
+    let when = r.freq === "weekly" ? `كل ${DOW_AR[r.day_of_week] || "أسبوع"}` : r.freq === "daily" ? "كل يوم" : `يوم ${r.day_of_month || 1}/الشهر`;
+    msg += `${catEmoji(r.category)} *${r.title}*\n   📆 ${when} ⏰ ${r.time} (#${r.id})\n`;
+  });
+  return msg + "\n🛑 لإيقاف واحدة اكتب: \"أوقف التكرار رقم [الرقم]\"";
+}
 function helpText(isAdmin) {
-  let m = "🤖 *VoiceTask AI*\n\n📝 أرسل مهامك نصاً أو 🎤 صوتاً أو 📷 صورة أو 📄 PDF\n\n✏️ \"أجّل اجتماع الأحد للساعة 7\"\n🗑 \"ألغي مهمة كذا\"\n✅ \"خلصت كذا\"\n⚡ بعد التذكير: \"خلصت\" / \"أجلها ساعة\" / \"أجلها بكرة\"\n\n🔐 الإلغاء والتعديل بتأكيد (نعم/لا)";
-  if (isAdmin) m += "\n\n👑 *أوامر المدير:* مهام الفريق │ مهام [اسم]";
+  let m = "🤖 *VoiceTask AI*\n\n📝 أرسل مهامك نصاً أو 🎤 صوتاً أو 📷 صورة أو 📄 PDF\n\n✏️ \"أجّل اجتماع الأحد للساعة 7\"\n🗑 \"ألغي مهمة كذا\"\n✅ \"خلصت كذا\"\n🔁 \"اجتماع كل خميس الساعة 4\" (مهمة متكررة)\n🏷 \"غيّر فئة حنان إلى المنزل\"\n⚡ بعد التذكير: \"خلصت\" / \"أجلها ساعة\" / \"أجلها بكرة\"\n\n🔐 الإلغاء والتعديل بتأكيد (نعم/لا)";
+  if (isAdmin) m += "\n\n👑 *أوامر المدير:* مهام الفريق │ مهام [اسم] │ سجل التغييرات";
   m += "\n\n📋 *القائمة* — كل الأوامر";
   return m;
 }
@@ -270,12 +313,19 @@ function formatTeam(tasks) {
 }
 
 // ---------- PENDING ----------
-async function applyPending(p, phone) {
+async function applyPending(p, user) {
+  const phone = user.phone;
   const t = await getTaskOwned(p.task_id, phone);
   if (!t) return "⚠️ المهمة لم تعد موجودة.";
-  if (p.type === "cancel") { await updateTaskOwned(p.task_id, phone, { status: "cancelled" }); return `🗑 *تم الإلغاء:* ${t.title}`; }
+  if (p.type === "cancel") {
+    await updateTaskOwned(p.task_id, phone, { status: "cancelled" });
+    await logChange({ taskId: t.id, action: "cancel", user, before: { status: t.status }, after: { status: "cancelled" } });
+    return `🗑 *تم الإلغاء:* ${t.title}`;
+  }
   if (p.type === "update") {
+    const before = { date: t.date, time: t.time, title: t.title, category: t.category };
     await updateTaskOwned(p.task_id, phone, p.updates);
+    await logChange({ taskId: t.id, action: "update", user, before, after: p.updates });
     const parts = [];
     if (p.updates.date) parts.push(`📅 ${p.updates.date}`);
     if (p.updates.time) parts.push(`⏰ ${p.updates.time}`);
@@ -293,7 +343,13 @@ async function executeIntent(result, user) {
   switch (result.intent) {
     case "add": {
       const tasks = result.tasks || []; let saved = 0;
-      for (const t of tasks) { try { await saveTask(t, phone); saved++; } catch (e) { console.error("Save:", e.message); } }
+      for (const t of tasks) {
+        try {
+          const row = await saveTask(t, phone); saved++;
+          const newId = Array.isArray(row) && row[0] ? row[0].id : null;
+          await logChange({ taskId: newId, action: "add", user, after: t });
+        } catch (e) { console.error("Save:", e.message); }
+      }
       if (tasks.length && !saved) return "⚠️ فهمت المهمة لكن حدث خطأ بالحفظ. حاول مرة أخرى.";
       if (!user.isAdmin && saved) {
         const admin = getAdmin();
@@ -302,6 +358,19 @@ async function executeIntent(result, user) {
         try { await sendWhatsApp(admin.phone, note); } catch (e) { console.error("notify:", e.message); }
       }
       return formatTasksMessage(tasks);
+    }
+    case "recurring": {
+      const r = result.recurring;
+      if (!r || !r.title || !r.freq) return "⚠️ لم أفهم تفاصيل التكرار. مثال: \"اجتماع كل خميس الساعة 4\"";
+      try {
+        await saveRecurringRule(r, phone);
+        await logChange({ action: "recurring_add", user, after: r });
+      } catch (e) { console.error("recurring:", e.message); return "⚠️ تعذّر حفظ التكرار. حاول مرة أخرى."; }
+      let when = "";
+      if (r.freq === "weekly") when = `كل ${DOW_AR[r.day_of_week] || "أسبوع"}`;
+      else if (r.freq === "daily") when = "كل يوم";
+      else if (r.freq === "monthly") when = `يوم ${r.day_of_month || 1} من كل شهر`;
+      return `🔁 *تم ضبط مهمة متكررة*\n\n*${r.title}*\n📆 ${when} │ ⏰ ${r.time || "09:00"}\n${catEmoji(r.category)} ${r.category || "شخصي"}\n\n💡 ستُنشأ تلقائياً في موعدها. لإيقافها اكتب: *التكرارات*`;
     }
     case "update": {
       if (!result.task_id || !result.updates) return "⚠️ لم أحدد المهمة أو التعديل. وضّح أكثر.";
@@ -327,7 +396,19 @@ async function executeIntent(result, user) {
       const t = activeTasks.find(x => x.id === result.task_id);
       if (!t) return "⚠️ لم أجد المهمة في قائمتك.";
       await updateTaskOwned(result.task_id, phone, { status: "done" });
+      await logChange({ taskId: t.id, action: "done", user, before: { status: t.status }, after: { status: "done" } });
       return `🎉 *أحسنت! أُنجزت:* ${t.title}`;
+    }
+    case "rename_category": {
+      const oldC = result.old_category, newC = result.new_category;
+      if (!oldC || !newC) return "⚠️ وضّح الفئتين. مثال: \"غيّر فئة حنان إلى المنزل\"";
+      const n = await renameCategory(phone, oldC, newC);
+      await logChange({ action: "rename_category", user, before: { category: oldC }, after: { category: newC } });
+      return n ? `🏷 *تم تغيير اسم الفئة*\n«${oldC}» ← «${newC}»\n📋 تأثّرت ${n} مهمة.` : `🏷 غيّرت الاسم «${oldC}» ← «${newC}»، لكن لم أجد مهام بهذه الفئة حالياً.`;
+    }
+    case "list_recurring": {
+      const rules = await getRecurringFor(phone);
+      return formatRecurring(rules);
     }
     case "list": {
       const sc = result.scope || "all";
@@ -351,16 +432,33 @@ async function executeIntent(result, user) {
 }
 
 // ---------- QUICK ----------
-async function quickDoneLast(phone) { const id = await getState(`last_reminder_${phone}`); if (!id) return null; const t = await getTaskOwned(id, phone); if (!t || t.status !== "new") return null; await updateTaskOwned(t.id, phone, { status: "done" }); return `🎉 *أحسنت! أُنجزت:* ${t.title}`; }
-async function quickPostpone(phone, mode) {
+async function quickDoneLast(user) { const phone = user.phone; const id = await getState(`last_reminder_${phone}`); if (!id) return null; const t = await getTaskOwned(id, phone); if (!t || t.status !== "new") return null; await updateTaskOwned(t.id, phone, { status: "done" }); await logChange({ taskId: t.id, action: "done", user, before: { status: "new" }, after: { status: "done" } }); return `🎉 *أحسنت! أُنجزت:* ${t.title}`; }
+async function quickPostpone(user, mode) {
+  const phone = user.phone;
   const id = await getState(`last_reminder_${phone}`); if (!id) return "⚠️ لا توجد مهمة حديثة. حدد المهمة بالاسم.";
   const t = await getTaskOwned(id, phone); if (!t || t.status !== "new") return "⚠️ المهمة الأخيرة لم تعد نشطة.";
-  if (mode === "tomorrow") { const d = new Date(t.date + "T12:00:00Z"); d.setUTCDate(d.getUTCDate() + 1); const nd = riyadhDateStr(d); await updateTaskOwned(t.id, phone, { date: nd }); return `⏰ *تم التأجيل لبكرة:* ${t.title}\n📅 ${nd} ⏰ ${t.time}`; }
+  if (mode === "tomorrow") { const d = new Date(t.date + "T12:00:00Z"); d.setUTCDate(d.getUTCDate() + 1); const nd = riyadhDateStr(d); await updateTaskOwned(t.id, phone, { date: nd }); await logChange({ taskId: t.id, action: "postpone", user, before: { date: t.date }, after: { date: nd } }); return `⏰ *تم التأجيل لبكرة:* ${t.title}\n📅 ${nd} ⏰ ${t.time}`; }
   let [h, m] = (t.time || "09:00").split(":").map(Number); let date = t.date; h += 1;
   if (h >= 24) { h -= 24; const d = new Date(date + "T12:00:00Z"); d.setUTCDate(d.getUTCDate() + 1); date = riyadhDateStr(d); }
   const nt = String(h).padStart(2, "0") + ":" + String(m).padStart(2, "0");
   await updateTaskOwned(t.id, phone, { date, time: nt });
+  await logChange({ taskId: t.id, action: "postpone", user, before: { date: t.date, time: t.time }, after: { date, time: nt } });
   return `⏰ *تم التأجيل ساعة:* ${t.title}\n🕐 ${nt}${date !== t.date ? " (" + date + ")" : ""}`;
+}
+
+// ---------- AUDIT FORMATTERS ----------
+async function getRecentAudit(limit = 15) { return supabaseRequest("GET", `audit_log?order=created_at.desc&limit=${limit}`); }
+function formatAuditLog(rows) {
+  if (!rows || !rows.length) return "📜 *سجل التغييرات* — لا يوجد نشاط بعد.";
+  const actAr = { add: "➕ أضاف", update: "✏️ عدّل", cancel: "🗑 ألغى", done: "✅ أنجز", postpone: "⏰ أجّل", rename_category: "🏷 غيّر فئة", recurring_add: "🔁 أضاف تكرار", recurring_stop: "🛑 أوقف تكرار" };
+  let msg = "📜 *سجل التغييرات* (آخر النشاطات)\n\n";
+  rows.forEach(r => {
+    const d = new Date(r.created_at); const tm = String((d.getUTCHours() + 3) % 24).padStart(2, "0") + ":" + String(d.getUTCMinutes()).padStart(2, "0");
+    const title = (r.after_data && r.after_data.title) || (r.before_data && r.before_data.title) || (r.after_data && r.after_data.category) || "";
+    const src = r.source === "dashboard" ? "🖥" : "📱";
+    msg += `${src} *${r.actor_name || "؟"}* — ${actAr[r.action] || r.action}${title ? ` «${title}»` : ""}\n   🕐 ${tm}\n`;
+  });
+  return msg.trim();
 }
 
 // ---------- ROUTER ----------
@@ -370,7 +468,7 @@ async function handleTextMessage(text, user) {
 
   const pending = await getPending(phone);
   if (pending) {
-    if (/^(نعم|أيوه|ايوه|تأكيد|تاكيد|اوك|أوكي|تمام|أكد|اكد|ok|yes|y)$/i.test(t)) { await clearPending(phone); return applyPending(pending, phone); }
+    if (/^(نعم|أيوه|ايوه|تأكيد|تاكيد|اوك|أوكي|تمام|أكد|اكد|ok|yes|y)$/i.test(t)) { await clearPending(phone); return applyPending(pending, user); }
     if (/^(لا|لأ|إلغاء|الغاء|تراجع|الغي|no|n)$/i.test(t)) { await clearPending(phone); return "👍 تم التراجع، لم يحدث أي تغيير."; }
     await clearPending(phone);
   }
@@ -378,12 +476,18 @@ async function handleTextMessage(text, user) {
   // أوامر Admin الخاصة (للمدير الأعلى فقط — غير مرئية لغيره)
   if (user.isAdmin) {
     if (/^مهام الفريق$/.test(t) || t === "الفريق") return formatTeam(await getAllActiveAdmin());
+    if (/^(سجل التغييرات|السجل|التغييرات)$/.test(t)) return formatAuditLog(await getRecentAudit());
     const mTeam = t.match(/^مهام\s+(.+)$/);
     if (mTeam) {
       const target = findUserByName(mTeam[1]);
       if (target) return formatWeekly(await getActiveForPhoneAdmin(target.phone), `مهام ${target.name}`);
     }
   }
+
+  // المهام المتكررة
+  if (/^(التكرارات|مهامي المتكررة|المتكررة)$/.test(t)) return formatRecurring(await getRecurringFor(phone));
+  const mStop = t.match(/أوقف\s+التكرار\s+رقم\s+(\d+)/);
+  if (mStop) { await deactivateRecurring(parseInt(mStop[1], 10), phone); await logChange({ action: "recurring_stop", user, before: { id: mStop[1] } }); return `🛑 تم إيقاف التكرار رقم ${mStop[1]}.`; }
 
   if (/^(القائمة|قائمة|قائمه|القائمه|menu)$/i.test(t)) return menuText(user.isAdmin);
   if (/^[1-6]$/.test(t)) {
@@ -403,9 +507,9 @@ async function handleTextMessage(text, user) {
   if (t === "فئاتي" || t === "الفئات") return formatCategoriesList(await getActiveTasksFor(phone));
   if (t === "مساعدة" || lower === "help" || t === "؟") return helpText(user.isAdmin);
 
-  if (t.length <= 20 && t.includes("أجل") && (t.includes("بكر") || t.includes("غد"))) return quickPostpone(phone, "tomorrow");
-  if (t.length <= 20 && t.includes("أجل") && t.includes("ساعة")) return quickPostpone(phone, "hour");
-  if (t.length <= 6 && (t === "خلصت" || t === "تم" || t === "تمت")) { const r = await quickDoneLast(phone); if (r) return r; }
+  if (t.length <= 20 && t.includes("أجل") && (t.includes("بكر") || t.includes("غد"))) return quickPostpone(user, "tomorrow");
+  if (t.length <= 20 && t.includes("أجل") && t.includes("ساعة")) return quickPostpone(user, "hour");
+  if (t.length <= 6 && (t === "خلصت" || t === "تم" || t === "تمت")) { const r = await quickDoneLast(user); if (r) return r; }
 
   if (t.length <= 3) return "أهلاً! أرسل مهامك وسأنظمها 😊\n📋 اكتب *القائمة*";
 
@@ -418,7 +522,7 @@ module.exports = async (req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   if (req.method === "OPTIONS") return res.status(200).end();
-  if (req.method === "GET") return res.status(200).json({ status: "✅ VoiceTask AI يعمل بنجاح!", version: "3.4.2", riyadhTime: riyadhNow().toISOString() });
+  if (req.method === "GET") return res.status(200).json({ status: "✅ VoiceTask AI يعمل بنجاح!", version: "3.5.0", riyadhTime: riyadhNow().toISOString() });
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
   const TwiML = `<?xml version="1.0" encoding="UTF-8"?><Response></Response>`;
