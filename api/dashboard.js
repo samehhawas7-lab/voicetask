@@ -1,5 +1,5 @@
 // ============================================================
-// VoiceTask AI - Dashboard v2.1.0
+// VoiceTask AI - Dashboard v2.2.0
 // لوحة تحكم احترافية: Dark + RTL + Chart.js + تصدير Excel/PDF
 // Multi-User آمنة: قراءة من جهة السيرفر + توكن لكل مستخدم + عزل تام
 // المسار: /api/dashboard
@@ -231,7 +231,7 @@ function buildData(tasks, scope, viewer, usersForSwitch, adminToken) {
 
   return {
     meta: {
-      appName: "VoiceTask", version: "2.1.0",
+      appName: "VoiceTask", version: "2.2.0",
       generatedAt: riyadhNow().toISOString().replace("T", " ").slice(0, 16),
       today, scope, viewer, isAdmin: viewer.isAdmin, isPrimary: !!viewer.isPrimary, isSecretary: !!viewer.isSecretary,
       viewerToken: adminToken,
@@ -578,7 +578,7 @@ document.getElementById("who").innerHTML = "العرض: <b>" + esc(scopeLabel) +
 // admin switcher
 if (m.isPrimary) {
   const sel = document.createElement("select");
-  const base = location.pathname + "?token=" + encodeURIComponent(m.adminToken);
+  const base = "/api/dashboard?token=" + encodeURIComponent(m.adminToken);
   const opts = [["__all__","👥 كل الفريق"]].concat(m.switchUsers.map(u => [u.phone, "👤 " + u.name]));
   opts.forEach(([val,label]) => {
     const o = document.createElement("option"); o.value = val; o.textContent = label;
@@ -828,7 +828,7 @@ function bindEditButtons(){
 const overlay=document.getElementById("overlay");
 let editingTask=null;
 async function api(payload){
-  const res = await fetch(location.pathname+"?token="+encodeURIComponent(TOKEN), {
+  const res = await fetch("/api/dashboard?token="+encodeURIComponent(TOKEN), {
     method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(payload)
   });
   return res.json();
@@ -951,7 +951,15 @@ function esc(s){ return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,
 module.exports = async (req, res) => {
   try {
     const q = req.query || {};
-    const token = q.token || "";
+    // التوكن: من ?token= أو من نهاية المسار /api/dashboard/<TOKEN> (أنظف للضغط في واتساب)
+    let token = q.token || "";
+    if (!token) {
+      try {
+        const urlPath = (req.url || "").split("?")[0];
+        const mPath = urlPath.match(/\/dashboard\/([A-Za-z0-9]+)\/?$/);
+        if (mPath) token = mPath[1];
+      } catch (e) {}
+    }
     const user = resolveByToken(token);
 
     // ===== POST: عمليات الكتابة (تعديل / سجل) — JSON =====
