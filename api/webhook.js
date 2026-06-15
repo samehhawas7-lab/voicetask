@@ -1,5 +1,5 @@
 // ============================================================
-// VoiceTask AI - Webhook v3.7.0
+// VoiceTask AI - Webhook v3.8.0
 // Multi-User + خصوصية محكمة + فهم طبيعي + مطابقة أسماء آمنة
 // ============================================================
 
@@ -235,7 +235,7 @@ ${ctx}
 النوايا: add | recurring | update | cancel | done | list | category_report | rename_category | list_recurring | clarify | not_found | chat
 - add: إضافة مهمة/مهام جديدة لمرة واحدة
 - recurring: مهمة متكررة بصيغة "كل [يوم]" أو "كل يوم" أو "كل شهر" (مثل: "اجتماع كل خميس الساعة 4"، "تمرين كل يوم 6 صباحاً"، "تقرير أول كل شهر"). أرجعها في "recurring": {"title":"...","freq":"weekly|daily|monthly","day_of_week":"TH","day_of_month":null,"time":"16:00","category":"...","priority":"medium","person":null}. أيام الأسبوع بالرمز: SU MO TU WE TH FR SA
-- update/cancel/done: طابق المهمة من قائمة هذا المستخدم فقط وأرجع task_id. **مهم للمطابقة:** افهم القصد حتى لو الكلمات مختلفة عن العنوان المسجّل (مثلاً "اجتماع المبيعات"="اجتماع مع إدارة المبيعات"، "الفجر"="اصحي لصلاة الفجر"). طابق بالكلمة المميزة أو الوقت أو الفئة. لو في تطابق واحد واضح أرجع task_id مباشرة. غامض (أكثر من تطابق)=clarify مع candidates. غير موجودة فعلاً=not_found.
+- update/cancel/done: طابق المهمة من قائمة هذا المستخدم فقط وأرجع task_id. **مهم للمطابقة:** افهم القصد حتى لو الكلمات مختلفة عن العنوان المسجّل (مثلاً "اجتماع المبيعات"="اجتماع مع إدارة المبيعات"، "الفجر"="اصحي لصلاة الفجر"). طابق بالكلمة المميزة أو الوقت أو الفئة. لو في تطابق واحد واضح أرجع task_id مباشرة. غامض (أكثر من تطابق)=clarify مع candidates، **وأرجع أيضاً pending_action** ("update" أو "cancel" أو "done") لتحديد العملية المقصودة، ومع updates لو كان تعديلاً. غير موجودة فعلاً=not_found.
 - list: أي طلب لعرض المهام بأي صياغة. أرجع "scope": today أو week أو overdue أو all
 - category_report: عرض مهام فئة/إدارة محددة. أرجع الفئة في "category"
 - rename_category: تغيير اسم فئة (مثل: "غيّر فئة حنان إلى المنزل"، "خلي اسم العمل شغل"). أرجع "old_category" و "new_category"
@@ -248,7 +248,7 @@ ${ctx}
 }
 function callClaude(systemPrompt, userContent) {
   return new Promise((resolve, reject) => {
-    const bodyData = JSON.stringify({ model: "claude-haiku-4-5-20251001", max_tokens: 1500, system: systemPrompt, messages: [{ role: "user", content: userContent }] });
+    const bodyData = JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 1500, system: systemPrompt, messages: [{ role: "user", content: userContent }] });
     const req = https.request({ hostname: "api.anthropic.com", path: "/v1/messages", method: "POST", headers: { "Content-Type": "application/json", "x-api-key": process.env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01" } },
       (res) => { let d = ""; res.on("data", c => d += c); res.on("end", () => { try { const r = JSON.parse(d); if (r.error) return reject(new Error("Claude: " + r.error.message)); const raw = r.content?.map(b => b.text || "").join("") || "{}"; resolve(JSON.parse(raw.replace(/```json|```/g, "").trim())); } catch (e) { reject(new Error("Claude parse error: " + e.message)); } }); });
     req.on("error", reject); req.write(bodyData); req.end();
@@ -495,9 +495,14 @@ async function executeIntent(result, user, originalText) {
       return formatCategory(result.category, await getCategoryFor(phone, result.category));
     }
     case "clarify": {
+      const cands = (result.candidates || []).map(c => { const t = activeTasks.find(x => x.id === c.id); return { id: c.id, title: t ? t.title : c.title, date: t ? t.date : "", time: t ? t.time : "" }; }).filter(c => c.id);
+      if (!cands.length) return "🤔 لم أحدد المهمة. أعد طلبك مع اسم المهمة.";
+      // خزّن المرشحين + نية الطلب الأصلية للرد بالرقم
+      await setPending(myKey, { type: "clarify", action: result.pending_action || "update", updates: result.updates || {}, candidates: cands });
       let msg = "🤔 وجدت أكثر من مهمة، أيها تقصد؟\n\n";
-      (result.candidates || []).forEach((c, i) => { const t = activeTasks.find(x => x.id === c.id); msg += `${i + 1}️⃣ ${t ? `${t.title} — ${t.date} ${t.time}` : c.title}\n`; });
-      return msg + "\nأعد طلبك مع تحديد المهمة.";
+      cands.forEach((c, i) => { msg += `${i + 1}️⃣ ${c.title}${c.date ? ` — ${c.date} ${c.time}` : ""}\n`; });
+      msg += "\n💬 رد بالرقم (مثلاً: 2)";
+      return msg;
     }
     case "not_found": return `⚠️ لم أجد المهمة.\n${result.reason || ""}\n📋 اكتب *القائمة*.`;
     default: {
@@ -599,6 +604,26 @@ async function handleTextMessage(text, user) {
 
   const pending = await getPending(myKey);
   if (pending) {
+    // رد على قائمة التوضيح برقم (1، 2، 3...)
+    if (pending.type === "clarify") {
+      const numMatch = t.match(/^([0-9\u0660-\u0669]+)$/);
+      if (numMatch) {
+        const idx = parseInt(numMatch[1].replace(/[\u0660-\u0669]/g, d => "٠١٢٣٤٥٦٧٨٩".indexOf(d)), 10) - 1;
+        const chosen = (pending.candidates || [])[idx];
+        if (chosen) {
+          await clearPending(myKey);
+          if (pending.action === "cancel") { await setPending(myKey, { type: "cancel", task_id: chosen.id }); return `⚠️ *تأكيد الإلغاء*\nمتأكد من إلغاء: *${chosen.title}*؟\n\nرد: *نعم* للتأكيد │ *لا* للتراجع`; }
+          if (pending.action === "done") { const r = await executeIntent({ intent: "done", task_id: chosen.id }, user); return r; }
+          // افتراضي: تعديل
+          await setPending(myKey, { type: "update", task_id: chosen.id, updates: pending.updates || {} });
+          const u = pending.updates || {}; const parts = [];
+          if (u.date) parts.push(`📅 ${u.date}`); if (u.time) parts.push(`⏰ ${u.time}`); if (u.title) parts.push(`✏️ ${u.title}`);
+          return `⚠️ *تأكيد التعديل*\n*${chosen.title}*\nالتغيير: ${parts.join("  ") || "(غير محدد)"}\n\nرد: *نعم* للتأكيد │ *لا* للتراجع`;
+        }
+        return "⚠️ رقم غير صحيح. رد برقم من القائمة.";
+      }
+      await clearPending(myKey); // رد بغير رقم → ألغِ التوضيح وكمّل عادي
+    }
     if (/^(نعم|أيوه|ايوه|تأكيد|تاكيد|اوك|أوكي|تمام|أكد|اكد|ok|yes|y)$/i.test(t)) { await clearPending(myKey); return applyPending(pending, user); }
     if (/^(لا|لأ|إلغاء|الغاء|تراجع|الغي|no|n)$/i.test(t)) { await clearPending(myKey); return "👍 تم التراجع، لم يحدث أي تغيير."; }
     await clearPending(myKey);
@@ -681,7 +706,7 @@ module.exports = async (req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   if (req.method === "OPTIONS") return res.status(200).end();
-  if (req.method === "GET") return res.status(200).json({ status: "✅ VoiceTask AI يعمل بنجاح!", version: "3.7.0", riyadhTime: riyadhNow().toISOString() });
+  if (req.method === "GET") return res.status(200).json({ status: "✅ VoiceTask AI يعمل بنجاح!", version: "3.8.0", riyadhTime: riyadhNow().toISOString() });
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
   const TwiML = `<?xml version="1.0" encoding="UTF-8"?><Response></Response>`;
