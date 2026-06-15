@@ -11,7 +11,7 @@ const crypto = require("crypto");
 function dashSecret() { return process.env.DASHBOARD_SECRET || process.env.TWILIO_AUTH_TOKEN || process.env.SUPABASE_KEY || "voicetask-fallback"; }
 function tokenFor(phone) { return crypto.createHash("sha256").update(phone + "|" + dashSecret()).digest("hex").slice(0, 28); }
 function dashboardBase() { return process.env.DASHBOARD_URL || "https://voicetask-swart.vercel.app/api/dashboard"; }
-function dashLinkFor(phone) { return `${dashboardBase()}?token=${tokenFor(phone)}`; }
+function dashLinkFor(phone) { return `${dashboardBase()}/${tokenFor(phone)}`; }
 
 function riyadhNow() { return new Date(Date.now() + 3 * 3600 * 1000); }
 function riyadhDateStr(d) { return d.toISOString().split("T")[0]; }
