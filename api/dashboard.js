@@ -1,5 +1,5 @@
 // ============================================================
-// VoiceTask AI - Dashboard v2.0.0
+// VoiceTask AI - Dashboard v2.1.0
 // لوحة تحكم احترافية: Dark + RTL + Chart.js + تصدير Excel/PDF
 // Multi-User آمنة: قراءة من جهة السيرفر + توكن لكل مستخدم + عزل تام
 // المسار: /api/dashboard
@@ -15,22 +15,42 @@ function riyadhDateStr(d) { return d.toISOString().split("T")[0]; }
 function shiftDays(dateStr, n) { const d = new Date(dateStr + "T12:00:00Z"); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().split("T")[0]; }
 
 // ---------- USERS & ROLES ----------
-function getAdmin() { return { phone: process.env.YOUR_WHATSAPP, name: process.env.ADMIN_NAME || "المدير الأعلى", isAdmin: true }; }
+function normPhone(p) { return String(p || "").replace(/^whatsapp:/i, "").replace(/[\s\-()]/g, "").trim(); }
+function samePhone(a, b) { return normPhone(a) === normPhone(b); }
+function toDbPhone(p) { const n = normPhone(p); return n ? "whatsapp:" + n : n; }
+
+function getAdmin() { return { phone: normPhone(process.env.YOUR_WHATSAPP), name: process.env.ADMIN_NAME || "المدير الأعلى", isAdmin: true, isPrimary: true, role: "primary" }; }
 function getTeam() {
   const raw = process.env.TEAM_MEMBERS || "";
   return raw.split(",").map(s => s.trim()).filter(Boolean).map(entry => {
     const idx = entry.lastIndexOf(":");
-    return { phone: entry.slice(0, idx).trim(), name: entry.slice(idx + 1).trim(), isAdmin: false };
+    return { phone: normPhone(entry.slice(0, idx)), name: entry.slice(idx + 1).trim(), isAdmin: false, role: "member" };
   }).filter(u => u.phone && u.name);
 }
+function getSecretaries() {
+  const raw = process.env.SECRETARY || "";
+  return raw.split(",").map(s => s.trim()).filter(Boolean).map(entry => {
+    const parts = entry.split(":");
+    if (parts.length < 3) return null;
+    return { phone: normPhone(parts[0]), name: parts[1].trim(), bossPhone: normPhone(parts[2]), isAdmin: false, role: "secretary" };
+  }).filter(Boolean).filter(u => u.phone && u.name && u.bossPhone);
+}
 function allUsers() { return [getAdmin(), ...getTeam()]; }
+function allPeople() { return [getAdmin(), ...getTeam(), ...getSecretaries()]; }
 
 // ---------- AUTH (token مشتق من الرقم + سر) ----------
 function secret() { return process.env.DASHBOARD_SECRET || process.env.TWILIO_AUTH_TOKEN || process.env.SUPABASE_KEY || "voicetask-fallback"; }
-function tokenFor(phone) { return crypto.createHash("sha256").update(phone + "|" + secret()).digest("hex").slice(0, 28); }
+function tokenFor(phone) { return crypto.createHash("sha256").update(normPhone(phone) + "|" + secret()).digest("hex").slice(0, 28); }
 function resolveByToken(token) {
   if (!token) return null;
-  return allUsers().find(u => tokenFor(u.phone) === token) || null;
+  const person = allPeople().find(u => tokenFor(u.phone) === token);
+  if (!person) return null;
+  if (person.role === "secretary") {
+    // السكرتير يدخل على لوحة مديره: صلاحيات كاملة على مساحة المدير + إشعار عند التعديل
+    const boss = allUsers().find(u => samePhone(u.phone, person.bossPhone));
+    return { ...person, isAdmin: true, isSecretary: true, workspacePhone: person.bossPhone, bossName: boss ? boss.name : "المدير" };
+  }
+  return { ...person, workspacePhone: person.phone };
 }
 
 // ---------- SUPABASE (قراءة + كتابة من السيرفر) ----------
@@ -61,29 +81,51 @@ async function fetchWindow(phone) {
 
 // ---------- WRITE OPS (عمليات الكتابة + سجل التغييرات) ----------
 async function getTaskById(id) { const r = await supabaseRequest("GET", `tasks?id=eq.${id}&${SELECT}`); return r.length ? r[0] : null; }
-async function logDashboard(taskId, action, viewer, before, after) {
+async function logDashboard(taskId, action, actor, before, after) {
   try {
     await supabaseRequest("POST", "audit_log", {
-      task_id: taskId || null, action, changed_by: viewer.phone, actor_name: viewer.name,
+      task_id: taskId || null, action, changed_by: actor.phone, actor_name: actor.name,
       before_data: before || null, after_data: after || null, source: "dashboard"
     }, "return=minimal");
   } catch (e) { console.error("audit:", e.message); }
 }
+// إرسال واتساب (للإشعارات)
+function sendWhatsApp(to, message) {
+  const sid = process.env.TWILIO_ACCOUNT_SID, tok = process.env.TWILIO_AUTH_TOKEN;
+  const body = new URLSearchParams({ To: to.startsWith("whatsapp:") ? to : "whatsapp:" + to, From: process.env.TWILIO_WHATSAPP_FROM, Body: message }).toString();
+  return new Promise((resolve) => {
+    const req = https.request({ hostname: "api.twilio.com", path: `/2010-04-01/Accounts/${sid}/Messages.json`, method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded", Authorization: "Basic " + Buffer.from(`${sid}:${tok}`).toString("base64") } },
+      (res) => { res.resume(); res.on("end", resolve); });
+    req.on("error", () => resolve()); req.write(body); req.end();
+  });
+}
+// إشعار تعديلات السكرتير من الداشبورد → المدير + الأدمن الأساسي
+async function notifySecretaryDash(actor, text) {
+  if (!actor || !actor.isSecretary) return;
+  const recipients = new Set();
+  if (actor.workspacePhone) recipients.add(normPhone(actor.workspacePhone));
+  recipients.add(normPhone(getAdmin().phone));
+  recipients.delete(normPhone(actor.phone));
+  const msg = `🗂 *${actor.name}* (سكرتير ${actor.bossName || "المدير"}) — من اللوحة\n${text}`;
+  for (const r of recipients) { try { await sendWhatsApp("whatsapp:" + r, msg); } catch (e) {} }
+}
 // تعديل مهمة (مع التحقق من الملكية)
-async function applyTaskEdit(viewer, taskId, updates) {
+async function applyTaskEdit(actor, taskId, updates) {
   const t = await getTaskById(taskId);
   if (!t) return { ok: false, error: "المهمة غير موجودة" };
-  if (!viewer.isAdmin && t.user_phone !== viewer.phone) return { ok: false, error: "لا تملك صلاحية تعديل هذه المهمة" };
+  const workspace = actor.isSecretary ? actor.workspacePhone : actor.phone;
+  if (!actor.isPrimary && !actor.isSecretary && !samePhone(t.user_phone, actor.phone)) return { ok: false, error: "لا تملك صلاحية تعديل هذه المهمة" };
+  if (actor.isSecretary && !samePhone(t.user_phone, workspace)) return { ok: false, error: "خارج نطاق صلاحيتك" };
   const allowed = {};
   ["title", "date", "time", "category", "priority", "status", "admin_notes"].forEach(k => { if (updates[k] !== undefined) allowed[k] = updates[k]; });
   if (!Object.keys(allowed).length) return { ok: false, error: "لا يوجد تغيير" };
-  // عند تغيير الموعد، أعِد ضبط التذكيرات
   if (allowed.date || allowed.time) { allowed.reminder_before_sent = false; allowed.reminder_due_sent = false; allowed.follow_up_sent = false; }
   allowed.updated_at = new Date().toISOString();
-  allowed.updated_by = viewer.name;
+  allowed.updated_by = actor.name;
   const before = { title: t.title, date: t.date, time: t.time, category: t.category, priority: t.priority, status: t.status, admin_notes: t.admin_notes };
   await supabaseRequest("PATCH", `tasks?id=eq.${taskId}`, allowed, "return=minimal");
-  await logDashboard(taskId, allowed.status === "done" ? "done" : (allowed.status === "cancelled" ? "cancel" : "update"), viewer, before, allowed);
+  await logDashboard(taskId, allowed.status === "done" ? "done" : (allowed.status === "cancelled" ? "cancel" : "update"), actor, before, allowed);
+  await notifySecretaryDash(actor, `✏️ عدّل مهمة: *${t.title}*`);
   return { ok: true };
 }
 async function getAuditRows(limit) { return supabaseRequest("GET", `audit_log?order=created_at.desc&limit=${limit || 25}`); }
@@ -93,7 +135,7 @@ async function listNotes(taskId) { return supabaseRequest("GET", `task_notes?tas
 async function ownTaskCheck(viewer, taskId) {
   const t = await getTaskById(taskId);
   if (!t) return { ok: false, error: "المهمة غير موجودة" };
-  if (!viewer.isAdmin && t.user_phone !== viewer.phone) return { ok: false, error: "لا تملك صلاحية" };
+  if (!viewer.isAdmin && !samePhone(t.user_phone, viewer.phone)) return { ok: false, error: "لا تملك صلاحية" };
   return { ok: true, task: t };
 }
 async function addNote(viewer, taskId, body) {
@@ -106,7 +148,7 @@ async function addNote(viewer, taskId, body) {
 async function editNote(viewer, noteId, body) {
   const r = await supabaseRequest("GET", `task_notes?id=eq.${noteId}`); if (!r.length) return { ok: false, error: "الملاحظة غير موجودة" };
   const note = r[0];
-  if (!viewer.isAdmin && note.user_phone !== viewer.phone) return { ok: false, error: "لا تملك صلاحية" };
+  if (!viewer.isAdmin && !samePhone(note.user_phone, viewer.phone)) return { ok: false, error: "لا تملك صلاحية" };
   if (!body || !body.trim()) return { ok: false, error: "الملاحظة فارغة" };
   await supabaseRequest("PATCH", `task_notes?id=eq.${noteId}`, { body: body.trim(), updated_at: new Date().toISOString() }, "return=minimal");
   await logDashboard(note.task_id, "note_edit", viewer, null, { body: body.trim() });
@@ -115,7 +157,7 @@ async function editNote(viewer, noteId, body) {
 async function deleteNote(viewer, noteId) {
   const r = await supabaseRequest("GET", `task_notes?id=eq.${noteId}`); if (!r.length) return { ok: false, error: "الملاحظة غير موجودة" };
   const note = r[0];
-  if (!viewer.isAdmin && note.user_phone !== viewer.phone) return { ok: false, error: "لا تملك صلاحية" };
+  if (!viewer.isAdmin && !samePhone(note.user_phone, viewer.phone)) return { ok: false, error: "لا تملك صلاحية" };
   await supabaseRequest("DELETE", `task_notes?id=eq.${noteId}`, null, "return=minimal");
   await logDashboard(note.task_id, "note_delete", viewer, { body: note.body }, null);
   return { ok: true };
@@ -156,7 +198,7 @@ async function addAttachment(viewer, taskId, fileName, fileType, base64Data) {
 async function deleteAttachment(viewer, attId) {
   const r = await supabaseRequest("GET", `task_attachments?id=eq.${attId}`); if (!r.length) return { ok: false, error: "المرفق غير موجود" };
   const att = r[0];
-  if (!viewer.isAdmin && att.user_phone !== viewer.phone) return { ok: false, error: "لا تملك صلاحية" };
+  if (!viewer.isAdmin && !samePhone(att.user_phone, viewer.phone)) return { ok: false, error: "لا تملك صلاحية" };
   await deleteFromStorage(att.file_path);
   await supabaseRequest("DELETE", `task_attachments?id=eq.${attId}`, null, "return=minimal");
   await logDashboard(att.task_id, "attach_delete", viewer, { file: att.file_name }, null);
@@ -167,7 +209,7 @@ async function deleteAttachment(viewer, attId) {
 function buildData(tasks, scope, viewer, usersForSwitch, adminToken) {
   const today = riyadhDateStr(riyadhNow());
   const d6 = shiftDays(today, -6);
-  const nameByPhone = {}; allUsers().forEach(u => { nameByPhone[u.phone] = u.name; });
+  const nameByPhone = {}; allUsers().forEach(u => { nameByPhone[normPhone(u.phone)] = u.name; });
 
   const active = tasks.filter(t => t.status === "new" && t.date >= today);
   const overdue = tasks.filter(t => t.status === "new" && t.date < today);
@@ -184,18 +226,18 @@ function buildData(tasks, scope, viewer, usersForSwitch, adminToken) {
   // جدول المهام: النشطة + المتأخرة + المنجزة آخر ٧ أيام
   const tableTasks = tasks
     .filter(t => t.status === "new" || (t.status === "done" && t.date >= d6))
-    .map(t => ({ ...t, ownerName: nameByPhone[t.user_phone] || "غير معروف" }))
+    .map(t => ({ ...t, ownerName: nameByPhone[normPhone(t.user_phone)] || "غير معروف" }))
     .sort((a, b) => (a.date + (a.time || "")).localeCompare(b.date + (b.time || "")));
 
   return {
     meta: {
-      appName: "VoiceTask", version: "2.0.0",
+      appName: "VoiceTask", version: "2.1.0",
       generatedAt: riyadhNow().toISOString().replace("T", " ").slice(0, 16),
-      today, scope, viewer, isAdmin: viewer.isAdmin,
+      today, scope, viewer, isAdmin: viewer.isAdmin, isPrimary: !!viewer.isPrimary, isSecretary: !!viewer.isSecretary,
       viewerToken: adminToken,
       adminToken: viewer.isAdmin ? adminToken : null,
       storageBase: `${process.env.SUPABASE_URL}/storage/v1/object/public/attachments`,
-      switchUsers: viewer.isAdmin ? usersForSwitch : []
+      switchUsers: viewer.isPrimary ? usersForSwitch : []
     },
     kpis: { active: active.length, overdue: overdue.length, doneLast7: doneLast7.length, rate },
     charts: {
@@ -534,7 +576,7 @@ const scopeLabel = m.scope === "all" ? "كل الفريق" : (m.scope === "user"
 document.getElementById("who").innerHTML = "العرض: <b>" + esc(scopeLabel) + "</b>";
 
 // admin switcher
-if (m.isAdmin) {
+if (m.isPrimary) {
   const sel = document.createElement("select");
   const base = location.pathname + "?token=" + encodeURIComponent(m.adminToken);
   const opts = [["__all__","👥 كل الفريق"]].concat(m.switchUsers.map(u => [u.phone, "👤 " + u.name]));
@@ -957,21 +999,28 @@ module.exports = async (req, res) => {
 
     if (!user) { res.statusCode = 401; return res.end(lockedPage()); }
 
-    // أداة الأدمن: عرض روابط كل المستخدمين
-    if (q.links && user.isAdmin) return res.end(linksPage(origin));
+    // أداة الأدمن: عرض روابط كل المستخدمين (الأدمن الأساسي فقط)
+    if (q.links && user.isPrimary) return res.end(linksPage(origin));
 
     // تحديد النطاق (scope)
-    let scope = "me", phone = user.phone, viewer = user;
-    if (user.isAdmin) {
+    let scope = "me", phone = toDbPhone(user.phone), viewer = user;
+
+    if (user.isSecretary) {
+      // السكرتير: لوحة مديره فقط (لا تبديل، لا كل الفريق)
+      scope = "user"; phone = toDbPhone(user.workspacePhone);
+      const boss = allUsers().find(u => samePhone(u.phone, user.workspacePhone));
+      viewer = { ...(boss || user), isAdmin: true, isSecretary: true, name: boss ? boss.name : "المدير", phone: normPhone(user.workspacePhone) };
+    } else if (user.isPrimary) {
+      // الأدمن الأساسي: كل الفريق أو مستخدم محدد
       if (q.as) {
-        const target = allUsers().find(u => u.phone === q.as);
-        if (target) { scope = "user"; phone = target.phone; viewer = { ...target, isAdmin: true }; }
+        const target = allUsers().find(u => samePhone(u.phone, q.as));
+        if (target) { scope = "user"; phone = toDbPhone(target.phone); viewer = { ...target, isAdmin: true }; }
         else { scope = "all"; phone = null; }
       } else { scope = "all"; phone = null; }
     }
 
     const tasks = await fetchWindow(phone); // null = كل الفريق
-    const switchUsers = user.isAdmin ? allUsers().map(u => ({ name: u.name, phone: u.phone })) : [];
+    const switchUsers = user.isPrimary ? allUsers().map(u => ({ name: u.name, phone: u.phone })) : [];
     const data = buildData(tasks, scope, viewer, switchUsers, tokenFor(user.phone));
 
     return res.end(dashboardPage(data));
