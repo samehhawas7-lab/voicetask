@@ -1,5 +1,5 @@
 // ============================================================
-// VoiceTask AI - Webhook v3.6.0
+// VoiceTask AI - Webhook v3.6.1
 // Multi-User + خصوصية محكمة + فهم طبيعي + مطابقة أسماء آمنة
 // ============================================================
 
@@ -525,7 +525,11 @@ function formatAuditLog(rows) {
 async function broadcastLinks() {
   let sent = 0;
   for (const u of allUsers()) {
-    try { await sendWhatsApp(toDbPhone(u.phone), `🖥 *لوحة تحكمك*\n\n${dashLinkFor(u.phone)}\n\n🔐 رابط خاص بك — لا تشاركه.`); sent++; } catch (e) { console.error("blink:", e.message); }
+    try {
+      await sendWhatsApp(toDbPhone(u.phone), "🖥 *لوحة تحكمك*\nاضغط الرابط للدخول 👇");
+      await sendWhatsApp(toDbPhone(u.phone), dashLinkFor(u.phone)); // الرابط لوحده
+      sent++;
+    } catch (e) { console.error("blink:", e.message); }
   }
   return `✅ تم إرسال روابط اللوحات إلى ${sent} مستخدم.`;
 }
@@ -600,12 +604,19 @@ async function handleTextMessage(text, user) {
   // رابط الداشبورد الشخصي (للسكرتير: رابط لوحة مديره)
   if (/^(رابط لوحتي|رابط اللوحة|لوحتي|رابط الداشبورد|الداشبورد|داشبورد)$/.test(t)) {
     const linkPhone = user.role === "secretary" ? user.workspacePhone : user.phone;
-    let msg = `🖥 *لوحة التحكم*\n\n${dashLinkFor(linkPhone)}\n\n🔐 رابط خاص — لا تشاركه مع أحد.`;
+    const messages = [];
+    messages.push("🖥 *لوحة التحكم الخاصة بك*\nاضغط الرابط التالي للدخول 👇");
+    messages.push(dashLinkFor(linkPhone));   // الرابط لوحده في رسالة مستقلة (قابل للضغط)
     if (primary) {
-      msg += `\n\n👑 *روابط الفريق:*\n`;
-      for (const u of allUsers()) msg += `\n• ${u.name}:\n${dashLinkFor(u.phone)}\n`;
+      messages.push("👑 *روابط دخول الفريق* — أرسل لكل شخص رابطه:");
+      for (const u of allUsers()) {
+        messages.push(`• *${u.name}*`);
+        messages.push(dashLinkFor(u.phone)); // كل رابط في رسالة مستقلة
+      }
+    } else {
+      messages.push("🔐 رابط خاص بك — لا تشاركه مع أحد.");
     }
-    return msg.trim();
+    return { messages };
   }
 
   if (/^(القائمة|قائمة|قائمه|القائمه|menu)$/i.test(t)) return menuText(user.isAdmin, primary);
@@ -641,7 +652,7 @@ module.exports = async (req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   if (req.method === "OPTIONS") return res.status(200).end();
-  if (req.method === "GET") return res.status(200).json({ status: "✅ VoiceTask AI يعمل بنجاح!", version: "3.6.0", riyadhTime: riyadhNow().toISOString() });
+  if (req.method === "GET") return res.status(200).json({ status: "✅ VoiceTask AI يعمل بنجاح!", version: "3.6.1", riyadhTime: riyadhNow().toISOString() });
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
   const TwiML = `<?xml version="1.0" encoding="UTF-8"?><Response></Response>`;
@@ -686,7 +697,12 @@ module.exports = async (req, res) => {
       reply = await handleTextMessage(msgBody, user);
     }
 
-    await sendWhatsApp(from, reply);
+    // الرد قد يكون نصاً واحداً أو عدة رسائل (مثل: تمهيد + رابط منفصل)
+    if (reply && typeof reply === "object" && Array.isArray(reply.messages)) {
+      for (const m of reply.messages) { if (m && m.trim()) await sendWhatsApp(from, m); }
+    } else {
+      await sendWhatsApp(from, reply);
+    }
     return res.status(200).send(TwiML);
   } catch (error) {
     console.error("❌ Handler error:", error.message);
