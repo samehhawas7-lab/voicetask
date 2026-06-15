@@ -1,5 +1,5 @@
 // ============================================================
-// VoiceTask AI - Webhook v3.6.1
+// VoiceTask AI - Webhook v3.7.0
 // Multi-User + خصوصية محكمة + فهم طبيعي + مطابقة أسماء آمنة
 // ============================================================
 
@@ -64,6 +64,17 @@ function findUserByName(name) {
   return allUsers().find(u => words.includes(u.name)) || null;
 }
 function isPrimaryAdmin(user) { return user && samePhone(user.phone, getAdmin().phone); }
+
+// من له حق استخدام المساعد العام (الأسئلة العامة بموديل Opus)
+// افتراضيًا: الأدمن الأساسي (سامح) + أي عضو اسمه يحتوي "المدير".
+// يمكن التخصيص عبر متغيّر البيئة GENERAL_AI_USERS (أرقام مفصولة بفواصل).
+function canUseGeneral(user) {
+  if (!user) return false;
+  if (isPrimaryAdmin(user)) return true;
+  const env = (process.env.GENERAL_AI_USERS || "").split(",").map(s => normPhone(s)).filter(Boolean);
+  if (env.length) return env.some(p => samePhone(p, user.phone));
+  return (user.name || "").includes("المدير");
+}
 
 // ---------- TWILIO ----------
 async function sendWhatsApp(to, message) {
@@ -244,6 +255,17 @@ function callClaude(systemPrompt, userContent) {
   });
 }
 async function analyzeText(text, activeTasks) { return callClaude(buildSystemPrompt(activeTasks), `رسالة المستخدم:\n"${text}"`); }
+
+// مساعد عام (يجيب نص حر زي ChatGPT) — موديل قوي، للأدمن الأساسي والمدير فقط
+function askGeneral(question) {
+  return new Promise((resolve, reject) => {
+    const system = "أنت مساعد ذكي عام تتحدث العربية بطلاقة. أجب بإيجاز ووضوح ومباشرة على أسئلة المستخدم في أي موضوع. ردودك ستظهر في واتساب، فاجعلها مناسبة للقراءة على الهاتف: فقرات قصيرة، بدون تنسيقات معقدة. إن كان السؤال يتطلب معلومات حديثة جدًا قد لا تكون لديك، نبّه المستخدم بلطف.";
+    const bodyData = JSON.stringify({ model: "claude-opus-4-8", max_tokens: 1200, system, messages: [{ role: "user", content: question }] });
+    const req = https.request({ hostname: "api.anthropic.com", path: "/v1/messages", method: "POST", headers: { "Content-Type": "application/json", "x-api-key": process.env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01" } },
+      (res) => { let d = ""; res.on("data", c => d += c); res.on("end", () => { try { const r = JSON.parse(d); if (r.error) return reject(new Error("Opus: " + r.error.message)); const raw = r.content?.map(b => b.text || "").join("").trim() || ""; resolve(raw || "لم أستطع توليد رد. حاول صياغة السؤال بشكل مختلف."); } catch (e) { reject(new Error("Opus parse error: " + e.message)); } }); });
+    req.on("error", reject); req.write(bodyData); req.end();
+  });
+}
 async function analyzeMedia(base64, mediaType, kind, activeTasks) {
   const block = kind === "pdf" ? { type: "document", source: { type: "base64", media_type: "application/pdf", data: base64 } } : { type: "image", source: { type: "base64", media_type: mediaType, data: base64 } };
   return callClaude(buildSystemPrompt(activeTasks), [block, { type: "text", text: `استخرج كل المهام والمواعيد من هذه ${kind === "pdf" ? "الوثيقة" : "الصورة"}. إن لم تجد أرجع intent="chat" مع وصف موجز في reason.` }]);
@@ -383,7 +405,7 @@ async function applyPending(p, user) {
 }
 
 // ---------- INTENT ----------
-async function executeIntent(result, user) {
+async function executeIntent(result, user, originalText) {
   const phone = toDbPhone(user.workspacePhone || user.phone); // مساحة العمل (للسكرتير = مساحة مديره)
   const myKey = normPhone(user.phone);                        // مفتاح pending شخصي
   const activeTasks = await getActiveTasksFor(phone);
@@ -478,7 +500,14 @@ async function executeIntent(result, user) {
       return msg + "\nأعد طلبك مع تحديد المهمة.";
     }
     case "not_found": return `⚠️ لم أجد المهمة.\n${result.reason || ""}\n📋 اكتب *القائمة*.`;
-    default: return result.reason ? `💬 ${result.reason}\n\n📋 اكتب *القائمة*` : "أهلاً! أرسل مهامك نصاً أو صوتاً 😊\n📋 اكتب *القائمة*";
+    default: {
+      // سؤال عام (ليس متعلقاً بالمهام): وجّهه للمساعد العام إن كان المستخدم مصرّحاً له
+      if (canUseGeneral(user) && originalText && originalText.trim().length > 2) {
+        try { return await askGeneral(originalText.trim()); }
+        catch (e) { console.error("askGeneral:", e.message); return "⚠️ تعذّر الوصول للمساعد الآن. حاول بعد قليل."; }
+      }
+      return result.reason ? `💬 ${result.reason}\n\n📋 اكتب *القائمة*` : "أهلاً! أرسل مهامك نصاً أو صوتاً 😊\n📋 اكتب *القائمة*";
+    }
   }
 }
 
@@ -644,7 +673,7 @@ async function handleTextMessage(text, user) {
   if (t.length <= 3) return "أهلاً! أرسل مهامك وسأنظمها 😊\n📋 اكتب *القائمة*";
 
   const active = await getActiveTasksFor(phone);
-  return executeIntent(await analyzeText(t, active), user);
+  return executeIntent(await analyzeText(t, active), user, t);
 }
 
 // ---------- MAIN ----------
@@ -652,7 +681,7 @@ module.exports = async (req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   if (req.method === "OPTIONS") return res.status(200).end();
-  if (req.method === "GET") return res.status(200).json({ status: "✅ VoiceTask AI يعمل بنجاح!", version: "3.6.1", riyadhTime: riyadhNow().toISOString() });
+  if (req.method === "GET") return res.status(200).json({ status: "✅ VoiceTask AI يعمل بنجاح!", version: "3.7.0", riyadhTime: riyadhNow().toISOString() });
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
   const TwiML = `<?xml version="1.0" encoding="UTF-8"?><Response></Response>`;
