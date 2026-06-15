@@ -1,27 +1,60 @@
 // ============================================================
-// VoiceTask AI - Webhook v3.5.0
+// VoiceTask AI - Webhook v3.6.0
 // Multi-User + خصوصية محكمة + فهم طبيعي + مطابقة أسماء آمنة
 // ============================================================
 
 "use strict";
 const https = require("https");
+const crypto = require("crypto");
+
+// ---------- DASHBOARD LINK (نفس منطق توكن الداشبورد) ----------
+function dashSecret() { return process.env.DASHBOARD_SECRET || process.env.TWILIO_AUTH_TOKEN || process.env.SUPABASE_KEY || "voicetask-fallback"; }
+function tokenFor(phone) { return crypto.createHash("sha256").update(phone + "|" + dashSecret()).digest("hex").slice(0, 28); }
+function dashboardBase() { return process.env.DASHBOARD_URL || "https://voicetask-swart.vercel.app/api/dashboard"; }
+function dashLinkFor(phone) { return `${dashboardBase()}?token=${tokenFor(phone)}`; }
 
 function riyadhNow() { return new Date(Date.now() + 3 * 3600 * 1000); }
 function riyadhDateStr(d) { return d.toISOString().split("T")[0]; }
 
 // ---------- USERS & ROLES ----------
-function getAdmin() { return { phone: process.env.YOUR_WHATSAPP, name: process.env.ADMIN_NAME || "المدير الأعلى", isAdmin: true }; }
+// تطبيع الرقم: يشيل "whatsapp:" والمسافات والرموز ويسيب الأرقام و +
+function normPhone(p) { return String(p || "").replace(/^whatsapp:/i, "").replace(/[\s\-()]/g, "").trim(); }
+function samePhone(a, b) { return normPhone(a) === normPhone(b); }
+// صيغة القاعدة: المهام مخزّنة بـ "whatsapp:+966..." — نضمن البادئة
+function toDbPhone(p) { const n = normPhone(p); return n ? "whatsapp:" + n : n; }
+
+function getAdmin() { return { phone: normPhone(process.env.YOUR_WHATSAPP), name: process.env.ADMIN_NAME || "المدير الأعلى", isAdmin: true, isPrimary: true, role: "primary" }; }
 function getTeam() {
   const raw = process.env.TEAM_MEMBERS || "";
   return raw.split(",").map(s => s.trim()).filter(Boolean).map(entry => {
     const idx = entry.lastIndexOf(":");
-    const phone = entry.slice(0, idx).trim();
+    const phone = normPhone(entry.slice(0, idx));
     const name = entry.slice(idx + 1).trim();
-    return { phone, name, isAdmin: false };
+    return { phone, name, isAdmin: false, role: "member" };
   }).filter(u => u.phone && u.name);
 }
-function allUsers() { return [getAdmin(), ...getTeam()]; }
-function resolveUser(from) { return allUsers().find(u => u.phone === from) || null; }
+// السكرتير: "رقم_السكرتير:الاسم:رقم_المدير" — يشتغل على مساحة مديره
+function getSecretaries() {
+  const raw = process.env.SECRETARY || "";
+  return raw.split(",").map(s => s.trim()).filter(Boolean).map(entry => {
+    const parts = entry.split(":");
+    if (parts.length < 3) return null;
+    return { phone: normPhone(parts[0]), name: parts[1].trim(), bossPhone: normPhone(parts[2]), isAdmin: false, role: "secretary" };
+  }).filter(Boolean).filter(u => u.phone && u.name && u.bossPhone);
+}
+function allUsers() { return [getAdmin(), ...getTeam()]; }                 // المستخدمون أصحاب المساحات
+function allPeople() { return [getAdmin(), ...getTeam(), ...getSecretaries()]; } // كل من يمكنه المراسلة
+function resolveUser(from) {
+  const f = normPhone(from);
+  const person = allPeople().find(u => samePhone(u.phone, f));
+  if (!person) return null;
+  if (person.role === "secretary") {
+    // السكرتير يعمل على مساحة مديره: workspacePhone = رقم المدير
+    const boss = allUsers().find(u => samePhone(u.phone, person.bossPhone));
+    return { ...person, workspacePhone: person.bossPhone, bossName: boss ? boss.name : "المدير" };
+  }
+  return { ...person, workspacePhone: person.phone };
+}
 function findUserByName(name) {
   const n = (name || "").trim();
   if (!n) return null;
@@ -30,6 +63,7 @@ function findUserByName(name) {
   const words = n.split(/\s+/);
   return allUsers().find(u => words.includes(u.name)) || null;
 }
+function isPrimaryAdmin(user) { return user && samePhone(user.phone, getAdmin().phone); }
 
 // ---------- TWILIO ----------
 async function sendWhatsApp(to, message) {
@@ -44,7 +78,16 @@ async function sendWhatsApp(to, message) {
   });
 }
 
-// ---------- MEDIA ----------
+// إشعار تعديلات السكرتير: يروح لمديره (workspace owner) + للأدمن الأساسي
+async function notifySecretaryAction(user, text) {
+  if (!user || user.role !== "secretary") return;
+  const recipients = new Set();
+  if (user.workspacePhone) recipients.add(normPhone(user.workspacePhone)); // المدير
+  recipients.add(normPhone(getAdmin().phone));                              // سامح
+  recipients.delete(normPhone(user.phone));                                // لا تُشعر السكرتير نفسه
+  const msg = `🗂 *${user.name}* (سكرتير ${user.bossName || "المدير"})\n${text}`;
+  for (const r of recipients) { try { await sendWhatsApp(r.startsWith("whatsapp:") ? r : "whatsapp:" + r, msg); } catch (e) { console.error("notifySec:", e.message); } }
+}
 function downloadBuffer(options) {
   return new Promise((resolve, reject) => {
     const req = https.request(options, (res) => {
@@ -214,9 +257,10 @@ function catName(c) { return (!c || c === "شخصي") ? "" : c; }
 function dayName(s) { return new Date(s + "T12:00:00").toLocaleDateString("ar-SA", { weekday: "long" }); }
 function taskLine(t) { let s = ` ${pEmoji[t.priority] || "🟡"} ${t.time} ${t.title} ${catEmoji(t.category)}`; const cn = catName(t.category); if (cn) s += ` ${cn}`; return s; }
 
-function menuText(isAdmin) {
-  let m = "🤖 *VoiceTask — القائمة*\n\n1️⃣ جدول اليوم\n2️⃣ جدول الأسبوع\n3️⃣ المهام المتأخرة\n4️⃣ إحصائياتي\n5️⃣ فئاتي\n6️⃣ مساعدة\n\n🔁 *التكرارات* — مهامك المتكررة";
-  if (isAdmin) m += "\n\n👑 *للمدير الأعلى:*\n• مهام الفريق\n• مهام [اسم الشخص]\n• سجل التغييرات";
+function menuText(isAdmin, primary) {
+  let m = "🤖 *VoiceTask — القائمة*\n\n1️⃣ جدول اليوم\n2️⃣ جدول الأسبوع\n3️⃣ المهام المتأخرة\n4️⃣ إحصائياتي\n5️⃣ فئاتي\n6️⃣ مساعدة\n\n🔁 *التكرارات* — مهامك المتكررة\n🖥 *رابط لوحتي* — لوحة التحكم";
+  if (isAdmin) m += "\n\n👑 *للمدير:*\n• مهام الفريق\n• مهام [اسم الشخص]\n• سجل التغييرات";
+  if (primary) m += "\n\n📢 *الإشعارات الجماعية (لك فقط):*\n• ابعت روابط اللوحات للكل\n• ابعت ملخص المهام للكل\n• بلّغ الفريق: [رسالة]\n• بلّغ [اسم]: [رسالة]";
   m += "\n\n💬 رد برقم أو اكتب/سجّل طلبك";
   return m;
 }
@@ -314,12 +358,13 @@ function formatTeam(tasks) {
 
 // ---------- PENDING ----------
 async function applyPending(p, user) {
-  const phone = user.phone;
+  const phone = toDbPhone(user.workspacePhone || user.phone);
   const t = await getTaskOwned(p.task_id, phone);
   if (!t) return "⚠️ المهمة لم تعد موجودة.";
   if (p.type === "cancel") {
     await updateTaskOwned(p.task_id, phone, { status: "cancelled" });
     await logChange({ taskId: t.id, action: "cancel", user, before: { status: t.status }, after: { status: "cancelled" } });
+    await notifySecretaryAction(user, `🗑 ألغى مهمة: *${t.title}*`);
     return `🗑 *تم الإلغاء:* ${t.title}`;
   }
   if (p.type === "update") {
@@ -331,6 +376,7 @@ async function applyPending(p, user) {
     if (p.updates.time) parts.push(`⏰ ${p.updates.time}`);
     if (p.updates.title) parts.push(`✏️ ${p.updates.title}`);
     if (p.updates.category) parts.push(`🏢 ${p.updates.category}`);
+    await notifySecretaryAction(user, `✏️ عدّل مهمة: *${t.title}*\n${parts.join("  ")}`);
     return `✏️ *تم التعديل:* ${t.title}\n${parts.join("  ")}\n🔔 أُعيد ضبط تذكيراتها`;
   }
   return "تم.";
@@ -338,7 +384,8 @@ async function applyPending(p, user) {
 
 // ---------- INTENT ----------
 async function executeIntent(result, user) {
-  const phone = user.phone;
+  const phone = toDbPhone(user.workspacePhone || user.phone); // مساحة العمل (للسكرتير = مساحة مديره)
+  const myKey = normPhone(user.phone);                        // مفتاح pending شخصي
   const activeTasks = await getActiveTasksFor(phone);
   switch (result.intent) {
     case "add": {
@@ -351,11 +398,14 @@ async function executeIntent(result, user) {
         } catch (e) { console.error("Save:", e.message); }
       }
       if (tasks.length && !saved) return "⚠️ فهمت المهمة لكن حدث خطأ بالحفظ. حاول مرة أخرى.";
-      if (!user.isAdmin && saved) {
-        const admin = getAdmin();
-        const first = tasks[0];
-        let note = `📥 *${user.name}* سجّل ${saved > 1 ? saved + " مهام" : "مهمة"}:\n*${first.title}*\n📅 ${first.date} ⏰ ${first.time} ${catEmoji(first.category)}`;
-        try { await sendWhatsApp(admin.phone, note); } catch (e) { console.error("notify:", e.message); }
+      const first = tasks[0];
+      if (user.role === "secretary" && saved) {
+        // إشعار للمدير + سامح بأن السكرتير أضاف
+        await notifySecretaryAction(user, `➕ أضاف ${saved > 1 ? saved + " مهام" : "مهمة"}:\n*${first.title}*\n📅 ${first.date} ⏰ ${first.time} ${catEmoji(first.category)}`);
+      } else if (!user.isAdmin && user.role === "member" && saved) {
+        // عضو عادي: إشعار للأدمن الأساسي
+        const note = `📥 *${user.name}* سجّل ${saved > 1 ? saved + " مهام" : "مهمة"}:\n*${first.title}*\n📅 ${first.date} ⏰ ${first.time} ${catEmoji(first.category)}`;
+        try { await sendWhatsApp(toDbPhone(getAdmin().phone), note); } catch (e) { console.error("notify:", e.message); }
       }
       return formatTasksMessage(tasks);
     }
@@ -381,14 +431,14 @@ async function executeIntent(result, user) {
       if (result.updates.time) parts.push(`⏰ ${result.updates.time}`);
       if (result.updates.title) parts.push(`✏️ ${result.updates.title}`);
       if (result.updates.category) parts.push(`🏢 ${result.updates.category}`);
-      await setPending(phone, { type: "update", task_id: result.task_id, updates: result.updates });
+      await setPending(myKey, { type: "update", task_id: result.task_id, updates: result.updates });
       return `⚠️ *تأكيد التعديل*\n*${t.title}* (الحالي: ${t.date} ${t.time})\nالتغيير: ${parts.join("  ")}\n\nرد: *نعم* للتأكيد │ *لا* للتراجع`;
     }
     case "cancel": {
       if (!result.task_id) return "⚠️ لم أحدد المهمة المطلوب إلغاؤها.";
       const t = activeTasks.find(x => x.id === result.task_id);
       if (!t) return "⚠️ لم أجد المهمة في قائمتك.";
-      await setPending(phone, { type: "cancel", task_id: result.task_id });
+      await setPending(myKey, { type: "cancel", task_id: result.task_id });
       return `⚠️ *تأكيد الإلغاء*\nمتأكد من إلغاء: *${t.title}*؟\n📅 ${t.date} ⏰ ${t.time}\n\nرد: *نعم* للتأكيد │ *لا* للتراجع`;
     }
     case "done": {
@@ -397,6 +447,7 @@ async function executeIntent(result, user) {
       if (!t) return "⚠️ لم أجد المهمة في قائمتك.";
       await updateTaskOwned(result.task_id, phone, { status: "done" });
       await logChange({ taskId: t.id, action: "done", user, before: { status: t.status }, after: { status: "done" } });
+      await notifySecretaryAction(user, `✅ أنجز مهمة: *${t.title}*`);
       return `🎉 *أحسنت! أُنجزت:* ${t.title}`;
     }
     case "rename_category": {
@@ -432,17 +483,26 @@ async function executeIntent(result, user) {
 }
 
 // ---------- QUICK ----------
-async function quickDoneLast(user) { const phone = user.phone; const id = await getState(`last_reminder_${phone}`); if (!id) return null; const t = await getTaskOwned(id, phone); if (!t || t.status !== "new") return null; await updateTaskOwned(t.id, phone, { status: "done" }); await logChange({ taskId: t.id, action: "done", user, before: { status: "new" }, after: { status: "done" } }); return `🎉 *أحسنت! أُنجزت:* ${t.title}`; }
+async function quickDoneLast(user) {
+  const wp = toDbPhone(user.workspacePhone || user.phone);
+  const id = await getState(`last_reminder_${wp}`); if (!id) return null;
+  const t = await getTaskOwned(id, wp); if (!t || t.status !== "new") return null;
+  await updateTaskOwned(t.id, wp, { status: "done" });
+  await logChange({ taskId: t.id, action: "done", user, before: { status: "new" }, after: { status: "done" } });
+  await notifySecretaryAction(user, `✅ أنجز مهمة: *${t.title}*`);
+  return `🎉 *أحسنت! أُنجزت:* ${t.title}`;
+}
 async function quickPostpone(user, mode) {
-  const phone = user.phone;
-  const id = await getState(`last_reminder_${phone}`); if (!id) return "⚠️ لا توجد مهمة حديثة. حدد المهمة بالاسم.";
-  const t = await getTaskOwned(id, phone); if (!t || t.status !== "new") return "⚠️ المهمة الأخيرة لم تعد نشطة.";
-  if (mode === "tomorrow") { const d = new Date(t.date + "T12:00:00Z"); d.setUTCDate(d.getUTCDate() + 1); const nd = riyadhDateStr(d); await updateTaskOwned(t.id, phone, { date: nd }); await logChange({ taskId: t.id, action: "postpone", user, before: { date: t.date }, after: { date: nd } }); return `⏰ *تم التأجيل لبكرة:* ${t.title}\n📅 ${nd} ⏰ ${t.time}`; }
+  const wp = toDbPhone(user.workspacePhone || user.phone);
+  const id = await getState(`last_reminder_${wp}`); if (!id) return "⚠️ لا توجد مهمة حديثة. حدد المهمة بالاسم.";
+  const t = await getTaskOwned(id, wp); if (!t || t.status !== "new") return "⚠️ المهمة الأخيرة لم تعد نشطة.";
+  if (mode === "tomorrow") { const d = new Date(t.date + "T12:00:00Z"); d.setUTCDate(d.getUTCDate() + 1); const nd = riyadhDateStr(d); await updateTaskOwned(t.id, wp, { date: nd }); await logChange({ taskId: t.id, action: "postpone", user, before: { date: t.date }, after: { date: nd } }); await notifySecretaryAction(user, `⏰ أجّل مهمة: *${t.title}* إلى ${nd}`); return `⏰ *تم التأجيل لبكرة:* ${t.title}\n📅 ${nd} ⏰ ${t.time}`; }
   let [h, m] = (t.time || "09:00").split(":").map(Number); let date = t.date; h += 1;
   if (h >= 24) { h -= 24; const d = new Date(date + "T12:00:00Z"); d.setUTCDate(d.getUTCDate() + 1); date = riyadhDateStr(d); }
   const nt = String(h).padStart(2, "0") + ":" + String(m).padStart(2, "0");
-  await updateTaskOwned(t.id, phone, { date, time: nt });
+  await updateTaskOwned(t.id, wp, { date, time: nt });
   await logChange({ taskId: t.id, action: "postpone", user, before: { date: t.date, time: t.time }, after: { date, time: nt } });
+  await notifySecretaryAction(user, `⏰ أجّل مهمة: *${t.title}* إلى ${nt}`);
   return `⏰ *تم التأجيل ساعة:* ${t.title}\n🕐 ${nt}${date !== t.date ? " (" + date + ")" : ""}`;
 }
 
@@ -461,26 +521,74 @@ function formatAuditLog(rows) {
   return msg.trim();
 }
 
+// ---------- BROADCAST (الأدمن الأساسي فقط) ----------
+async function broadcastLinks() {
+  let sent = 0;
+  for (const u of allUsers()) {
+    try { await sendWhatsApp(toDbPhone(u.phone), `🖥 *لوحة تحكمك*\n\n${dashLinkFor(u.phone)}\n\n🔐 رابط خاص بك — لا تشاركه.`); sent++; } catch (e) { console.error("blink:", e.message); }
+  }
+  return `✅ تم إرسال روابط اللوحات إلى ${sent} مستخدم.`;
+}
+async function broadcastSummaries() {
+  let sent = 0;
+  for (const u of allUsers()) {
+    try {
+      const tasks = await getTodayFor(toDbPhone(u.phone));
+      await sendWhatsApp(toDbPhone(u.phone), formatDaily(tasks));
+      sent++;
+    } catch (e) { console.error("bsum:", e.message); }
+  }
+  return `✅ تم إرسال ملخص اليوم إلى ${sent} مستخدم (كل واحد مهامه فقط).`;
+}
+async function broadcastMessage(body) {
+  if (!body) return "⚠️ اكتب الرسالة بعد «بلّغ الفريق:».";
+  let sent = 0;
+  for (const u of allUsers()) {
+    if (samePhone(u.phone, getAdmin().phone)) continue; // لا ترسل لنفسك
+    try { await sendWhatsApp(toDbPhone(u.phone), `📢 *رسالة من ${getAdmin().name}:*\n\n${body}`); sent++; } catch (e) { console.error("bmsg:", e.message); }
+  }
+  return `✅ تم تبليغ ${sent} عضو.`;
+}
+async function notifyOne(name, body) {
+  const target = findUserByName(name);
+  if (!target) return `⚠️ لم أجد عضواً بالاسم «${name}».`;
+  try { await sendWhatsApp(toDbPhone(target.phone), `📢 *رسالة من ${getAdmin().name}:*\n\n${body}`); }
+  catch (e) { return "⚠️ تعذّر الإرسال."; }
+  return `✅ تم تبليغ *${target.name}*.`;
+}
+
 // ---------- ROUTER ----------
 async function handleTextMessage(text, user) {
-  const phone = user.phone;
+  const phone = toDbPhone(user.workspacePhone || user.phone); // مساحة المهام (للسكرتير = مساحة مديره)
+  const myKey = normPhone(user.phone);                        // مفتاح شخصي (pending/reminder لكل فرد)
   const t = (text || "").trim(), lower = t.toLowerCase();
+  const primary = isPrimaryAdmin(user);                       // سامح فقط
 
-  const pending = await getPending(phone);
+  const pending = await getPending(myKey);
   if (pending) {
-    if (/^(نعم|أيوه|ايوه|تأكيد|تاكيد|اوك|أوكي|تمام|أكد|اكد|ok|yes|y)$/i.test(t)) { await clearPending(phone); return applyPending(pending, user); }
-    if (/^(لا|لأ|إلغاء|الغاء|تراجع|الغي|no|n)$/i.test(t)) { await clearPending(phone); return "👍 تم التراجع، لم يحدث أي تغيير."; }
-    await clearPending(phone);
+    if (/^(نعم|أيوه|ايوه|تأكيد|تاكيد|اوك|أوكي|تمام|أكد|اكد|ok|yes|y)$/i.test(t)) { await clearPending(myKey); return applyPending(pending, user); }
+    if (/^(لا|لأ|إلغاء|الغاء|تراجع|الغي|no|n)$/i.test(t)) { await clearPending(myKey); return "👍 تم التراجع، لم يحدث أي تغيير."; }
+    await clearPending(myKey);
   }
 
-  // أوامر Admin الخاصة (للمدير الأعلى فقط — غير مرئية لغيره)
+  // ===== أوامر الإشعارات الجماعية — للأدمن الأساسي (سامح) فقط =====
+  if (primary) {
+    if (/^(ابعت روابط اللوحات للكل|روابط الكل|ارسل الروابط للكل)$/.test(t)) return await broadcastLinks();
+    if (/^(ابعت ملخص المهام للكل|ملخص الكل|ارسل الملخصات للكل)$/.test(t)) return await broadcastSummaries();
+    const mNotifyTeam = t.match(/^بلّ?غ\s+الفريق\s*[:：]\s*([\s\S]+)$/);
+    if (mNotifyTeam) return await broadcastMessage(mNotifyTeam[1].trim());
+    const mNotifyOne = t.match(/^بلّ?غ\s+(.+?)\s*[:：]\s*([\s\S]+)$/);
+    if (mNotifyOne) return await notifyOne(mNotifyOne[1].trim(), mNotifyOne[2].trim());
+  }
+
+  // أوامر المدير/الأدمن (الأدمن الأساسي أو من isAdmin)
   if (user.isAdmin) {
     if (/^مهام الفريق$/.test(t) || t === "الفريق") return formatTeam(await getAllActiveAdmin());
     if (/^(سجل التغييرات|السجل|التغييرات)$/.test(t)) return formatAuditLog(await getRecentAudit());
     const mTeam = t.match(/^مهام\s+(.+)$/);
     if (mTeam) {
       const target = findUserByName(mTeam[1]);
-      if (target) return formatWeekly(await getActiveForPhoneAdmin(target.phone), `مهام ${target.name}`);
+      if (target) return formatWeekly(await getActiveForPhoneAdmin(toDbPhone(target.phone)), `مهام ${target.name}`);
     }
   }
 
@@ -489,7 +597,18 @@ async function handleTextMessage(text, user) {
   const mStop = t.match(/أوقف\s+التكرار\s+رقم\s+(\d+)/);
   if (mStop) { await deactivateRecurring(parseInt(mStop[1], 10), phone); await logChange({ action: "recurring_stop", user, before: { id: mStop[1] } }); return `🛑 تم إيقاف التكرار رقم ${mStop[1]}.`; }
 
-  if (/^(القائمة|قائمة|قائمه|القائمه|menu)$/i.test(t)) return menuText(user.isAdmin);
+  // رابط الداشبورد الشخصي (للسكرتير: رابط لوحة مديره)
+  if (/^(رابط لوحتي|رابط اللوحة|لوحتي|رابط الداشبورد|الداشبورد|داشبورد)$/.test(t)) {
+    const linkPhone = user.role === "secretary" ? user.workspacePhone : user.phone;
+    let msg = `🖥 *لوحة التحكم*\n\n${dashLinkFor(linkPhone)}\n\n🔐 رابط خاص — لا تشاركه مع أحد.`;
+    if (primary) {
+      msg += `\n\n👑 *روابط الفريق:*\n`;
+      for (const u of allUsers()) msg += `\n• ${u.name}:\n${dashLinkFor(u.phone)}\n`;
+    }
+    return msg.trim();
+  }
+
+  if (/^(القائمة|قائمة|قائمه|القائمه|menu)$/i.test(t)) return menuText(user.isAdmin, primary);
   if (/^[1-6]$/.test(t)) {
     switch (t) {
       case "1": return formatDaily(await getTodayFor(phone));
@@ -522,7 +641,7 @@ module.exports = async (req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   if (req.method === "OPTIONS") return res.status(200).end();
-  if (req.method === "GET") return res.status(200).json({ status: "✅ VoiceTask AI يعمل بنجاح!", version: "3.5.0", riyadhTime: riyadhNow().toISOString() });
+  if (req.method === "GET") return res.status(200).json({ status: "✅ VoiceTask AI يعمل بنجاح!", version: "3.6.0", riyadhTime: riyadhNow().toISOString() });
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
   const TwiML = `<?xml version="1.0" encoding="UTF-8"?><Response></Response>`;
@@ -549,12 +668,12 @@ module.exports = async (req, res) => {
         } else if (mediaType.startsWith("image")) {
           await sendWhatsApp(from, "📷 استلمت الصورة!\n⏳ جاري قراءتها...");
           const buf = await downloadMedia(mediaUrl);
-          const active = await getActiveTasksFor(user.phone);
+          const active = await getActiveTasksFor(toDbPhone(user.workspacePhone || user.phone));
           reply = await executeIntent(await analyzeMedia(buf.toString("base64"), mediaType, "image", active), user);
         } else if (mediaType === "application/pdf") {
           await sendWhatsApp(from, "📄 استلمت الملف!\n⏳ جاري قراءته...");
           const buf = await downloadMedia(mediaUrl);
-          const active = await getActiveTasksFor(user.phone);
+          const active = await getActiveTasksFor(toDbPhone(user.workspacePhone || user.phone));
           reply = await executeIntent(await analyzeMedia(buf.toString("base64"), mediaType, "pdf", active), user);
         } else {
           reply = "📎 النوع ده غير مدعوم.\nالمدعوم: 🎤 صوت │ 📷 صور │ 📄 PDF │ 📝 نص";
