@@ -951,15 +951,7 @@ function esc(s){ return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,
 module.exports = async (req, res) => {
   try {
     const q = req.query || {};
-    // التوكن: من ?token= أو من نهاية المسار /api/dashboard/<TOKEN> (أنظف للضغط في واتساب)
-    let token = q.token || "";
-    if (!token) {
-      try {
-        const urlPath = (req.url || "").split("?")[0];
-        const mPath = urlPath.match(/\/dashboard\/([A-Za-z0-9]+)\/?$/);
-        if (mPath) token = mPath[1];
-      } catch (e) {}
-    }
+    const token = q.token || "";
     const user = resolveByToken(token);
 
     // ===== POST: عمليات الكتابة (تعديل / سجل) — JSON =====
