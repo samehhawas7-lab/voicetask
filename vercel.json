@@ -1,0 +1,5 @@
+
+  "rewrites": [
+    { "source": "/api/dashboard/:token", "destination": "/api/dashboard?token=:token" }
+  ]
+}
