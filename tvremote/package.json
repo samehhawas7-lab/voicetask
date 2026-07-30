@@ -1,0 +1,17 @@
+{
+  "name": "kmc-web-remote",
+  "version": "1.0.0",
+  "private": true,
+  "description": "تطبيق ويب للتحكم بتلفزيون KMC الذكي (Android TV / Google TV) من الجوال أو الكمبيوتر",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "scan": "node -e \"require('./lib/discover').discover().then(r=>console.log(r))\""
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "androidtv-remote": "^1.0.10"
+  }
+}

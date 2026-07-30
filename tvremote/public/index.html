@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <meta name="theme-color" content="#0b0d12">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>ريموت KMC</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+<div class="shell">
+
+  <!-- ===== الشريط العلوي ===== -->
+  <header class="topbar">
+    <div class="brand">
+      <span class="dot" id="statusDot"></span>
+      <div>
+        <div class="brand-name">ريموت KMC</div>
+        <div class="brand-sub" id="statusText">جاري التحميل…</div>
+      </div>
+    </div>
+    <button class="icon-btn" id="settingsBtn" title="الإعدادات" aria-label="الإعدادات">⚙</button>
+  </header>
+
+  <!-- ===== لوحة الإعداد / الإقران ===== -->
+  <section class="panel" id="setupPanel" hidden>
+    <h2 class="panel-title">توصيل التلفزيون</h2>
+
+    <div class="field">
+      <label for="hostInput">عنوان IP للتلفزيون</label>
+      <div class="row">
+        <input id="hostInput" type="text" inputmode="decimal" placeholder="192.168.1.20" autocomplete="off">
+        <button class="btn" id="connectBtn">توصيل</button>
+      </div>
+      <p class="hint">تلقاه في: إعدادات التلفزيون ← الشبكة ← حالة الشبكة</p>
+    </div>
+
+    <div class="field">
+      <button class="btn ghost wide" id="scanBtn">🔍 ابحث عن التلفزيون في الشبكة</button>
+      <div id="scanResult" class="scan-result"></div>
+    </div>
+
+    <div class="field" id="knownWrap" hidden>
+      <label>أجهزة مقترنة سابقاً</label>
+      <div id="knownList" class="chips"></div>
+    </div>
+  </section>
+
+  <!-- ===== لوحة رمز الإقران ===== -->
+  <section class="panel" id="pairPanel" hidden>
+    <h2 class="panel-title">رمز الإقران</h2>
+    <p class="hint">التلفزيون يعرض الحين رمز على الشاشة. اكتبه هنا:</p>
+    <div class="row">
+      <input id="codeInput" type="text" inputmode="numeric" maxlength="6" placeholder="123456" autocomplete="one-time-code">
+      <button class="btn" id="codeBtn">تأكيد</button>
+    </div>
+    <button class="btn ghost wide" id="cancelPairBtn">إلغاء</button>
+  </section>
+
+  <!-- ===== الريموت ===== -->
+  <main class="remote" id="remote" hidden>
+
+    <!-- صف الطاقة -->
+    <div class="row-3">
+      <button class="key power" data-power title="الطاقة">⏻</button>
+      <button class="key" data-key="mute" title="كتم">🔇</button>
+      <button class="key" data-key="settings" title="الإعدادات">⚙</button>
+    </div>
+
+    <!-- عجلة التنقل -->
+    <div class="dpad">
+      <button class="dpad-btn up" data-key="up" aria-label="فوق"></button>
+      <button class="dpad-btn down" data-key="down" aria-label="تحت"></button>
+      <button class="dpad-btn left" data-key="left" aria-label="يسار"></button>
+      <button class="dpad-btn right" data-key="right" aria-label="يمين"></button>
+      <button class="dpad-ok" data-key="ok">OK</button>
+    </div>
+
+    <!-- رجوع / رئيسية / بحث -->
+    <div class="row-3">
+      <button class="key" data-key="back" title="رجوع">↩</button>
+      <button class="key" data-key="home" title="الرئيسية">⌂</button>
+      <button class="key" data-key="search" title="بحث">🔎</button>
+    </div>
+
+    <!-- الصوت والقنوات -->
+    <div class="rockers">
+      <div class="rocker">
+        <button class="key tall" data-key="volume_up" data-repeat>＋</button>
+        <span class="rocker-label">الصوت</span>
+        <button class="key tall" data-key="volume_down" data-repeat>－</button>
+      </div>
+      <div class="rocker-mid">
+        <button class="key" data-key="info" title="معلومات">ℹ</button>
+        <button class="key" data-key="guide" title="الدليل">☰</button>
+        <button class="key" data-key="captions" title="ترجمة">CC</button>
+      </div>
+      <div class="rocker">
+        <button class="key tall" data-key="channel_up" data-repeat>▲</button>
+        <span class="rocker-label">القناة</span>
+        <button class="key tall" data-key="channel_down" data-repeat>▼</button>
+      </div>
+    </div>
+
+    <!-- التشغيل -->
+    <div class="row-5">
+      <button class="key" data-key="rewind" title="إرجاع">◀◀</button>
+      <button class="key" data-key="previous" title="السابق">⏮</button>
+      <button class="key accent" data-key="play_pause" title="تشغيل/إيقاف">⏯</button>
+      <button class="key" data-key="next" title="التالي">⏭</button>
+      <button class="key" data-key="forward" title="تقديم">▶▶</button>
+    </div>
+
+    <!-- الكتابة -->
+    <div class="typing">
+      <input id="textInput" type="text" placeholder="اكتب هنا وأرسل للتلفزيون…" autocomplete="off">
+      <button class="btn small" id="sendTextBtn">إرسال</button>
+      <button class="key small" data-key="del" title="مسح">⌫</button>
+    </div>
+
+    <!-- التطبيقات -->
+    <div class="apps">
+      <button class="app" data-app="youtube">YouTube</button>
+      <button class="app" data-app="netflix">Netflix</button>
+      <button class="app" data-app="shahid">شاهد</button>
+      <button class="app" data-app="primevideo">Prime</button>
+    </div>
+
+    <!-- لوحة الأرقام (قابلة للطي) -->
+    <details class="numpad-wrap">
+      <summary>لوحة الأرقام</summary>
+      <div class="numpad">
+        <button class="key" data-key="1">1</button>
+        <button class="key" data-key="2">2</button>
+        <button class="key" data-key="3">3</button>
+        <button class="key" data-key="4">4</button>
+        <button class="key" data-key="5">5</button>
+        <button class="key" data-key="6">6</button>
+        <button class="key" data-key="7">7</button>
+        <button class="key" data-key="8">8</button>
+        <button class="key" data-key="9">9</button>
+        <button class="key" data-key="tv">TV</button>
+        <button class="key" data-key="0">0</button>
+        <button class="key" data-key="enter">↵</button>
+      </div>
+    </details>
+
+    <div class="now-playing" id="nowPlaying" hidden></div>
+  </main>
+
+  <div class="toast" id="toast" hidden></div>
+</div>
+
+<script src="/app.js"></script>
+</body>
+</html>
