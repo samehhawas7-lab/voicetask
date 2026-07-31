@@ -748,7 +748,13 @@ async function launchApp(id, params){
              (r.errorText || r.errorCode || "رفض"));
         continue;
       }
-      diag("✓ أُطلق " + id + " عبر " + uri.replace("ssap://", ""));
+      diag("✓ قبل التلفزيون إطلاق " + id + " عبر " + uri.replace("ssap://", "") +
+           " — رده: " + JSON.stringify(r || {}).slice(0, 200));
+      setTimeout(() => {
+        tv.request(SSAP.fgApp)
+          .then(p => diag("   الشغّال بعد ثانيتين: " + ((p && p.appId) || "غير معروف")))
+          .catch(() => {});
+      }, 2000);
       return r;
     } catch (e){
       diag("إطلاق " + id + " عبر " + uri.replace("ssap://", "") + ": ✗ " + e.message);
