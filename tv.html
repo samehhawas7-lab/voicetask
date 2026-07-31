@@ -689,20 +689,47 @@ class WebOSRemote {
     return base + path;
   }
 
+  // نجرّب العنوان المعاد بناؤه ثم العنوان الأصلي كما أعطاه التلفزيون،
+  // لأن أي واحد منهما قد يكون الصحيح حسب طراز الجهاز وإصدار نظامه.
   _openPointer(raw){
-    const url = this._pointerUrl(raw);
-    if (url !== raw) diag("أُعيد توجيه قناة الأزرار إلى: " + url);
-    try {
-      const ws = new RelaySocket(url);
-      ws.onopen  = () => { this.pointer = ws; diag("✓ قناة الأزرار جاهزة"); };
-      ws.onclose = (ev) => {
-        if (this.pointer === ws) this.pointer = null;
-        diag("✗ أُغلقت قناة الأزرار (رمز " + (ev && ev.code) + ")");
-      };
-      ws.onerror = () => diag("✗ خطأ في قناة الأزرار");
-    } catch (e){
-      diag("✗ تعذّر فتح قناة الأزرار: " + e.message);
-    }
+    const candidates = [];
+    const rebuilt = this._pointerUrl(raw);
+    candidates.push(rebuilt);
+    if (raw !== rebuilt) candidates.push(raw);
+
+    const attempt = (i) => {
+      if (i >= candidates.length){
+        diag("✗ فشلت كل عناوين قناة الأزرار — أزرار التنقل لن تعمل");
+        return;
+      }
+      const url = candidates[i];
+      diag("محاولة قناة الأزرار " + (i+1) + "/" + candidates.length + ": " + url);
+      let settled = false;
+      try {
+        const ws = new RelaySocket(url);
+        ws.onopen = () => {
+          settled = true;
+          this.pointer = ws;
+          diag("✓ قناة الأزرار جاهزة عبر " + url);
+        };
+        ws.onclose = (ev) => {
+          if (this.pointer === ws) this.pointer = null;
+          if (!settled){
+            settled = true;
+            diag("   أُغلقت (رمز " + (ev && ev.code) + ") — نجرّب التالي");
+            attempt(i + 1);
+          } else {
+            diag("   انقطعت قناة الأزرار (رمز " + (ev && ev.code) + ")");
+          }
+        };
+        ws.onerror = () => diag("   خطأ في المقبس");
+      } catch (e){
+        diag("   تعذّر الفتح: " + e.message);
+        attempt(i + 1);
+      }
+    };
+
+    attempt(0);
   }
 
   _send(type, uri, payload, handler, keep){
