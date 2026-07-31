@@ -426,6 +426,8 @@ const SSAP = {
   enter:   "ssap://com.webos.service.ime/sendEnterKey",
   pointer: "ssap://com.webos.service.networkinput/getPointerInputSocket",
   sysInfo: "ssap://system/getSystemInfo",
+  screenOff: "ssap://com.webos.service.tvpower/power/turnOffScreen",
+  screenOn:  "ssap://com.webos.service.tvpower/power/turnOnScreen",
   toast:   "ssap://system.notifications/createToast"
 };
 
@@ -841,6 +843,7 @@ class WebOSRemote {
 // ============================================================
 const tv = new WebOSRemote();
 let muted = false;
+let screenIsOff = false;   // هل الشاشة مطفأة الآن؟
 
 let toastTimer = null;
 function toast(msg, isError){
@@ -932,8 +935,12 @@ tv.onReady = () => {
 function runCmd(cmd){
   switch (cmd){
     case "power":
-      if (!confirm("إطفاء التلفزيون؟\n\nتنبيه: ما تقدر تشغّله مرة ثانية من هذا التطبيق.")) return Promise.resolve();
+      // إطفاء كامل: التلفزيون يدخل السكون وإيقاظه يحتاج حزمة شبكة
+      // لا يستطيع المتصفح إرسالها، فلا رجعة منه إلا بالريموت الأصلي
+      if (!confirm("إطفاء كامل للتلفزيون؟\n\nما راح تقدر تشغّله من جوالك — تحتاج الريموت الأصلي.\n\nلو تبي إطفاء ترجع منه، اضغط الزر ضغطة قصيرة بدل المطوّلة.")) return Promise.resolve();
       return tv.request(SSAP.power);
+    case "screenOff": return tv.request(SSAP.screenOff);
+    case "screenOn":  return tv.request(SSAP.screenOn);
     case "mute":   return tv.request(SSAP.setMute, { mute: !muted });
     case "volUp":  return tv.request(SSAP.volUp);
     case "volDown":return tv.request(SSAP.volDown);
@@ -1082,10 +1089,47 @@ function bind(){
     if (e.key === "-"){ e.preventDefault(); runCmd("volDown").catch(()=>{}); }
   });
 
-  $("powerBtn").onclick = () => {
-    buzz(20);
-    runCmd("power").catch(e => toast(e.message, true));
-  };
+  // زر الطاقة: ضغطة = إطفاء/تشغيل الشاشة (ذهاب وإياب من الجوال)
+  //            ضغطة مطوّلة = إطفاء كامل (لا رجعة منه إلا بالريموت الأصلي)
+  (function(){
+    const btn = $("powerBtn");
+    let holdTimer = null, held = false;
+
+    const paint = () => {
+      btn.textContent = screenIsOff ? "☀" : "⏻";
+      btn.style.background = screenIsOff ? "var(--ok)" : "";
+      btn.setAttribute("aria-label", screenIsOff ? "تشغيل الشاشة" : "إطفاء الشاشة");
+    };
+
+    btn.addEventListener("pointerdown", () => {
+      held = false;
+      holdTimer = setTimeout(() => {
+        held = true;
+        buzz(35);
+        runCmd("power").catch(e => toast(e.message, true));
+      }, 800);
+    });
+
+    const release = () => {
+      clearTimeout(holdTimer);
+      if (held) return;
+      buzz(20);
+      const next = !screenIsOff;
+      runCmd(next ? "screenOff" : "screenOn").then(() => {
+        screenIsOff = next;
+        paint();
+        toast(next ? "أُطفئت الشاشة — اضغط الزر مرة ثانية لتشغيلها" : "رجعت الشاشة");
+      }).catch(() => {
+        toast("تلفزيونك ما يدعم إطفاء الشاشة — اضغط مطوّلاً للإطفاء الكامل", true);
+      });
+    };
+
+    btn.addEventListener("pointerup", release);
+    btn.addEventListener("pointerleave", () => clearTimeout(holdTimer));
+    btn.addEventListener("pointercancel", () => clearTimeout(holdTimer));
+    btn.addEventListener("contextmenu", e => e.preventDefault());
+    paint();
+  })();
 
   $("connectBtn").onclick = () => {
     const ip = $("ipInput").value.trim();
