@@ -25,10 +25,10 @@
   head.appendChild(vp);
 
   var reset = doc.createElement("style");
-  reset.textContent = "\n/* ============================================================\n   ريموت KMC — webOS — ملف واحد مستقل، يشتغل بدون خادم\n   ============================================================ */\n:root{\n  --bg:#0b0d12; --surface:#151922; --surface-2:#1d222d; --surface-3:#262c3a;\n  --line:#2c3342; --text:#e8ecf4; --muted:#8a94a8;\n  --accent:#3d8bff; --accent-dim:#1e4a8c;\n  --danger:#e5484d; --ok:#30a46c; --warn:#f5a524; --radius:16px;\n}\n*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}\n[hidden]{display:none !important}\nhtml,body{margin:0;padding:0;background:var(--bg);color:var(--text);\n  font-family:\"SF Arabic\",\"Noto Kufi Arabic\",-apple-system,BlinkMacSystemFont,\"Segoe UI\",Tahoma,sans-serif;\n  overscroll-behavior:none}\nbody{min-height:100dvh;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}\n.shell{max-width:420px;margin:0 auto;padding:12px 14px 32px}\n\n.topbar{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 4px 16px}\n.brand{display:flex;align-items:center;gap:10px}\n.brand-name{font-size:17px;font-weight:700}\n.brand-sub{font-size:12px;color:var(--muted);margin-top:2px}\n.dot{width:10px;height:10px;border-radius:50%;background:var(--muted);flex:none;transition:background .25s,box-shadow .25s}\n.dot.ready{background:var(--ok);box-shadow:0 0 0 4px rgba(48,163,108,.16)}\n.dot.busy{background:var(--warn);box-shadow:0 0 0 4px rgba(245,165,36,.16)}\n.dot.error{background:var(--danger);box-shadow:0 0 0 4px rgba(229,72,77,.16)}\n.icon-btn{width:40px;height:40px;border-radius:12px;border:1px solid var(--line);\n  background:var(--surface);color:var(--text);font-size:18px;cursor:pointer}\n\n.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:18px 16px;margin-bottom:16px}\n.panel-title{margin:0 0 14px;font-size:15px;font-weight:700}\n.field{margin-bottom:18px}.field:last-child{margin-bottom:0}\n.field label{display:block;font-size:12px;color:var(--muted);margin-bottom:8px}\n.row{display:flex;gap:8px}.row input{flex:1;min-width:0}\ninput[type=text]{background:var(--surface-2);border:1px solid var(--line);border-radius:12px;color:var(--text);\n  padding:12px 14px;font-size:16px;font-family:inherit;width:100%;outline:none;direction:ltr;text-align:right}\ninput[type=text]:focus{border-color:var(--accent)}\ninput::placeholder{color:#5c6579}\n.hint{font-size:11.5px;color:var(--muted);margin:8px 0 0;line-height:1.7}\n.btn{background:var(--accent);color:#fff;border:none;border-radius:12px;padding:12px 18px;font-size:14px;\n  font-weight:600;font-family:inherit;cursor:pointer;white-space:nowrap;transition:transform .08s,filter .15s}\n.btn:active{transform:scale(.97);filter:brightness(.9)}\n.btn:disabled{opacity:.5}\n.btn.ghost{background:var(--surface-2);border:1px solid var(--line);color:var(--text)}\n.btn.wide{width:100%;margin-top:8px}\n.btn.small{padding:10px 14px;font-size:13px}\n.notice{background:rgba(61,139,255,.09);border:1px solid var(--accent-dim);border-radius:12px;\n  padding:12px 14px;font-size:12.5px;line-height:1.8;color:#cfe0ff;margin-top:14px}\n\n.remote{display:flex;flex-direction:column;gap:14px}\n.key{background:var(--surface-2);border:1px solid var(--line);border-radius:14px;color:var(--text);\n  font-size:19px;font-family:inherit;height:54px;cursor:pointer;display:flex;align-items:center;\n  justify-content:center;transition:transform .06s,background .12s;user-select:none}\n.key:active,.key.pressed{background:var(--surface-3);transform:scale(.94)}\n.key.accent{background:var(--accent-dim);border-color:#2f5f9e}\n.key.power{color:var(--danger);font-size:22px}\n.key.tall{height:60px;font-size:22px}\n.key.small{height:44px;width:52px;font-size:17px;flex:none}\n.row-3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}\n.row-5{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;direction:ltr}\n.row-5 .key{height:48px;font-size:15px;letter-spacing:-2px}\n\n.dpad{position:relative;width:100%;aspect-ratio:1;max-width:260px;margin:4px auto;\n  background:radial-gradient(circle at 50% 50%,var(--surface-2) 0 32%,var(--surface) 32% 100%);\n  border:1px solid var(--line);border-radius:50%}\n.dpad-btn{position:absolute;border:none;background:transparent;cursor:pointer;width:34%;height:34%;transition:background .12s}\n.dpad-btn::after{content:\"\";position:absolute;inset:0;margin:auto;width:0;height:0;border:9px solid transparent}\n.dpad-btn:active,.dpad-btn.pressed{background:rgba(61,139,255,.14)}\n.dpad-btn.up{top:2%;left:33%;border-radius:50% 50% 8px 8px}\n.dpad-btn.down{bottom:2%;left:33%;border-radius:8px 8px 50% 50%}\n.dpad-btn.left{left:2%;top:33%;border-radius:50% 8px 8px 50%}\n.dpad-btn.right{right:2%;top:33%;border-radius:8px 50% 50% 8px}\n.dpad-btn.up::after{border-bottom-color:var(--text);margin-bottom:14px}\n.dpad-btn.down::after{border-top-color:var(--text);margin-top:14px}\n.dpad-btn.left::after{border-right-color:var(--text);margin-right:14px}\n.dpad-btn.right::after{border-left-color:var(--text);margin-left:14px}\n.dpad-ok{position:absolute;inset:0;margin:auto;width:34%;height:34%;border-radius:50%;\n  background:var(--surface-3);border:1px solid var(--line);color:var(--text);font-size:15px;\n  font-weight:700;font-family:inherit;cursor:pointer;transition:transform .07s,background .12s}\n.dpad-ok:active,.dpad-ok.pressed{background:var(--accent-dim);transform:scale(.92)}\n\n.rockers{display:grid;grid-template-columns:1fr 1.15fr 1fr;gap:10px;align-items:center}\n.rocker{display:flex;flex-direction:column;gap:6px;background:var(--surface);border:1px solid var(--line);\n  border-radius:var(--radius);padding:8px}\n.rocker-label{text-align:center;font-size:11px;color:var(--muted)}\n.rocker-mid{display:flex;flex-direction:column;gap:8px}\n.rocker-mid .key{height:44px;font-size:15px}\n\n.typing{display:flex;gap:8px;align-items:center}\n.typing input{flex:1;min-width:0;direction:rtl;text-align:right}\n\n.apps{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;max-height:212px;overflow-y:auto;\n  -webkit-overflow-scrolling:touch}\n.app{background:var(--surface-2);border:1px solid var(--line);border-radius:12px;color:var(--text);\n  font-size:10.5px;font-family:inherit;font-weight:600;min-height:62px;cursor:pointer;padding:6px 3px;\n  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;\n  transition:transform .07s,background .12s;overflow:hidden}\n.app:active{background:var(--surface-3);transform:scale(.95)}\n.app img{width:26px;height:26px;border-radius:6px;object-fit:cover}\n.app span{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}\n\n.numpad-wrap{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:12px 14px}\n.numpad-wrap summary{cursor:pointer;font-size:13px;color:var(--muted);list-style:none}\n.numpad-wrap summary::-webkit-details-marker{display:none}\n.numpad-wrap summary::before{content:\"▾ \"}\n.numpad-wrap[open] summary::before{content:\"▴ \"}\n.numpad{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px}\n.numpad .key{height:48px;font-size:17px}\n\n.now-playing{text-align:center;font-size:11.5px;color:var(--muted);padding:6px;direction:ltr;word-break:break-all}\n.vol-badge{display:inline-block;background:var(--surface-3);border-radius:999px;padding:2px 10px;font-size:11px;color:var(--text)}\n\n.proto{background:var(--surface);border:1px solid var(--accent-dim);border-radius:var(--radius);padding:12px 14px}\n.proto-head{display:flex;justify-content:space-between;align-items:center;font-size:12.5px;\n  color:#cfe0ff;font-weight:600;margin-bottom:8px}\n.proto-head button{background:var(--surface-2);border:1px solid var(--line);color:var(--muted);\n  border-radius:8px;padding:5px 12px;font-size:11px;font-family:inherit;cursor:pointer}\n.proto pre{background:#0d1017;border:1px solid var(--line);border-radius:10px;padding:10px;\n  font-size:10px;line-height:1.65;color:#8fd0a0;direction:ltr;text-align:left;\n  white-space:pre-wrap;word-break:break-word;height:170px;overflow-y:auto;margin:0 0 10px}\n.demo-tag{background:var(--warn);color:#3d2c00;font-size:10px;font-weight:700;\n  border-radius:6px;padding:2px 7px;margin-right:6px}\n\n.diag{margin-top:14px;border-top:1px solid var(--line);padding-top:12px}\n.diag summary{cursor:pointer;font-size:12px;color:var(--muted);list-style:none}\n.diag summary::-webkit-details-marker{display:none}\n.diag summary::before{content:\"▾ \"}\n.diag[open] summary::before{content:\"▴ \"}\n.diag pre{background:#0d1017;border:1px solid var(--line);border-radius:10px;padding:10px;\n  font-size:10.5px;line-height:1.7;color:#a9b4c7;direction:ltr;text-align:left;\n  white-space:pre-wrap;word-break:break-word;max-height:220px;overflow-y:auto;margin:10px 0}\n\n.toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom));transform:translateX(-50%);\n  background:var(--surface-3);border:1px solid var(--line);color:var(--text);padding:12px 18px;\n  border-radius:12px;font-size:13px;max-width:90vw;text-align:center;z-index:50;\n  box-shadow:0 8px 28px rgba(0,0,0,.45)}\n.toast.error{border-color:var(--danger)}\n@media (prefers-reduced-motion:reduce){*{animation:none !important;transition:none !important}}\n";
+  reset.textContent = "\n/* ============================================================\n   ريموت KMC — webOS — واجهة متعددة الصفحات\n   ============================================================ */\n:root{\n  --bg:#0b0d12; --surface:#151922; --surface-2:#1d222d; --surface-3:#2a3140;\n  --line:#2c3342; --text:#e8ecf4; --muted:#8a94a8;\n  --accent:#3d8bff; --accent-dim:#1e4a8c; --nav:#4a5468;\n  --danger:#e5484d; --ok:#30a46c; --warn:#f5a524; --radius:16px;\n}\n*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}\n[hidden]{display:none !important}\nhtml,body{margin:0;padding:0;background:var(--bg);color:var(--text);\n  font-family:\"SF Arabic\",\"Noto Kufi Arabic\",-apple-system,BlinkMacSystemFont,\"Segoe UI\",Tahoma,sans-serif;\n  overscroll-behavior:none;height:100%}\nbody{display:flex;flex-direction:column;height:100dvh;\n  padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}\n\n/* ---------- الرأس ---------- */\n.topbar{display:flex;align-items:center;justify-content:space-between;gap:12px;direction:ltr;\n  padding:10px 16px 12px;border-bottom:1px solid var(--line);flex:none}\n.title{text-align:center;flex:1;min-width:0;direction:rtl}\n.title h1{font-size:17px;font-weight:700;margin:0}\n.title .model{font-size:12px;color:var(--muted);margin-top:2px;direction:ltr}\n.icon-btn{width:44px;height:44px;border-radius:12px;border:1px solid var(--line);\n  background:var(--surface);color:var(--text);font-size:19px;cursor:pointer;flex:none}\n.icon-btn:active{background:var(--surface-2)}\n.pw-btn{width:52px;height:52px;border-radius:50%;border:none;background:var(--danger);\n  color:#fff;font-size:24px;cursor:pointer;flex:none;transition:transform .08s,filter .15s;\n  box-shadow:0 3px 12px rgba(229,72,77,.35)}\n.pw-btn:active{transform:scale(.92);filter:brightness(.85)}\n.pw-btn:disabled{background:var(--surface-2);color:var(--muted);box-shadow:none}\n.dot{width:9px;height:9px;border-radius:50%;background:var(--muted);flex:none;\n  transition:background .25s,box-shadow .25s;margin-inline-start:6px}\n.dot.ready{background:var(--ok);box-shadow:0 0 0 3px rgba(48,163,108,.18)}\n.dot.busy{background:var(--warn);box-shadow:0 0 0 3px rgba(245,165,36,.18)}\n.dot.error{background:var(--danger);box-shadow:0 0 0 3px rgba(229,72,77,.18)}\n\n/* ---------- الصفحات ---------- */\n.pages{flex:1;display:flex;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;direction:ltr;\n  -webkit-overflow-scrolling:touch;scrollbar-width:none}\n.pages::-webkit-scrollbar{display:none}\n.page{flex:0 0 100%;scroll-snap-align:center;overflow-y:auto;padding:16px 16px 8px;direction:rtl;\n  -webkit-overflow-scrolling:touch}\n.page-title{font-size:12px;color:var(--muted);text-align:center;margin:0 0 14px}\n.dots{display:flex;justify-content:center;gap:8px;padding:12px 0 8px;flex:none;direction:ltr}\n.dots i{width:7px;height:7px;border-radius:50%;background:var(--surface-3);\n  transition:background .25s,transform .25s}\n.dots i.on{background:var(--accent);transform:scale(1.25)}\n\n/* ---------- الأزرار ---------- */\n.key{background:var(--surface-2);border:1px solid var(--line);border-radius:14px;color:var(--text);\n  font-size:15px;font-weight:600;font-family:inherit;height:56px;cursor:pointer;display:flex;\n  align-items:center;justify-content:center;transition:transform .06s,background .12s;user-select:none}\n.key:active,.key.pressed{background:var(--surface-3);transform:scale(.94)}\n.key.nav{background:var(--nav);border-color:#59637a}\n.key.nav:active,.key.nav.pressed{background:#5c6880}\n.key.big{font-size:19px}\n.key.sm{height:46px;font-size:13px}\n.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:10px}\n.grid3.media{direction:ltr}\n.grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:10px}\n\n/* الهزّازات: صوت وقنوات */\n.rockers{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px}\n.rocker{background:var(--surface-2);border:1px solid var(--line);border-radius:16px;\n  display:flex;flex-direction:column;overflow:hidden}\n.rocker button{background:none;border:none;color:var(--text);font-size:22px;font-family:inherit;\n  height:56px;cursor:pointer;transition:background .12s}\n.rocker button:active{background:var(--surface-3)}\n.rocker span{text-align:center;font-size:11px;color:var(--muted);padding:6px 0;\n  border-block:1px solid var(--line)}\n.mid{display:flex;flex-direction:column;gap:10px}\n.mid .key{height:56px}\n\n/* عجلة التنقل */\n.dpad{position:relative;width:100%;aspect-ratio:1;max-width:250px;margin:6px auto 12px;\n  background:radial-gradient(circle at 50% 50%,var(--surface-2) 0 31%,var(--surface) 31% 100%);\n  border:1px solid var(--line);border-radius:50%}\n.dpad-btn{position:absolute;border:none;background:transparent;cursor:pointer;width:34%;height:34%;\n  transition:background .12s}\n.dpad-btn::after{content:\"\";position:absolute;inset:0;margin:auto;width:0;height:0;border:10px solid transparent}\n.dpad-btn:active,.dpad-btn.pressed{background:rgba(61,139,255,.16)}\n.dpad-btn.up{top:1%;left:33%;border-radius:50% 50% 8px 8px}\n.dpad-btn.down{bottom:1%;left:33%;border-radius:8px 8px 50% 50%}\n.dpad-btn.left{left:1%;top:33%;border-radius:50% 8px 8px 50%}\n.dpad-btn.right{right:1%;top:33%;border-radius:8px 50% 50% 8px}\n.dpad-btn.up::after{border-bottom-color:var(--text);margin-bottom:15px}\n.dpad-btn.down::after{border-top-color:var(--text);margin-top:15px}\n.dpad-btn.left::after{border-right-color:var(--text);margin-right:15px}\n.dpad-btn.right::after{border-left-color:var(--text);margin-left:15px}\n.dpad-ok{position:absolute;inset:0;margin:auto;width:36%;height:36%;border-radius:50%;\n  background:var(--surface-3);border:1px solid var(--line);color:var(--text);font-size:15px;\n  font-weight:700;font-family:inherit;cursor:pointer;transition:transform .07s,background .12s}\n.dpad-ok:active,.dpad-ok.pressed{background:var(--accent-dim);transform:scale(.92)}\n\n/* أزرار ملوّنة */\n.colors{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:4px}\n.colors button{height:42px;border:1px solid var(--line);border-radius:12px;background:var(--surface-2);\n  cursor:pointer;display:flex;align-items:center;justify-content:center}\n.colors button:active{background:var(--surface-3)}\n.colors i{display:block;width:32px;height:7px;border-radius:4px}\n\n/* لوحة اللمس */\n.pad{background:var(--surface-2);border:1px solid var(--line);border-radius:18px;\n  height:min(46vh,340px);margin-bottom:12px;touch-action:none;position:relative;\n  display:flex;align-items:center;justify-content:center}\n.pad.active{background:var(--surface-3);border-color:var(--accent-dim)}\n.pad p{color:var(--muted);font-size:12.5px;text-align:center;margin:0;padding:0 24px;line-height:1.9;\n  pointer-events:none}\n\n/* التطبيقات */\n.apps{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}\n.app{background:var(--surface-2);border:1px solid var(--line);border-radius:16px;color:var(--text);\n  font-size:11px;font-family:inherit;font-weight:600;aspect-ratio:1;cursor:pointer;padding:8px;\n  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;\n  transition:transform .07s,background .12s;overflow:hidden}\n.app:active{background:var(--surface-3);transform:scale(.94)}\n.app img{width:46px;height:46px;border-radius:10px;object-fit:cover}\n.app span{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}\n.empty{color:var(--muted);font-size:13px;text-align:center;padding:40px 20px;line-height:2}\n\n/* لوحة الأرقام والكتابة */\n.numpad{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;max-width:300px;margin:0 auto 16px}\n.numpad .key{height:60px;font-size:21px}\n.typing{display:flex;gap:8px;align-items:center;margin-bottom:12px}\n.typing input{flex:1;min-width:0}\n\n/* ---------- الإعداد ---------- */\n.setup{padding:20px 16px;overflow-y:auto;flex:1}\n.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);\n  padding:18px 16px;margin-bottom:14px}\n.panel-title{margin:0 0 14px;font-size:15px;font-weight:700}\n.field{margin-bottom:18px}.field:last-child{margin-bottom:0}\n.field label{display:block;font-size:12px;color:var(--muted);margin-bottom:8px}\n.row{display:flex;gap:8px}.row input{flex:1;min-width:0}\ninput[type=text]{background:var(--surface-2);border:1px solid var(--line);border-radius:12px;\n  color:var(--text);padding:13px 14px;font-size:16px;font-family:inherit;width:100%;outline:none;\n  direction:ltr;text-align:right}\ninput[type=text]:focus{border-color:var(--accent)}\ninput::placeholder{color:#5c6579}\n.hint{font-size:11.5px;color:var(--muted);margin:8px 0 0;line-height:1.7}\n.btn{background:var(--accent);color:#fff;border:none;border-radius:12px;padding:13px 18px;\n  font-size:14px;font-weight:600;font-family:inherit;cursor:pointer;white-space:nowrap;\n  transition:transform .08s,filter .15s}\n.btn:active{transform:scale(.97);filter:brightness(.9)}\n.btn:disabled{opacity:.5}\n.btn.ghost{background:var(--surface-2);border:1px solid var(--line);color:var(--text)}\n.btn.wide{width:100%;margin-top:8px}\n.notice{background:rgba(61,139,255,.09);border:1px solid var(--accent-dim);border-radius:12px;\n  padding:12px 14px;font-size:12.5px;line-height:1.8;color:#cfe0ff;margin-top:14px}\n.diag{margin-top:14px;border-top:1px solid var(--line);padding-top:12px}\n.diag summary{cursor:pointer;font-size:12px;color:var(--muted);list-style:none}\n.diag summary::-webkit-details-marker{display:none}\n.diag summary::before{content:\"▾ \"}\n.diag[open] summary::before{content:\"▴ \"}\n.diag pre{background:#0d1017;border:1px solid var(--line);border-radius:10px;padding:10px;\n  font-size:10.5px;line-height:1.7;color:#a9b4c7;direction:ltr;text-align:left;\n  white-space:pre-wrap;word-break:break-word;max-height:220px;overflow-y:auto;margin:10px 0}\n\n.toast{position:fixed;left:50%;bottom:calc(28px + env(safe-area-inset-bottom));\n  transform:translateX(-50%);background:var(--surface-3);border:1px solid var(--line);\n  color:var(--text);padding:12px 18px;border-radius:12px;font-size:13px;max-width:90vw;\n  text-align:center;z-index:50;box-shadow:0 8px 28px rgba(0,0,0,.45)}\n.toast.error{border-color:var(--danger)}\n@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}\n";
   head.appendChild(reset);
 
-  doc.body.innerHTML = "\n<div class=\"shell\">\n\n  <header class=\"topbar\">\n    <div class=\"brand\">\n      <span class=\"dot\" id=\"statusDot\"></span>\n      <div>\n        <div class=\"brand-name\">ريموت KMC</div>\n        <div class=\"brand-sub\" id=\"statusText\">غير متصل</div>\n      </div>\n    </div>\n    <button class=\"icon-btn\" id=\"settingsBtn\" aria-label=\"الإعدادات\">⚙</button>\n  </header>\n\n  <!-- ===== التوصيل ===== -->\n  <section class=\"panel\" id=\"setupPanel\">\n    <h2 class=\"panel-title\">توصيل التلفزيون</h2>\n    <div class=\"field\">\n      <label for=\"ipInput\">عنوان IP للتلفزيون</label>\n      <div class=\"row\">\n        <input id=\"ipInput\" type=\"text\" inputmode=\"decimal\" placeholder=\"192.168.8.77\" autocomplete=\"off\">\n        <button class=\"btn\" id=\"connectBtn\">توصيل</button>\n      </div>\n      <p class=\"hint\">تلقاه في: الإعدادات ← الاتصال ← إعدادات Wi-Fi ← متقدم</p>\n    </div>\n\n    <div class=\"field\">\n      <button class=\"btn ghost wide\" id=\"demoBtn\">🧪 جرّب بدون تلفزيون — وضع التعلّم</button>\n      <p class=\"hint\">تلفزيون محاكى داخل الصفحة. تضغط الأزرار وتشوف رسائل\n        البروتوكول الحقيقية اللي كانت راح تنرسل. ما يحتاج شبكة ولا شهادات.</p>\n    </div>\n    <div id=\"setupNotice\" class=\"notice\" hidden></div>\n\n    <details class=\"diag\" id=\"diagWrap\">\n      <summary>تفاصيل تقنية</summary>\n      <pre id=\"diagLog\"></pre>\n      <button class=\"btn ghost wide\" id=\"copyDiagBtn\">نسخ التفاصيل</button>\n    </details>\n  </section>\n\n  <!-- ===== انتظار الموافقة ===== -->\n  <section class=\"panel\" id=\"pairPanel\" hidden>\n    <h2 class=\"panel-title\">وافق من التلفزيون</h2>\n    <p class=\"hint\" style=\"font-size:13px\">\n      ظهرت على شاشة التلفزيون رسالة تسأل عن السماح لهذا الجهاز.<br>\n      اضغط <b>«موافق / Yes»</b> بريموت التلفزيون الأصلي.<br><br>\n      مرة وحدة بس — بعدها يتذكرك.\n    </p>\n    <button class=\"btn ghost wide\" id=\"cancelPairBtn\">إلغاء</button>\n  </section>\n\n  <!-- ===== الريموت ===== -->\n  <main class=\"remote\" id=\"remote\" hidden>\n    <div class=\"row-3\">\n      <button class=\"key power\" data-cmd=\"power\" title=\"إطفاء\">⏻</button>\n      <button class=\"key\" data-cmd=\"mute\" title=\"كتم\">🔇</button>\n      <button class=\"key\" data-btn=\"MENU\" title=\"القائمة\">☰</button>\n    </div>\n\n    <div class=\"dpad\">\n      <button class=\"dpad-btn up\"    data-btn=\"UP\"    aria-label=\"فوق\"></button>\n      <button class=\"dpad-btn down\"  data-btn=\"DOWN\"  aria-label=\"تحت\"></button>\n      <button class=\"dpad-btn left\"  data-btn=\"LEFT\"  aria-label=\"يسار\"></button>\n      <button class=\"dpad-btn right\" data-btn=\"RIGHT\" aria-label=\"يمين\"></button>\n      <button class=\"dpad-ok\"        data-btn=\"ENTER\">OK</button>\n    </div>\n\n    <div class=\"row-3\">\n      <button class=\"key\" data-btn=\"BACK\" title=\"رجوع\">↩</button>\n      <button class=\"key\" data-btn=\"HOME\" title=\"الرئيسية\">⌂</button>\n      <button class=\"key\" data-btn=\"EXIT\" title=\"خروج\">✕</button>\n    </div>\n\n    <div class=\"rockers\">\n      <div class=\"rocker\">\n        <button class=\"key tall\" data-cmd=\"volUp\" data-repeat>＋</button>\n        <span class=\"rocker-label\" id=\"volLabel\">الصوت</span>\n        <button class=\"key tall\" data-cmd=\"volDown\" data-repeat>－</button>\n      </div>\n      <div class=\"rocker-mid\">\n        <button class=\"key\" data-btn=\"INFO\" title=\"معلومات\">ℹ</button>\n        <button class=\"key\" data-cmd=\"livetv\" title=\"التلفزيون\">TV</button>\n        <button class=\"key\" data-btn=\"CC\" title=\"ترجمة\">CC</button>\n      </div>\n      <div class=\"rocker\">\n        <button class=\"key tall\" data-cmd=\"chUp\" data-repeat>▲</button>\n        <span class=\"rocker-label\">القناة</span>\n        <button class=\"key tall\" data-cmd=\"chDown\" data-repeat>▼</button>\n      </div>\n    </div>\n\n    <div class=\"row-5\">\n      <button class=\"key\" data-cmd=\"rewind\" title=\"إرجاع\">◀◀</button>\n      <button class=\"key\" data-cmd=\"play\" title=\"تشغيل\">▶</button>\n      <button class=\"key accent\" data-cmd=\"pause\" title=\"إيقاف مؤقت\">❚❚</button>\n      <button class=\"key\" data-cmd=\"stop\" title=\"إيقاف\">■</button>\n      <button class=\"key\" data-cmd=\"forward\" title=\"تقديم\">▶▶</button>\n    </div>\n\n    <!-- الكتابة: webOS يدعم العربي هنا -->\n    <div class=\"typing\">\n      <input id=\"textInput\" type=\"text\" placeholder=\"اكتب بالعربي أو الإنجليزي…\" autocomplete=\"off\">\n      <button class=\"btn small\" id=\"sendTextBtn\">إرسال</button>\n      <button class=\"key small\" data-cmd=\"del\" title=\"مسح\">⌫</button>\n    </div>\n\n    <div class=\"apps\" id=\"appsGrid\"></div>\n\n    <details class=\"numpad-wrap\">\n      <summary>لوحة الأرقام</summary>\n      <div class=\"numpad\">\n        <button class=\"key\" data-btn=\"1\">1</button>\n        <button class=\"key\" data-btn=\"2\">2</button>\n        <button class=\"key\" data-btn=\"3\">3</button>\n        <button class=\"key\" data-btn=\"4\">4</button>\n        <button class=\"key\" data-btn=\"5\">5</button>\n        <button class=\"key\" data-btn=\"6\">6</button>\n        <button class=\"key\" data-btn=\"7\">7</button>\n        <button class=\"key\" data-btn=\"8\">8</button>\n        <button class=\"key\" data-btn=\"9\">9</button>\n        <button class=\"key\" data-btn=\"DASH\">−</button>\n        <button class=\"key\" data-btn=\"0\">0</button>\n        <button class=\"key\" data-btn=\"ENTER\">↵</button>\n      </div>\n    </details>\n\n    <!-- يظهر في وضع التعلّم فقط: الرسائل الفعلية على السلك -->\n    <div class=\"proto\" id=\"protoWrap\" hidden>\n      <div class=\"proto-head\">\n        <span>📡 رسائل البروتوكول</span>\n        <button id=\"protoClear\">مسح</button>\n      </div>\n      <pre id=\"protoLog\"></pre>\n      <p class=\"hint\" style=\"margin:0\">\n        <b>request</b> = أمر JSON على قناة التحكم (المنفذ 3001).<br>\n        <b>button</b> = نص خام على قناة الأزرار — أسرع، لهذا التنقل يستخدمها.\n      </p>\n    </div>\n\n    <div class=\"now-playing\" id=\"nowPlaying\" hidden></div>\n  </main>\n\n  <div class=\"toast\" id=\"toast\" hidden></div>\n</div>\n\n";
+  doc.body.innerHTML = "\n<header class=\"topbar\">\n  <button class=\"icon-btn\" id=\"settingsBtn\" aria-label=\"الإعدادات\">⚙</button>\n  <div class=\"title\">\n    <h1 id=\"pageTitle\">ريموت KMC</h1>\n    <div class=\"model\" id=\"modelName\">غير متصل</div>\n  </div>\n  <span class=\"dot\" id=\"statusDot\"></span>\n  <button class=\"pw-btn\" id=\"powerBtn\" aria-label=\"الطاقة\">⏻</button>\n</header>\n\n<!-- ===== الإعداد ===== -->\n<div class=\"setup\" id=\"setupPanel\">\n  <div class=\"panel\">\n    <h2 class=\"panel-title\">توصيل التلفزيون</h2>\n    <div class=\"field\">\n      <label for=\"ipInput\">عنوان IP للتلفزيون</label>\n      <div class=\"row\">\n        <input id=\"ipInput\" type=\"text\" inputmode=\"decimal\" placeholder=\"192.168.8.77\" autocomplete=\"off\">\n        <button class=\"btn\" id=\"connectBtn\">توصيل</button>\n      </div>\n      <p class=\"hint\">تلقاه في: الإعدادات ← الاتصال ← Wi-Fi ← متقدم</p>\n    </div>\n    <div id=\"setupNotice\" class=\"notice\" hidden></div>\n    <details class=\"diag\" id=\"diagWrap\">\n      <summary>تفاصيل تقنية</summary>\n      <pre id=\"diagLog\"></pre>\n      <button class=\"btn ghost wide\" id=\"copyDiagBtn\">نسخ التفاصيل</button>\n    </details>\n  </div>\n</div>\n\n<!-- ===== انتظار الموافقة ===== -->\n<div class=\"setup\" id=\"pairPanel\" hidden>\n  <div class=\"panel\">\n    <h2 class=\"panel-title\">وافق من التلفزيون</h2>\n    <p class=\"hint\" style=\"font-size:13.5px\">\n      ظهرت على شاشة التلفزيون رسالة تسأل عن السماح لهذا الجهاز.<br>\n      اضغط <b>«موافق»</b> بريموت التلفزيون الأصلي.<br><br>\n      مرة وحدة بس — بعدها يتذكرك.\n    </p>\n    <button class=\"btn ghost wide\" id=\"cancelPairBtn\">إلغاء</button>\n  </div>\n</div>\n\n<!-- ===== الصفحات ===== -->\n<div class=\"pages\" id=\"pages\" hidden>\n\n  <!-- ١) التحكم -->\n  <section class=\"page\" data-name=\"التحكم عن بعد\">\n    <div class=\"rockers\">\n      <div class=\"rocker\">\n        <button data-cmd=\"volUp\" data-repeat>＋</button>\n        <span id=\"volLabel\">الصوت</span>\n        <button data-cmd=\"volDown\" data-repeat>－</button>\n      </div>\n      <div class=\"mid\">\n        <button class=\"key\" data-cmd=\"mute\">🔇</button>\n        <button class=\"key\" data-btn=\"INFO\">INFO</button>\n      </div>\n      <div class=\"rocker\">\n        <button data-cmd=\"chUp\" data-repeat>▲</button>\n        <span>القناة</span>\n        <button data-cmd=\"chDown\" data-repeat>▼</button>\n      </div>\n    </div>\n\n    <div class=\"grid3\">\n      <button class=\"key\" data-btn=\"GUIDE\">GUIDE</button>\n      <button class=\"key\" data-btn=\"HOME\">HOME</button>\n      <button class=\"key\" data-cmd=\"web\">WEB</button>\n    </div>\n\n    <div class=\"dpad\">\n      <button class=\"dpad-btn up\"    data-btn=\"UP\"    aria-label=\"فوق\"></button>\n      <button class=\"dpad-btn down\"  data-btn=\"DOWN\"  aria-label=\"تحت\"></button>\n      <button class=\"dpad-btn left\"  data-btn=\"LEFT\"  aria-label=\"يسار\"></button>\n      <button class=\"dpad-btn right\" data-btn=\"RIGHT\" aria-label=\"يمين\"></button>\n      <button class=\"dpad-ok\"        data-btn=\"ENTER\">OK</button>\n    </div>\n\n    <div class=\"grid3\">\n      <button class=\"key\" data-btn=\"BACK\">BACK</button>\n      <button class=\"key\" data-cmd=\"livetv\">TV</button>\n      <button class=\"key\" data-btn=\"EXIT\">EXIT</button>\n    </div>\n\n    <div class=\"grid3\">\n      <button class=\"key sm\" data-btn=\"MENU\">SETTINGS</button>\n      <button class=\"key sm\" data-btn=\"CC\">CC</button>\n      <button class=\"key sm\" data-btn=\"SEARCH\">SEARCH</button>\n    </div>\n\n    <div class=\"colors\">\n      <button data-btn=\"RED\"><i style=\"background:#e5484d\"></i></button>\n      <button data-btn=\"GREEN\"><i style=\"background:#7bc043\"></i></button>\n      <button data-btn=\"YELLOW\"><i style=\"background:#f5c518\"></i></button>\n      <button data-btn=\"BLUE\"><i style=\"background:#3d8bff\"></i></button>\n    </div>\n  </section>\n\n  <!-- ٢) لوحة اللمس -->\n  <section class=\"page\" data-name=\"لوحة اللمس\">\n    <div class=\"grid3\">\n      <button class=\"key\" data-btn=\"BACK\">BACK</button>\n      <button class=\"key\" data-btn=\"HOME\">HOME</button>\n      <button class=\"key\" data-cmd=\"web\">WEB</button>\n    </div>\n\n    <div class=\"pad\" id=\"pad\">\n      <p>مرّر بإصبعك لتحريك المؤشر على التلفزيون<br>وانقر للاختيار</p>\n    </div>\n\n    <div class=\"grid3 media\">\n      <button class=\"key big\" data-cmd=\"rewind\">◀◀</button>\n      <button class=\"key big\" data-cmd=\"pause\">❚❚</button>\n      <button class=\"key big\" data-cmd=\"forward\">▶▶</button>\n    </div>\n    <div class=\"grid3 media\">\n      <button class=\"key big\" data-cmd=\"stop\">■</button>\n      <button class=\"key big\" data-cmd=\"play\">▶</button>\n      <button class=\"key\" data-btn=\"SEARCH\">SEARCH</button>\n    </div>\n  </section>\n\n  <!-- ٣) التطبيقات -->\n  <section class=\"page\" data-name=\"التطبيقات\">\n    <div class=\"apps\" id=\"appsGrid\"></div>\n    <div class=\"empty\" id=\"appsEmpty\">جاري جلب التطبيقات من التلفزيون…</div>\n  </section>\n\n  <!-- ٤) الأرقام والكتابة -->\n  <section class=\"page\" data-name=\"الأرقام والكتابة\">\n    <div class=\"typing\">\n      <input id=\"textInput\" type=\"text\" placeholder=\"اكتب بالعربي أو الإنجليزي…\" autocomplete=\"off\">\n      <button class=\"btn\" id=\"sendTextBtn\">إرسال</button>\n    </div>\n    <div class=\"grid3\">\n      <button class=\"key sm\" data-cmd=\"del\">⌫ مسح</button>\n      <button class=\"key sm\" data-btn=\"ENTER\">↵ إدخال</button>\n      <button class=\"key sm\" data-btn=\"EXIT\">خروج</button>\n    </div>\n    <div class=\"numpad\">\n      <button class=\"key\" data-btn=\"1\">1</button>\n      <button class=\"key\" data-btn=\"2\">2</button>\n      <button class=\"key\" data-btn=\"3\">3</button>\n      <button class=\"key\" data-btn=\"4\">4</button>\n      <button class=\"key\" data-btn=\"5\">5</button>\n      <button class=\"key\" data-btn=\"6\">6</button>\n      <button class=\"key\" data-btn=\"7\">7</button>\n      <button class=\"key\" data-btn=\"8\">8</button>\n      <button class=\"key\" data-btn=\"9\">9</button>\n      <button class=\"key\" data-btn=\"DASH\">−</button>\n      <button class=\"key\" data-btn=\"0\">0</button>\n      <button class=\"key\" data-cmd=\"del\">⌫</button>\n    </div>\n    <div class=\"grid3\">\n      <button class=\"key sm\" data-cmd=\"input\">INPUT</button>\n      <button class=\"key sm\" data-btn=\"LIST\">LIST</button>\n      <button class=\"key sm\" data-btn=\"QMENU\">Q.MENU</button>\n    </div>\n  </section>\n\n</div>\n\n<div class=\"dots\" id=\"dots\" hidden></div>\n<div class=\"toast\" id=\"toast\" hidden></div>\n";
 
   // ---------- منطق التطبيق ----------
 
@@ -112,7 +112,9 @@ const SSAP = {
   insert:  "ssap://com.webos.service.ime/insertText",
   del:     "ssap://com.webos.service.ime/deleteCharacters",
   enter:   "ssap://com.webos.service.ime/sendEnterKey",
-  pointer: "ssap://com.webos.service.networkinput/getPointerInputSocket"
+  pointer: "ssap://com.webos.service.networkinput/getPointerInputSocket",
+  sysInfo: "ssap://system/getSystemInfo",
+  toast:   "ssap://system.notifications/createToast"
 };
 
 // تخزين بسيط يتحمّل منع التخزين في بعض المتصفحات
@@ -240,6 +242,7 @@ class WebOSRemote {
     this.onVolume = () => {};
     this.onApp = () => {};
     this.onApps = () => {};
+    this.onReady = () => {};
   }
 
   _set(status, detail){
@@ -392,6 +395,7 @@ class WebOSRemote {
   // بعد الجاهزية: نفتح قناة الأزرار ونشترك في الصوت والتطبيق الحالي
   async _afterReady(){
     this._startHeartbeat();
+    this.onReady();
     try {
       const res = await this.request(SSAP.pointer);
       if (res && res.socketPath){
@@ -549,13 +553,15 @@ tv.onStatus = (status, detail) => {
   else if (status === "error") dot.classList.add("error");
   else if (status !== "disconnected") dot.classList.add("busy");
 
-  $("statusText").textContent = detail || (status === "ready" && tv.ip ? "متصل بـ " + tv.ip : STATUS_TEXT[status]);
-
-  $("remote").hidden     = status !== "ready";
+  const ready = status === "ready";
+  $("pages").hidden      = !ready;
+  $("dots").hidden       = !ready;
   $("pairPanel").hidden  = status !== "pairing";
-  $("setupPanel").hidden = (status === "ready" || status === "pairing");
+  $("setupPanel").hidden = (ready || status === "pairing");
+  $("powerBtn").disabled = !ready;
   $("connectBtn").disabled = status === "connecting";
 
+  if (!ready) $("modelName").textContent = detail || STATUS_TEXT[status] || status;
   if (status === "error") showTroubleshoot(detail);
 };
 
@@ -566,44 +572,55 @@ tv.onVolume = (p) => {
 };
 
 tv.onApp = (appId) => {
-  const el = $("nowPlaying");
-  el.hidden = !appId;
-  el.textContent = appId || "";
+  // نُبرز التطبيق الشغّال حالياً في شبكة التطبيقات بدل شريط منفصل
+  document.querySelectorAll(".app").forEach(el => {
+    el.style.borderColor = (el.dataset.appId === appId) ? "var(--accent)" : "";
+  });
 };
 
-// شبكة التطبيقات تُبنى من التطبيقات المثبتة فعلاً على التلفزيون
 tv.onApps = (points) => {
   const grid = $("appsGrid");
   grid.innerHTML = "";
   const skip = /^(com\.webos\.app\.(hdmi|component|av|externalinput)|com\.webos\.exampleapp)/;
-  points
-    .filter(p => p.id && p.title && !skip.test(p.id))
-    .sort((a,b) => (a.title||"").localeCompare(b.title||""))
-    .forEach(p => {
-      const btn = document.createElement("button");
-      btn.className = "app";
-      if (p.icon){
-        const img = document.createElement("img");
-        img.src = p.icon;
-        img.onerror = () => img.remove();
-        btn.appendChild(img);
-      }
-      const label = document.createElement("span");
-      label.textContent = p.title;
-      btn.appendChild(label);
-      btn.onclick = () => {
-        buzz();
-        tv.request(SSAP.launch, { id: p.id }).catch(e => toast(e.message, true));
-      };
-      grid.appendChild(btn);
-    });
+  const list = points.filter(p => p.id && p.title && !skip.test(p.id))
+                     .sort((a,b) => (a.title||"").localeCompare(b.title||""));
+  $("appsEmpty").hidden = list.length > 0;
+  if (!list.length){ $("appsEmpty").textContent = "ما فيه تطبيقات — تأكد إن التلفزيون مشغّل"; return; }
+
+  list.forEach(p => {
+    const btn = document.createElement("button");
+    btn.className = "app";
+    btn.dataset.appId = p.id;
+    if (p.icon){
+      const img = document.createElement("img");
+      img.src = p.icon;
+      img.onerror = () => img.remove();
+      btn.appendChild(img);
+    }
+    const label = document.createElement("span");
+    label.textContent = p.title;
+    btn.appendChild(label);
+    btn.onclick = () => {
+      buzz();
+      tv.request(SSAP.launch, { id: p.id }).catch(e => toast(e.message, true));
+    };
+    grid.appendChild(btn);
+  });
+};
+
+// اسم الطراز في الرأس — لمسة تعريفية مثل التطبيقات الاحترافية
+tv.onReady = () => {
+  tv.request(SSAP.sysInfo).then(info => {
+    const model = info && (info.modelName || info.model);
+    $("modelName").textContent = model ? "webOS TV " + model : "متصل بـ " + tv.ip;
+  }).catch(() => { $("modelName").textContent = "متصل بـ " + tv.ip; });
 };
 
 // ---------- تنفيذ الأوامر ----------
 function runCmd(cmd){
   switch (cmd){
     case "power":
-      if (!confirm("إطفاء التلفزيون؟\n\nتنبيه: ما تقدر تشغّله مرة ثانية من هذا التطبيق.")) return;
+      if (!confirm("إطفاء التلفزيون؟\n\nتنبيه: ما تقدر تشغّله مرة ثانية من هذا التطبيق.")) return Promise.resolve();
       return tv.request(SSAP.power);
     case "mute":   return tv.request(SSAP.setMute, { mute: !muted });
     case "volUp":  return tv.request(SSAP.volUp);
@@ -617,11 +634,86 @@ function runCmd(cmd){
     case "forward":return tv.request(SSAP.forward);
     case "del":    return tv.request(SSAP.del, { count: 1 });
     case "livetv": return tv.request(SSAP.launch, { id: "com.webos.app.livetv" });
+    case "web":    return tv.request(SSAP.launch, { id: "com.webos.app.browser" });
+    case "input":  return tv.request(SSAP.launch, { id: "com.webos.app.inputcommon" });
     default: return Promise.reject(new Error("أمر غير معروف"));
   }
 }
 
+// ---------- الصفحات ولوحة اللمس ----------
+function setupPages(){
+  const pages = $("pages");
+  const sections = [...pages.querySelectorAll(".page")];
+  const dots = $("dots");
+
+  sections.forEach(() => dots.appendChild(document.createElement("i")));
+  const marks = [...dots.children];
+
+  const sync = () => {
+    // العرض يساوي صفراً ما دامت الصفحات مخفية، فنحرس القسمة
+    const w = pages.clientWidth || 1;
+    let i = Math.round(pages.scrollLeft / w);
+    if (!Number.isFinite(i)) i = 0;
+    const idx = Math.min(Math.max(i, 0), sections.length - 1);
+    marks.forEach((m, n) => m.classList.toggle("on", n === idx));
+    $("pageTitle").textContent = sections[idx].dataset.name;
+  };
+
+  pages.addEventListener("scroll", () => {
+    clearTimeout(pages._t);
+    pages._t = setTimeout(sync, 60);
+  });
+  marks.forEach((m, n) => m.onclick = () => {
+    pages.scrollTo({ left: n * pages.clientWidth, behavior: "smooth" });
+  });
+  sync();
+}
+
+// لوحة اللمس: تحرّك المؤشر على التلفزيون عبر قناة الأزرار
+function setupTouchpad(){
+  const pad = $("pad");
+  let last = null, moved = 0;
+
+  const send = (msg) => {
+    if (!tv.pointer || tv.pointer.readyState !== 1) return;
+    tv.pointer.send(msg);
+  };
+
+  pad.addEventListener("pointerdown", (e) => {
+    e.preventDefault();
+    pad.setPointerCapture(e.pointerId);
+    pad.classList.add("active");
+    last = { x: e.clientX, y: e.clientY };
+    moved = 0;
+  });
+
+  pad.addEventListener("pointermove", (e) => {
+    if (!last) return;
+    const dx = e.clientX - last.x, dy = e.clientY - last.y;
+    if (!dx && !dy) return;
+    moved += Math.abs(dx) + Math.abs(dy);
+    last = { x: e.clientX, y: e.clientY };
+    // المؤشر على التلفزيون يتحرك بعكس اتجاه المحور الأفقي في الواجهة العربية؟ لا:
+    // الإحداثيات فيزيائية، فنرسلها كما هي
+    send("type:move\ndx:" + Math.round(dx) + "\ndy:" + Math.round(dy) + "\ndown:0\n\n");
+  });
+
+  const end = (e) => {
+    if (!last) return;
+    pad.classList.remove("active");
+    if (moved < 8){ buzz(); send("type:click\n\n"); }  // نقرة قصيرة = اختيار
+    last = null;
+    try { pad.releasePointerCapture(e.pointerId); } catch {}
+  };
+  pad.addEventListener("pointerup", end);
+  pad.addEventListener("pointercancel", end);
+  pad.addEventListener("contextmenu", (e) => e.preventDefault());
+}
+
 function bind(){
+  setupPages();
+  setupTouchpad();
+
   // أزرار قناة الأزرار (التنقل والأرقام)
   document.querySelectorAll("[data-btn]").forEach(el => {
     const name = el.dataset.btn;
@@ -677,6 +769,11 @@ function bind(){
     if (e.key === "+"){ e.preventDefault(); runCmd("volUp").catch(()=>{}); }
     if (e.key === "-"){ e.preventDefault(); runCmd("volDown").catch(()=>{}); }
   });
+
+  $("powerBtn").onclick = () => {
+    buzz(20);
+    runCmd("power").catch(e => toast(e.message, true));
+  };
 
   $("connectBtn").onclick = () => {
     const ip = $("ipInput").value.trim();
