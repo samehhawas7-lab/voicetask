@@ -610,7 +610,14 @@ class WebOSRemote {
         // تعديل هذه الترويسة، فلا سبيل لتجاوزها من صفحة ويب إطلاقاً.
         if (code === 1008) this.originBlocked = true;
 
-        if (this.ws === ws){ this.ws = null; if (this.status === "ready") this._set("disconnected"); }
+        if (this.ws === ws){
+          this.ws = null;
+          if (this.status === "ready"){
+            this._stopHeartbeat();
+            this._set("disconnected");
+            this._scheduleReconnect();
+          }
+        }
         done(reject, new Error(code === 1008
           ? "التلفزيون يرفض التحكم من المتصفحات"
           : "التلفزيون أغلق الاتصال (" + why + ")"));
@@ -618,8 +625,34 @@ class WebOSRemote {
     });
   }
 
+  // التلفزيون يغلق أي اتصال يبقى خاملاً دقيقتين تقريباً، فنرسل طلباً
+  // خفيفاً بانتظام ليبقى حياً ما دامت الصفحة مفتوحة.
+  _startHeartbeat(){
+    this._stopHeartbeat();
+    this._hb = setInterval(() => {
+      if (this.status !== "ready") return;
+      this.request(SSAP.getVol).catch(() => {});
+    }, 20000);
+  }
+
+  _stopHeartbeat(){
+    if (this._hb){ clearInterval(this._hb); this._hb = null; }
+  }
+
+  // انقطاع غير مقصود: نعيد الوصل تلقائياً بالمفتاح المحفوظ دون إزعاج المستخدم
+  _scheduleReconnect(){
+    if (this._reconnectTimer || !this.ip) return;
+    if (!store.get("webos_key_" + this.ip)) return; // بلا مفتاح يلزم موافقة يدوية
+    diag("انقطع الاتصال — إعادة الوصل بعد ثانيتين");
+    this._reconnectTimer = setTimeout(() => {
+      this._reconnectTimer = null;
+      if (this.status !== "ready") this.connect(this.ip);
+    }, 2000);
+  }
+
   // بعد الجاهزية: نفتح قناة الأزرار ونشترك في الصوت والتطبيق الحالي
   async _afterReady(){
+    this._startHeartbeat();
     try {
       const res = await this.request(SSAP.pointer);
       if (res && res.socketPath) this._openPointer(res.socketPath);
@@ -669,6 +702,8 @@ class WebOSRemote {
   }
 
   disconnect(){
+    this._stopHeartbeat();
+    if (this._reconnectTimer){ clearTimeout(this._reconnectTimer); this._reconnectTimer = null; }
     for (const s of [this.ws, this.pointer]){
       if (s) { try { s.onclose = null; s.close(); } catch {} }
     }
