@@ -722,23 +722,64 @@ function bind(){
   });
 }
 
+// تنزيل نسخة محلية من الصفحة نفسها — تتخطى قيود HTTPS كلياً
+async function downloadLocalCopy(){
+  const btn = $("dlBtn");
+  if (btn){ btn.disabled = true; btn.textContent = "جاري التحضير…"; }
+  try {
+    const res = await fetch(location.href, { cache: "no-store" });
+    const html = await res.text();
+    const url = URL.createObjectURL(new Blob([html], { type: "text/html" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "remote-kmc.html";
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 2000);
+    diag("تم تجهيز النسخة المحلية للتنزيل");
+    toast("اختر «تنزيل» ثم افتحه من تطبيق الملفات");
+  } catch (e){
+    diag("فشل تجهيز النسخة المحلية: " + e.message);
+    toast("تعذّر التحميل: " + e.message, true);
+  } finally {
+    if (btn){ btn.disabled = false; btn.textContent = "⬇︎ حفظ نسخة تشتغل بدون شهادة"; }
+  }
+}
+
 // نصائح عند فشل الاتصال — تختلف حسب طريقة فتح الصفحة
 function showTroubleshoot(detail){
   const box = $("setupNotice");
   const secure = location.protocol === "https:";
   box.hidden = false;
-  box.innerHTML = secure
-    ? "<b>الصفحة مفتوحة عبر HTTPS</b><br>" +
-      "المتصفح يمنع الاتصال بالتلفزيون إلا بشهادة موثوقة. سوّ التالي مرة وحدة:<br>" +
-      "١. افتح تبويب جديد على <code style='direction:ltr;display:inline-block'>https://" +
-      ($("ipInput").value.trim() || "IP") + ":3001</code><br>" +
-      "٢. بيطلع تحذير أمان — اضغط «إظهار التفاصيل» ثم «زيارة الموقع»<br>" +
-      "٣. ارجع هنا واضغط توصيل<br><br>" +
-      "لو ما نفع، احفظ الملف على جوالك وافتحه من تطبيق «الملفات» — تختفي المشكلة."
-    : "<b>تأكد من التالي:</b><br>" +
+
+  if (!secure){
+    box.innerHTML =
+      "<b>تأكد من التالي:</b><br>" +
       "• التلفزيون مشغّل (مو نائم)<br>" +
       "• جوالك والتلفزيون على نفس الواي فاي<br>" +
       "• عنوان IP صحيح — يتغير أحياناً بعد إعادة تشغيل الراوتر";
+    return;
+  }
+
+  box.innerHTML =
+    "<b>هذي الصفحة على HTTPS، والمتصفح يمنعها من مكالمة التلفزيون.</b><br><br>" +
+    "<b>الحل الأسهل ↓</b><br>" +
+    "احفظ نسخة على جوالك وافتحها من تطبيق «الملفات» — تشتغل مباشرة بدون أي شهادات.";
+
+  const btn = document.createElement("button");
+  btn.className = "btn wide";
+  btn.id = "dlBtn";
+  btn.textContent = "⬇︎ حفظ نسخة تشتغل بدون شهادة";
+  btn.onclick = downloadLocalCopy;
+  box.appendChild(btn);
+
+  const alt = document.createElement("p");
+  alt.className = "hint";
+  alt.innerHTML = "<b>أو</b> اقبل شهادة التلفزيون: افتح " +
+    "<code style='direction:ltr;display:inline-block'>https://" +
+    ($("ipInput").value.trim() || "IP") + ":3001</code> ← «إظهار التفاصيل» ← " +
+    "<b>انزل لآخر الصفحة</b> ← «زيارة هذا الموقع».";
+  box.appendChild(alt);
 }
 
 // ---------- التشغيل ----------
