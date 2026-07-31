@@ -338,7 +338,7 @@ class WebOSRemote {
         const entry = this.pending.get(msg.id);
         if (entry){
           if (!entry.keep) this.pending.delete(msg.id);
-          entry.handler(msg.payload || {});
+          entry.handler(msg.payload || {}, msg);
         }
       };
 
@@ -466,14 +466,15 @@ class WebOSRemote {
         () => finish(reject, new Error("ما رد بعنوان خلال ٦ ثوانٍ")), 6000);
 
       try {
-        id = this._send(kind, SSAP.pointer, null, (payload) => {
-          const raw = JSON.stringify(payload || {});
-          diag("   رد التلفزيون: " + raw.slice(0, 240));
-          this.lastPointerReply = raw.slice(0, 160);
+        id = this._send(kind, SSAP.pointer, null, (payload, msg) => {
+          const raw = JSON.stringify(msg || payload || {});
+          diag("   رد التلفزيون (" + kind + "): " + raw.slice(0, 300));
+          this.lastPointerReply = raw.slice(0, 200);
           if (payload && payload.socketPath) return finish(resolve, payload.socketPath);
-          if (payload && payload.returnValue === false){
-            const why = payload.errorText || payload.errorCode || "رفض بلا سبب معلن";
-            return finish(reject, new Error("التلفزيون رفض الطلب: " + why));
+          const why = (msg && (msg.error || msg.errorText)) ||
+                      (payload && (payload.errorText || payload.errorCode));
+          if (why || (msg && msg.type === "error")){
+            return finish(reject, new Error("التلفزيون رفض: " + (why || "بلا سبب معلن")));
           }
           // ردّ بلا عنوان ولا خطأ: ننتظر الرسالة التالية حتى تنتهي المهلة
         }, true);
@@ -1062,7 +1063,8 @@ if (savedIp){
       input.value = host;
       diag("وضع الحقن: التطبيق يعمل داخل صفحة التلفزيون " + host);
       diag("الاتصال سيكون من نفس المصدر — بلا قيود شهادات");
-      if (tv.status !== "ready") tv.connect(host);
+      // التطبيق قد يكون بدأ الاتصال بالمفتاح المحفوظ، فلا نفتح اتصالاً ثانياً فوقه
+      if (tv.status === "disconnected") tv.connect(host);
     } else {
       diag("تحذير: هذي الصفحة مو صفحة التلفزيون (" + host + ")");
       diag("افتح " + "http://<عنوان-التلفزيون>:3000" + " ثم شغّل الاختصار من هناك");
