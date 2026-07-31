@@ -757,7 +757,19 @@ class WebOSRemote {
   // لأن أي واحد منهما قد يكون الصحيح حسب طراز الجهاز وإصدار نظامه.
   // بعض الطرازات ترد أولاً بردٍّ بلا عنوان ثم ترسل العنوان في رسالة تالية،
   // فنُبقي المستمع حياً ونأخذ أول ردّ يحمل socketPath فعلاً.
-  _askPointerPath(){
+  async _askPointerPath(){
+    // نجرّب الطلب العادي ثم الاشتراك، فبعض الطرازات لا ترد إلا على أحدهما
+    for (const kind of ["request", "subscribe"]){
+      try {
+        return await this._askPointerVia(kind);
+      } catch (e){
+        diag("   " + kind + " ما نفع: " + e.message);
+        if (kind === "subscribe") throw e;
+      }
+    }
+  }
+
+  _askPointerVia(kind){
     return new Promise((resolve, reject) => {
       let id, done = false;
       const finish = (fn, arg) => {
@@ -768,10 +780,10 @@ class WebOSRemote {
         fn(arg);
       };
       const timer = setTimeout(
-        () => finish(reject, new Error("التلفزيون ما رد بعنوان القناة خلال ٨ ثوانٍ")), 8000);
+        () => finish(reject, new Error("ما رد بعنوان خلال ٦ ثوانٍ")), 6000);
 
       try {
-        id = this._send("request", SSAP.pointer, null, (payload) => {
+        id = this._send(kind, SSAP.pointer, null, (payload) => {
           const raw = JSON.stringify(payload || {});
           diag("   رد التلفزيون: " + raw.slice(0, 240));
           this.lastPointerReply = raw.slice(0, 160);
@@ -849,7 +861,10 @@ class WebOSRemote {
     if (!this.ws || this.ws.readyState !== 1) throw new Error("التلفزيون غير متصل");
     const id = "cmd_" + (++this.counter);
     if (handler) this.pending.set(id, { handler, keep });
-    this.ws.send(JSON.stringify({ type, id, uri, payload: payload || {} }));
+    // بعض خدمات webOS ترفض الطلب إن حمل payload فارغاً، فنحذفه إن لم يكن مطلوباً
+    const msg = { type, id, uri };
+    if (payload && Object.keys(payload).length) msg.payload = payload;
+    this.ws.send(JSON.stringify(msg));
     return id;
   }
 
