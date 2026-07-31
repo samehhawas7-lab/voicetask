@@ -100,6 +100,7 @@ const SSAP = {
   rewind:  "ssap://media.controls/rewind",
   forward: "ssap://media.controls/fastForward",
   launch:  "ssap://system.launcher/launch",
+  launchAlt: "ssap://com.webos.applicationManager/launch",
   apps:    "ssap://com.webos.applicationManager/listLaunchPoints",
   fgApp:   "ssap://com.webos.applicationManager/getForegroundAppInfo",
   insert:  "ssap://com.webos.service.ime/insertText",
@@ -710,10 +711,30 @@ function findApp(kind){
   return null;
 }
 
+// تختلف خدمة الإطلاق بين الطرازات، فنجرّب المعروفتين قبل أن نُعلن الفشل
+async function launchApp(id, params){
+  const payload = params ? { id, params } : { id };
+  for (const uri of [SSAP.launch, SSAP.launchAlt]){
+    try {
+      const r = await tv.request(uri, payload);
+      if (r && r.returnValue === false){
+        diag("إطلاق " + id + " عبر " + uri.split("/").pop() + ": ✗ " +
+             (r.errorText || r.errorCode || "رفض"));
+        continue;
+      }
+      diag("✓ أُطلق " + id + " عبر " + uri.replace("ssap://", ""));
+      return r;
+    } catch (e){
+      diag("إطلاق " + id + " عبر " + uri.replace("ssap://", "") + ": ✗ " + e.message);
+    }
+  }
+  throw new Error("التلفزيون رفض فتح " + id);
+}
+
 function launchKind(kind, fallback){
   const id = findApp(kind) || fallback;
   if (!id) return Promise.reject(new Error("ما لقيت هذا التطبيق على تلفزيونك"));
-  return tv.request(SSAP.launch, { id });
+  return launchApp(id);
 }
 
 tv.onApps = (points) => {
@@ -741,7 +762,7 @@ tv.onApps = (points) => {
     btn.appendChild(label);
     btn.onclick = () => {
       buzz();
-      tv.request(SSAP.launch, { id: p.id }).catch(e => toast(e.message, true));
+      launchApp(p.id, p.params).catch(e => toast(e.message, true));
     };
     grid.appendChild(btn);
   });
