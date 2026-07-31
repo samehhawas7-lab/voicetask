@@ -22,7 +22,9 @@ const server = http.createServer((req, res) => {
     res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
     return res.end(JSON.stringify(log));
   }
-  res.writeHead(404).end();
+  // التلفزيون الحقيقي يرد بهذا على أي GET — نحاكيه بالضبط
+  res.writeHead(200, { "Content-Type": "text/html" });
+  res.end("Hello world");
 });
 
 const wss = new WebSocketServer({ noServer: true });

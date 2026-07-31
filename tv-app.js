@@ -1,299 +1,37 @@
-<!DOCTYPE html>
-<html lang="ar" dir="rtl">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
-<meta name="theme-color" content="#0b0d12">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>ريموت KMC</title>
-<style>
 /* ============================================================
-   ريموت KMC — webOS — ملف واحد مستقل، يشتغل بدون خادم
+   ريموت KMC — نسخة قابلة للحقن (مولّدة آلياً من tv.html)
+   لا تعدّل هذا الملف — عدّل tv.html ثم شغّل:
+       node tvremote/build-inject.js
    ============================================================ */
-:root{
-  --bg:#0b0d12; --surface:#151922; --surface-2:#1d222d; --surface-3:#262c3a;
-  --line:#2c3342; --text:#e8ecf4; --muted:#8a94a8;
-  --accent:#3d8bff; --accent-dim:#1e4a8c;
-  --danger:#e5484d; --ok:#30a46c; --warn:#f5a524; --radius:16px;
-}
-*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-[hidden]{display:none !important}
-html,body{margin:0;padding:0;background:var(--bg);color:var(--text);
-  font-family:"SF Arabic","Noto Kufi Arabic",-apple-system,BlinkMacSystemFont,"Segoe UI",Tahoma,sans-serif;
-  overscroll-behavior:none}
-body{min-height:100dvh;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
-.shell{max-width:420px;margin:0 auto;padding:12px 14px 32px}
+(function(){
+  "use strict";
 
-.topbar{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 4px 16px}
-.brand{display:flex;align-items:center;gap:10px}
-.brand-name{font-size:17px;font-weight:700}
-.brand-sub{font-size:12px;color:var(--muted);margin-top:2px}
-.dot{width:10px;height:10px;border-radius:50%;background:var(--muted);flex:none;transition:background .25s,box-shadow .25s}
-.dot.ready{background:var(--ok);box-shadow:0 0 0 4px rgba(48,163,108,.16)}
-.dot.busy{background:var(--warn);box-shadow:0 0 0 4px rgba(245,165,36,.16)}
-.dot.error{background:var(--danger);box-shadow:0 0 0 4px rgba(229,72,77,.16)}
-.icon-btn{width:40px;height:40px;border-radius:12px;border:1px solid var(--line);
-  background:var(--surface);color:var(--text);font-size:18px;cursor:pointer}
+  if (window.__kmcRemoteLoaded) { location.reload(); return; }
+  window.__kmcRemoteLoaded = true;
 
-.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:18px 16px;margin-bottom:16px}
-.panel-title{margin:0 0 14px;font-size:15px;font-weight:700}
-.field{margin-bottom:18px}.field:last-child{margin-bottom:0}
-.field label{display:block;font-size:12px;color:var(--muted);margin-bottom:8px}
-.row{display:flex;gap:8px}.row input{flex:1;min-width:0}
-input[type=text]{background:var(--surface-2);border:1px solid var(--line);border-radius:12px;color:var(--text);
-  padding:12px 14px;font-size:16px;font-family:inherit;width:100%;outline:none;direction:ltr;text-align:right}
-input[type=text]:focus{border-color:var(--accent)}
-input::placeholder{color:#5c6579}
-.hint{font-size:11.5px;color:var(--muted);margin:8px 0 0;line-height:1.7}
-.btn{background:var(--accent);color:#fff;border:none;border-radius:12px;padding:12px 18px;font-size:14px;
-  font-weight:600;font-family:inherit;cursor:pointer;white-space:nowrap;transition:transform .08s,filter .15s}
-.btn:active{transform:scale(.97);filter:brightness(.9)}
-.btn:disabled{opacity:.5}
-.btn.ghost{background:var(--surface-2);border:1px solid var(--line);color:var(--text)}
-.btn.wide{width:100%;margin-top:8px}
-.btn.small{padding:10px 14px;font-size:13px}
-.notice{background:rgba(61,139,255,.09);border:1px solid var(--accent-dim);border-radius:12px;
-  padding:12px 14px;font-size:12.5px;line-height:1.8;color:#cfe0ff;margin-top:14px}
+  var doc = document;
 
-.remote{display:flex;flex-direction:column;gap:14px}
-.key{background:var(--surface-2);border:1px solid var(--line);border-radius:14px;color:var(--text);
-  font-size:19px;font-family:inherit;height:54px;cursor:pointer;display:flex;align-items:center;
-  justify-content:center;transition:transform .06s,background .12s;user-select:none}
-.key:active,.key.pressed{background:var(--surface-3);transform:scale(.94)}
-.key.accent{background:var(--accent-dim);border-color:#2f5f9e}
-.key.power{color:var(--danger);font-size:22px}
-.key.tall{height:60px;font-size:22px}
-.key.small{height:44px;width:52px;font-size:17px;flex:none}
-.row-3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
-.row-5{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;direction:ltr}
-.row-5 .key{height:48px;font-size:15px;letter-spacing:-2px}
+  // نمسح صفحة التلفزيون ونبني مكانها الواجهة، مع الحفاظ على الأصل
+  doc.documentElement.setAttribute("lang", "ar");
+  doc.documentElement.setAttribute("dir", "rtl");
+  doc.title = "ريموت KMC";
 
-.dpad{position:relative;width:100%;aspect-ratio:1;max-width:260px;margin:4px auto;
-  background:radial-gradient(circle at 50% 50%,var(--surface-2) 0 32%,var(--surface) 32% 100%);
-  border:1px solid var(--line);border-radius:50%}
-.dpad-btn{position:absolute;border:none;background:transparent;cursor:pointer;width:34%;height:34%;transition:background .12s}
-.dpad-btn::after{content:"";position:absolute;inset:0;margin:auto;width:0;height:0;border:9px solid transparent}
-.dpad-btn:active,.dpad-btn.pressed{background:rgba(61,139,255,.14)}
-.dpad-btn.up{top:2%;left:33%;border-radius:50% 50% 8px 8px}
-.dpad-btn.down{bottom:2%;left:33%;border-radius:8px 8px 50% 50%}
-.dpad-btn.left{left:2%;top:33%;border-radius:50% 8px 8px 50%}
-.dpad-btn.right{right:2%;top:33%;border-radius:8px 50% 50% 8px}
-.dpad-btn.up::after{border-bottom-color:var(--text);margin-bottom:14px}
-.dpad-btn.down::after{border-top-color:var(--text);margin-top:14px}
-.dpad-btn.left::after{border-right-color:var(--text);margin-right:14px}
-.dpad-btn.right::after{border-left-color:var(--text);margin-left:14px}
-.dpad-ok{position:absolute;inset:0;margin:auto;width:34%;height:34%;border-radius:50%;
-  background:var(--surface-3);border:1px solid var(--line);color:var(--text);font-size:15px;
-  font-weight:700;font-family:inherit;cursor:pointer;transition:transform .07s,background .12s}
-.dpad-ok:active,.dpad-ok.pressed{background:var(--accent-dim);transform:scale(.92)}
+  var head = doc.head || doc.getElementsByTagName("head")[0];
+  head.innerHTML = "";
 
-.rockers{display:grid;grid-template-columns:1fr 1.15fr 1fr;gap:10px;align-items:center}
-.rocker{display:flex;flex-direction:column;gap:6px;background:var(--surface);border:1px solid var(--line);
-  border-radius:var(--radius);padding:8px}
-.rocker-label{text-align:center;font-size:11px;color:var(--muted)}
-.rocker-mid{display:flex;flex-direction:column;gap:8px}
-.rocker-mid .key{height:44px;font-size:15px}
+  var vp = doc.createElement("meta");
+  vp.name = "viewport";
+  vp.content = "width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no";
+  head.appendChild(vp);
 
-.typing{display:flex;gap:8px;align-items:center}
-.typing input{flex:1;min-width:0;direction:rtl;text-align:right}
+  var reset = doc.createElement("style");
+  reset.textContent = "\n/* ============================================================\n   ريموت KMC — webOS — ملف واحد مستقل، يشتغل بدون خادم\n   ============================================================ */\n:root{\n  --bg:#0b0d12; --surface:#151922; --surface-2:#1d222d; --surface-3:#262c3a;\n  --line:#2c3342; --text:#e8ecf4; --muted:#8a94a8;\n  --accent:#3d8bff; --accent-dim:#1e4a8c;\n  --danger:#e5484d; --ok:#30a46c; --warn:#f5a524; --radius:16px;\n}\n*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}\n[hidden]{display:none !important}\nhtml,body{margin:0;padding:0;background:var(--bg);color:var(--text);\n  font-family:\"SF Arabic\",\"Noto Kufi Arabic\",-apple-system,BlinkMacSystemFont,\"Segoe UI\",Tahoma,sans-serif;\n  overscroll-behavior:none}\nbody{min-height:100dvh;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}\n.shell{max-width:420px;margin:0 auto;padding:12px 14px 32px}\n\n.topbar{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 4px 16px}\n.brand{display:flex;align-items:center;gap:10px}\n.brand-name{font-size:17px;font-weight:700}\n.brand-sub{font-size:12px;color:var(--muted);margin-top:2px}\n.dot{width:10px;height:10px;border-radius:50%;background:var(--muted);flex:none;transition:background .25s,box-shadow .25s}\n.dot.ready{background:var(--ok);box-shadow:0 0 0 4px rgba(48,163,108,.16)}\n.dot.busy{background:var(--warn);box-shadow:0 0 0 4px rgba(245,165,36,.16)}\n.dot.error{background:var(--danger);box-shadow:0 0 0 4px rgba(229,72,77,.16)}\n.icon-btn{width:40px;height:40px;border-radius:12px;border:1px solid var(--line);\n  background:var(--surface);color:var(--text);font-size:18px;cursor:pointer}\n\n.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:18px 16px;margin-bottom:16px}\n.panel-title{margin:0 0 14px;font-size:15px;font-weight:700}\n.field{margin-bottom:18px}.field:last-child{margin-bottom:0}\n.field label{display:block;font-size:12px;color:var(--muted);margin-bottom:8px}\n.row{display:flex;gap:8px}.row input{flex:1;min-width:0}\ninput[type=text]{background:var(--surface-2);border:1px solid var(--line);border-radius:12px;color:var(--text);\n  padding:12px 14px;font-size:16px;font-family:inherit;width:100%;outline:none;direction:ltr;text-align:right}\ninput[type=text]:focus{border-color:var(--accent)}\ninput::placeholder{color:#5c6579}\n.hint{font-size:11.5px;color:var(--muted);margin:8px 0 0;line-height:1.7}\n.btn{background:var(--accent);color:#fff;border:none;border-radius:12px;padding:12px 18px;font-size:14px;\n  font-weight:600;font-family:inherit;cursor:pointer;white-space:nowrap;transition:transform .08s,filter .15s}\n.btn:active{transform:scale(.97);filter:brightness(.9)}\n.btn:disabled{opacity:.5}\n.btn.ghost{background:var(--surface-2);border:1px solid var(--line);color:var(--text)}\n.btn.wide{width:100%;margin-top:8px}\n.btn.small{padding:10px 14px;font-size:13px}\n.notice{background:rgba(61,139,255,.09);border:1px solid var(--accent-dim);border-radius:12px;\n  padding:12px 14px;font-size:12.5px;line-height:1.8;color:#cfe0ff;margin-top:14px}\n\n.remote{display:flex;flex-direction:column;gap:14px}\n.key{background:var(--surface-2);border:1px solid var(--line);border-radius:14px;color:var(--text);\n  font-size:19px;font-family:inherit;height:54px;cursor:pointer;display:flex;align-items:center;\n  justify-content:center;transition:transform .06s,background .12s;user-select:none}\n.key:active,.key.pressed{background:var(--surface-3);transform:scale(.94)}\n.key.accent{background:var(--accent-dim);border-color:#2f5f9e}\n.key.power{color:var(--danger);font-size:22px}\n.key.tall{height:60px;font-size:22px}\n.key.small{height:44px;width:52px;font-size:17px;flex:none}\n.row-3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}\n.row-5{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;direction:ltr}\n.row-5 .key{height:48px;font-size:15px;letter-spacing:-2px}\n\n.dpad{position:relative;width:100%;aspect-ratio:1;max-width:260px;margin:4px auto;\n  background:radial-gradient(circle at 50% 50%,var(--surface-2) 0 32%,var(--surface) 32% 100%);\n  border:1px solid var(--line);border-radius:50%}\n.dpad-btn{position:absolute;border:none;background:transparent;cursor:pointer;width:34%;height:34%;transition:background .12s}\n.dpad-btn::after{content:\"\";position:absolute;inset:0;margin:auto;width:0;height:0;border:9px solid transparent}\n.dpad-btn:active,.dpad-btn.pressed{background:rgba(61,139,255,.14)}\n.dpad-btn.up{top:2%;left:33%;border-radius:50% 50% 8px 8px}\n.dpad-btn.down{bottom:2%;left:33%;border-radius:8px 8px 50% 50%}\n.dpad-btn.left{left:2%;top:33%;border-radius:50% 8px 8px 50%}\n.dpad-btn.right{right:2%;top:33%;border-radius:8px 50% 50% 8px}\n.dpad-btn.up::after{border-bottom-color:var(--text);margin-bottom:14px}\n.dpad-btn.down::after{border-top-color:var(--text);margin-top:14px}\n.dpad-btn.left::after{border-right-color:var(--text);margin-right:14px}\n.dpad-btn.right::after{border-left-color:var(--text);margin-left:14px}\n.dpad-ok{position:absolute;inset:0;margin:auto;width:34%;height:34%;border-radius:50%;\n  background:var(--surface-3);border:1px solid var(--line);color:var(--text);font-size:15px;\n  font-weight:700;font-family:inherit;cursor:pointer;transition:transform .07s,background .12s}\n.dpad-ok:active,.dpad-ok.pressed{background:var(--accent-dim);transform:scale(.92)}\n\n.rockers{display:grid;grid-template-columns:1fr 1.15fr 1fr;gap:10px;align-items:center}\n.rocker{display:flex;flex-direction:column;gap:6px;background:var(--surface);border:1px solid var(--line);\n  border-radius:var(--radius);padding:8px}\n.rocker-label{text-align:center;font-size:11px;color:var(--muted)}\n.rocker-mid{display:flex;flex-direction:column;gap:8px}\n.rocker-mid .key{height:44px;font-size:15px}\n\n.typing{display:flex;gap:8px;align-items:center}\n.typing input{flex:1;min-width:0;direction:rtl;text-align:right}\n\n.apps{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;max-height:212px;overflow-y:auto;\n  -webkit-overflow-scrolling:touch}\n.app{background:var(--surface-2);border:1px solid var(--line);border-radius:12px;color:var(--text);\n  font-size:10.5px;font-family:inherit;font-weight:600;min-height:62px;cursor:pointer;padding:6px 3px;\n  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;\n  transition:transform .07s,background .12s;overflow:hidden}\n.app:active{background:var(--surface-3);transform:scale(.95)}\n.app img{width:26px;height:26px;border-radius:6px;object-fit:cover}\n.app span{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}\n\n.numpad-wrap{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:12px 14px}\n.numpad-wrap summary{cursor:pointer;font-size:13px;color:var(--muted);list-style:none}\n.numpad-wrap summary::-webkit-details-marker{display:none}\n.numpad-wrap summary::before{content:\"▾ \"}\n.numpad-wrap[open] summary::before{content:\"▴ \"}\n.numpad{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px}\n.numpad .key{height:48px;font-size:17px}\n\n.now-playing{text-align:center;font-size:11.5px;color:var(--muted);padding:6px;direction:ltr;word-break:break-all}\n.vol-badge{display:inline-block;background:var(--surface-3);border-radius:999px;padding:2px 10px;font-size:11px;color:var(--text)}\n\n.proto{background:var(--surface);border:1px solid var(--accent-dim);border-radius:var(--radius);padding:12px 14px}\n.proto-head{display:flex;justify-content:space-between;align-items:center;font-size:12.5px;\n  color:#cfe0ff;font-weight:600;margin-bottom:8px}\n.proto-head button{background:var(--surface-2);border:1px solid var(--line);color:var(--muted);\n  border-radius:8px;padding:5px 12px;font-size:11px;font-family:inherit;cursor:pointer}\n.proto pre{background:#0d1017;border:1px solid var(--line);border-radius:10px;padding:10px;\n  font-size:10px;line-height:1.65;color:#8fd0a0;direction:ltr;text-align:left;\n  white-space:pre-wrap;word-break:break-word;height:170px;overflow-y:auto;margin:0 0 10px}\n.demo-tag{background:var(--warn);color:#3d2c00;font-size:10px;font-weight:700;\n  border-radius:6px;padding:2px 7px;margin-right:6px}\n\n.diag{margin-top:14px;border-top:1px solid var(--line);padding-top:12px}\n.diag summary{cursor:pointer;font-size:12px;color:var(--muted);list-style:none}\n.diag summary::-webkit-details-marker{display:none}\n.diag summary::before{content:\"▾ \"}\n.diag[open] summary::before{content:\"▴ \"}\n.diag pre{background:#0d1017;border:1px solid var(--line);border-radius:10px;padding:10px;\n  font-size:10.5px;line-height:1.7;color:#a9b4c7;direction:ltr;text-align:left;\n  white-space:pre-wrap;word-break:break-word;max-height:220px;overflow-y:auto;margin:10px 0}\n\n.toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom));transform:translateX(-50%);\n  background:var(--surface-3);border:1px solid var(--line);color:var(--text);padding:12px 18px;\n  border-radius:12px;font-size:13px;max-width:90vw;text-align:center;z-index:50;\n  box-shadow:0 8px 28px rgba(0,0,0,.45)}\n.toast.error{border-color:var(--danger)}\n@media (prefers-reduced-motion:reduce){*{animation:none !important;transition:none !important}}\n";
+  head.appendChild(reset);
 
-.apps{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;max-height:212px;overflow-y:auto;
-  -webkit-overflow-scrolling:touch}
-.app{background:var(--surface-2);border:1px solid var(--line);border-radius:12px;color:var(--text);
-  font-size:10.5px;font-family:inherit;font-weight:600;min-height:62px;cursor:pointer;padding:6px 3px;
-  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;
-  transition:transform .07s,background .12s;overflow:hidden}
-.app:active{background:var(--surface-3);transform:scale(.95)}
-.app img{width:26px;height:26px;border-radius:6px;object-fit:cover}
-.app span{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  doc.body.innerHTML = "\n<div class=\"shell\">\n\n  <header class=\"topbar\">\n    <div class=\"brand\">\n      <span class=\"dot\" id=\"statusDot\"></span>\n      <div>\n        <div class=\"brand-name\">ريموت KMC</div>\n        <div class=\"brand-sub\" id=\"statusText\">غير متصل</div>\n      </div>\n    </div>\n    <button class=\"icon-btn\" id=\"settingsBtn\" aria-label=\"الإعدادات\">⚙</button>\n  </header>\n\n  <!-- ===== التوصيل ===== -->\n  <section class=\"panel\" id=\"setupPanel\">\n    <h2 class=\"panel-title\">توصيل التلفزيون</h2>\n    <div class=\"field\">\n      <label for=\"ipInput\">عنوان IP للتلفزيون</label>\n      <div class=\"row\">\n        <input id=\"ipInput\" type=\"text\" inputmode=\"decimal\" placeholder=\"192.168.8.77\" autocomplete=\"off\">\n        <button class=\"btn\" id=\"connectBtn\">توصيل</button>\n      </div>\n      <p class=\"hint\">تلقاه في: الإعدادات ← الاتصال ← إعدادات Wi-Fi ← متقدم</p>\n    </div>\n\n    <div class=\"field\">\n      <button class=\"btn ghost wide\" id=\"demoBtn\">🧪 جرّب بدون تلفزيون — وضع التعلّم</button>\n      <p class=\"hint\">تلفزيون محاكى داخل الصفحة. تضغط الأزرار وتشوف رسائل\n        البروتوكول الحقيقية اللي كانت راح تنرسل. ما يحتاج شبكة ولا شهادات.</p>\n    </div>\n    <div id=\"setupNotice\" class=\"notice\" hidden></div>\n\n    <details class=\"diag\" id=\"diagWrap\">\n      <summary>تفاصيل تقنية</summary>\n      <pre id=\"diagLog\"></pre>\n      <button class=\"btn ghost wide\" id=\"copyDiagBtn\">نسخ التفاصيل</button>\n    </details>\n  </section>\n\n  <!-- ===== انتظار الموافقة ===== -->\n  <section class=\"panel\" id=\"pairPanel\" hidden>\n    <h2 class=\"panel-title\">وافق من التلفزيون</h2>\n    <p class=\"hint\" style=\"font-size:13px\">\n      ظهرت على شاشة التلفزيون رسالة تسأل عن السماح لهذا الجهاز.<br>\n      اضغط <b>«موافق / Yes»</b> بريموت التلفزيون الأصلي.<br><br>\n      مرة وحدة بس — بعدها يتذكرك.\n    </p>\n    <button class=\"btn ghost wide\" id=\"cancelPairBtn\">إلغاء</button>\n  </section>\n\n  <!-- ===== الريموت ===== -->\n  <main class=\"remote\" id=\"remote\" hidden>\n    <div class=\"row-3\">\n      <button class=\"key power\" data-cmd=\"power\" title=\"إطفاء\">⏻</button>\n      <button class=\"key\" data-cmd=\"mute\" title=\"كتم\">🔇</button>\n      <button class=\"key\" data-btn=\"MENU\" title=\"القائمة\">☰</button>\n    </div>\n\n    <div class=\"dpad\">\n      <button class=\"dpad-btn up\"    data-btn=\"UP\"    aria-label=\"فوق\"></button>\n      <button class=\"dpad-btn down\"  data-btn=\"DOWN\"  aria-label=\"تحت\"></button>\n      <button class=\"dpad-btn left\"  data-btn=\"LEFT\"  aria-label=\"يسار\"></button>\n      <button class=\"dpad-btn right\" data-btn=\"RIGHT\" aria-label=\"يمين\"></button>\n      <button class=\"dpad-ok\"        data-btn=\"ENTER\">OK</button>\n    </div>\n\n    <div class=\"row-3\">\n      <button class=\"key\" data-btn=\"BACK\" title=\"رجوع\">↩</button>\n      <button class=\"key\" data-btn=\"HOME\" title=\"الرئيسية\">⌂</button>\n      <button class=\"key\" data-btn=\"EXIT\" title=\"خروج\">✕</button>\n    </div>\n\n    <div class=\"rockers\">\n      <div class=\"rocker\">\n        <button class=\"key tall\" data-cmd=\"volUp\" data-repeat>＋</button>\n        <span class=\"rocker-label\" id=\"volLabel\">الصوت</span>\n        <button class=\"key tall\" data-cmd=\"volDown\" data-repeat>－</button>\n      </div>\n      <div class=\"rocker-mid\">\n        <button class=\"key\" data-btn=\"INFO\" title=\"معلومات\">ℹ</button>\n        <button class=\"key\" data-cmd=\"livetv\" title=\"التلفزيون\">TV</button>\n        <button class=\"key\" data-btn=\"CC\" title=\"ترجمة\">CC</button>\n      </div>\n      <div class=\"rocker\">\n        <button class=\"key tall\" data-cmd=\"chUp\" data-repeat>▲</button>\n        <span class=\"rocker-label\">القناة</span>\n        <button class=\"key tall\" data-cmd=\"chDown\" data-repeat>▼</button>\n      </div>\n    </div>\n\n    <div class=\"row-5\">\n      <button class=\"key\" data-cmd=\"rewind\" title=\"إرجاع\">◀◀</button>\n      <button class=\"key\" data-cmd=\"play\" title=\"تشغيل\">▶</button>\n      <button class=\"key accent\" data-cmd=\"pause\" title=\"إيقاف مؤقت\">❚❚</button>\n      <button class=\"key\" data-cmd=\"stop\" title=\"إيقاف\">■</button>\n      <button class=\"key\" data-cmd=\"forward\" title=\"تقديم\">▶▶</button>\n    </div>\n\n    <!-- الكتابة: webOS يدعم العربي هنا -->\n    <div class=\"typing\">\n      <input id=\"textInput\" type=\"text\" placeholder=\"اكتب بالعربي أو الإنجليزي…\" autocomplete=\"off\">\n      <button class=\"btn small\" id=\"sendTextBtn\">إرسال</button>\n      <button class=\"key small\" data-cmd=\"del\" title=\"مسح\">⌫</button>\n    </div>\n\n    <div class=\"apps\" id=\"appsGrid\"></div>\n\n    <details class=\"numpad-wrap\">\n      <summary>لوحة الأرقام</summary>\n      <div class=\"numpad\">\n        <button class=\"key\" data-btn=\"1\">1</button>\n        <button class=\"key\" data-btn=\"2\">2</button>\n        <button class=\"key\" data-btn=\"3\">3</button>\n        <button class=\"key\" data-btn=\"4\">4</button>\n        <button class=\"key\" data-btn=\"5\">5</button>\n        <button class=\"key\" data-btn=\"6\">6</button>\n        <button class=\"key\" data-btn=\"7\">7</button>\n        <button class=\"key\" data-btn=\"8\">8</button>\n        <button class=\"key\" data-btn=\"9\">9</button>\n        <button class=\"key\" data-btn=\"DASH\">−</button>\n        <button class=\"key\" data-btn=\"0\">0</button>\n        <button class=\"key\" data-btn=\"ENTER\">↵</button>\n      </div>\n    </details>\n\n    <!-- يظهر في وضع التعلّم فقط: الرسائل الفعلية على السلك -->\n    <div class=\"proto\" id=\"protoWrap\" hidden>\n      <div class=\"proto-head\">\n        <span>📡 رسائل البروتوكول</span>\n        <button id=\"protoClear\">مسح</button>\n      </div>\n      <pre id=\"protoLog\"></pre>\n      <p class=\"hint\" style=\"margin:0\">\n        <b>request</b> = أمر JSON على قناة التحكم (المنفذ 3001).<br>\n        <b>button</b> = نص خام على قناة الأزرار — أسرع، لهذا التنقل يستخدمها.\n      </p>\n    </div>\n\n    <div class=\"now-playing\" id=\"nowPlaying\" hidden></div>\n  </main>\n\n  <div class=\"toast\" id=\"toast\" hidden></div>\n</div>\n\n";
 
-.numpad-wrap{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:12px 14px}
-.numpad-wrap summary{cursor:pointer;font-size:13px;color:var(--muted);list-style:none}
-.numpad-wrap summary::-webkit-details-marker{display:none}
-.numpad-wrap summary::before{content:"▾ "}
-.numpad-wrap[open] summary::before{content:"▴ "}
-.numpad{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px}
-.numpad .key{height:48px;font-size:17px}
+  // ---------- منطق التطبيق ----------
 
-.now-playing{text-align:center;font-size:11.5px;color:var(--muted);padding:6px;direction:ltr;word-break:break-all}
-.vol-badge{display:inline-block;background:var(--surface-3);border-radius:999px;padding:2px 10px;font-size:11px;color:var(--text)}
-
-.proto{background:var(--surface);border:1px solid var(--accent-dim);border-radius:var(--radius);padding:12px 14px}
-.proto-head{display:flex;justify-content:space-between;align-items:center;font-size:12.5px;
-  color:#cfe0ff;font-weight:600;margin-bottom:8px}
-.proto-head button{background:var(--surface-2);border:1px solid var(--line);color:var(--muted);
-  border-radius:8px;padding:5px 12px;font-size:11px;font-family:inherit;cursor:pointer}
-.proto pre{background:#0d1017;border:1px solid var(--line);border-radius:10px;padding:10px;
-  font-size:10px;line-height:1.65;color:#8fd0a0;direction:ltr;text-align:left;
-  white-space:pre-wrap;word-break:break-word;height:170px;overflow-y:auto;margin:0 0 10px}
-.demo-tag{background:var(--warn);color:#3d2c00;font-size:10px;font-weight:700;
-  border-radius:6px;padding:2px 7px;margin-right:6px}
-
-.diag{margin-top:14px;border-top:1px solid var(--line);padding-top:12px}
-.diag summary{cursor:pointer;font-size:12px;color:var(--muted);list-style:none}
-.diag summary::-webkit-details-marker{display:none}
-.diag summary::before{content:"▾ "}
-.diag[open] summary::before{content:"▴ "}
-.diag pre{background:#0d1017;border:1px solid var(--line);border-radius:10px;padding:10px;
-  font-size:10.5px;line-height:1.7;color:#a9b4c7;direction:ltr;text-align:left;
-  white-space:pre-wrap;word-break:break-word;max-height:220px;overflow-y:auto;margin:10px 0}
-
-.toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom));transform:translateX(-50%);
-  background:var(--surface-3);border:1px solid var(--line);color:var(--text);padding:12px 18px;
-  border-radius:12px;font-size:13px;max-width:90vw;text-align:center;z-index:50;
-  box-shadow:0 8px 28px rgba(0,0,0,.45)}
-.toast.error{border-color:var(--danger)}
-@media (prefers-reduced-motion:reduce){*{animation:none !important;transition:none !important}}
-</style>
-</head>
-<body>
-<div class="shell">
-
-  <header class="topbar">
-    <div class="brand">
-      <span class="dot" id="statusDot"></span>
-      <div>
-        <div class="brand-name">ريموت KMC</div>
-        <div class="brand-sub" id="statusText">غير متصل</div>
-      </div>
-    </div>
-    <button class="icon-btn" id="settingsBtn" aria-label="الإعدادات">⚙</button>
-  </header>
-
-  <!-- ===== التوصيل ===== -->
-  <section class="panel" id="setupPanel">
-    <h2 class="panel-title">توصيل التلفزيون</h2>
-    <div class="field">
-      <label for="ipInput">عنوان IP للتلفزيون</label>
-      <div class="row">
-        <input id="ipInput" type="text" inputmode="decimal" placeholder="192.168.8.77" autocomplete="off">
-        <button class="btn" id="connectBtn">توصيل</button>
-      </div>
-      <p class="hint">تلقاه في: الإعدادات ← الاتصال ← إعدادات Wi-Fi ← متقدم</p>
-    </div>
-
-    <div class="field">
-      <button class="btn ghost wide" id="demoBtn">🧪 جرّب بدون تلفزيون — وضع التعلّم</button>
-      <p class="hint">تلفزيون محاكى داخل الصفحة. تضغط الأزرار وتشوف رسائل
-        البروتوكول الحقيقية اللي كانت راح تنرسل. ما يحتاج شبكة ولا شهادات.</p>
-    </div>
-    <div id="setupNotice" class="notice" hidden></div>
-
-    <details class="diag" id="diagWrap">
-      <summary>تفاصيل تقنية</summary>
-      <pre id="diagLog"></pre>
-      <button class="btn ghost wide" id="copyDiagBtn">نسخ التفاصيل</button>
-    </details>
-  </section>
-
-  <!-- ===== انتظار الموافقة ===== -->
-  <section class="panel" id="pairPanel" hidden>
-    <h2 class="panel-title">وافق من التلفزيون</h2>
-    <p class="hint" style="font-size:13px">
-      ظهرت على شاشة التلفزيون رسالة تسأل عن السماح لهذا الجهاز.<br>
-      اضغط <b>«موافق / Yes»</b> بريموت التلفزيون الأصلي.<br><br>
-      مرة وحدة بس — بعدها يتذكرك.
-    </p>
-    <button class="btn ghost wide" id="cancelPairBtn">إلغاء</button>
-  </section>
-
-  <!-- ===== الريموت ===== -->
-  <main class="remote" id="remote" hidden>
-    <div class="row-3">
-      <button class="key power" data-cmd="power" title="إطفاء">⏻</button>
-      <button class="key" data-cmd="mute" title="كتم">🔇</button>
-      <button class="key" data-btn="MENU" title="القائمة">☰</button>
-    </div>
-
-    <div class="dpad">
-      <button class="dpad-btn up"    data-btn="UP"    aria-label="فوق"></button>
-      <button class="dpad-btn down"  data-btn="DOWN"  aria-label="تحت"></button>
-      <button class="dpad-btn left"  data-btn="LEFT"  aria-label="يسار"></button>
-      <button class="dpad-btn right" data-btn="RIGHT" aria-label="يمين"></button>
-      <button class="dpad-ok"        data-btn="ENTER">OK</button>
-    </div>
-
-    <div class="row-3">
-      <button class="key" data-btn="BACK" title="رجوع">↩</button>
-      <button class="key" data-btn="HOME" title="الرئيسية">⌂</button>
-      <button class="key" data-btn="EXIT" title="خروج">✕</button>
-    </div>
-
-    <div class="rockers">
-      <div class="rocker">
-        <button class="key tall" data-cmd="volUp" data-repeat>＋</button>
-        <span class="rocker-label" id="volLabel">الصوت</span>
-        <button class="key tall" data-cmd="volDown" data-repeat>－</button>
-      </div>
-      <div class="rocker-mid">
-        <button class="key" data-btn="INFO" title="معلومات">ℹ</button>
-        <button class="key" data-cmd="livetv" title="التلفزيون">TV</button>
-        <button class="key" data-btn="CC" title="ترجمة">CC</button>
-      </div>
-      <div class="rocker">
-        <button class="key tall" data-cmd="chUp" data-repeat>▲</button>
-        <span class="rocker-label">القناة</span>
-        <button class="key tall" data-cmd="chDown" data-repeat>▼</button>
-      </div>
-    </div>
-
-    <div class="row-5">
-      <button class="key" data-cmd="rewind" title="إرجاع">◀◀</button>
-      <button class="key" data-cmd="play" title="تشغيل">▶</button>
-      <button class="key accent" data-cmd="pause" title="إيقاف مؤقت">❚❚</button>
-      <button class="key" data-cmd="stop" title="إيقاف">■</button>
-      <button class="key" data-cmd="forward" title="تقديم">▶▶</button>
-    </div>
-
-    <!-- الكتابة: webOS يدعم العربي هنا -->
-    <div class="typing">
-      <input id="textInput" type="text" placeholder="اكتب بالعربي أو الإنجليزي…" autocomplete="off">
-      <button class="btn small" id="sendTextBtn">إرسال</button>
-      <button class="key small" data-cmd="del" title="مسح">⌫</button>
-    </div>
-
-    <div class="apps" id="appsGrid"></div>
-
-    <details class="numpad-wrap">
-      <summary>لوحة الأرقام</summary>
-      <div class="numpad">
-        <button class="key" data-btn="1">1</button>
-        <button class="key" data-btn="2">2</button>
-        <button class="key" data-btn="3">3</button>
-        <button class="key" data-btn="4">4</button>
-        <button class="key" data-btn="5">5</button>
-        <button class="key" data-btn="6">6</button>
-        <button class="key" data-btn="7">7</button>
-        <button class="key" data-btn="8">8</button>
-        <button class="key" data-btn="9">9</button>
-        <button class="key" data-btn="DASH">−</button>
-        <button class="key" data-btn="0">0</button>
-        <button class="key" data-btn="ENTER">↵</button>
-      </div>
-    </details>
-
-    <!-- يظهر في وضع التعلّم فقط: الرسائل الفعلية على السلك -->
-    <div class="proto" id="protoWrap" hidden>
-      <div class="proto-head">
-        <span>📡 رسائل البروتوكول</span>
-        <button id="protoClear">مسح</button>
-      </div>
-      <pre id="protoLog"></pre>
-      <p class="hint" style="margin:0">
-        <b>request</b> = أمر JSON على قناة التحكم (المنفذ 3001).<br>
-        <b>button</b> = نص خام على قناة الأزرار — أسرع، لهذا التنقل يستخدمها.
-      </p>
-    </div>
-
-    <div class="now-playing" id="nowPlaying" hidden></div>
-  </main>
-
-  <div class="toast" id="toast" hidden></div>
-</div>
-
-<script>
-"use strict";
 /* ============================================================
    بروتوكول SSAP الخاص بـ webOS
    - قناة التحكم:  ws://<ip>:3000  أو  wss://<ip>:3001
@@ -838,6 +576,22 @@ if (savedIp){
   $("ipInput").value = savedIp;
   if (store.get("webos_key_" + savedIp)) tv.connect(savedIp);
 }
-</script>
-</body>
-</html>
+
+
+  // ---------- إضافات خاصة بوضع الحقن ----------
+  // الصفحة مفتوحة على التلفزيون نفسه، فعنوانه معروف: هو المضيف الحالي
+  (function(){
+    var host = location.hostname;
+    if (/^\d{1,3}(\.\d{1,3}){3}$/.test(host)){
+      var input = document.getElementById("ipInput");
+      input.value = host;
+      diag("وضع الحقن: التطبيق يعمل داخل صفحة التلفزيون " + host);
+      diag("الاتصال سيكون من نفس المصدر — بلا قيود شهادات");
+      if (tv.status !== "ready") tv.connect(host);
+    } else {
+      diag("تحذير: هذي الصفحة مو صفحة التلفزيون (" + host + ")");
+      diag("افتح " + "http://<عنوان-التلفزيون>:3000" + " ثم شغّل الاختصار من هناك");
+    }
+  })();
+
+})();
