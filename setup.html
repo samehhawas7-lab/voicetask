@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b0d12">
+<title>تجهيز ريموت KMC</title>
+<style>
+:root{--bg:#0b0d12;--surface:#151922;--surface-2:#1d222d;--line:#2c3342;
+  --text:#e8ecf4;--muted:#8a94a8;--accent:#3d8bff;--ok:#30a46c;--warn:#f5a524;--radius:16px}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--text);
+  font-family:"SF Arabic","Noto Kufi Arabic",-apple-system,BlinkMacSystemFont,"Segoe UI",Tahoma,sans-serif;
+  line-height:1.75}
+body{padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
+.wrap{max-width:440px;margin:0 auto;padding:24px 16px 60px}
+
+h1{font-size:21px;margin:0 0 6px}
+.sub{color:var(--muted);font-size:13px;margin:0 0 26px}
+
+.step{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);
+  padding:18px 16px;margin-bottom:14px;position:relative}
+.step-n{position:absolute;top:-11px;inset-inline-start:16px;background:var(--accent);color:#fff;
+  width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+  font-size:13px;font-weight:700}
+.step h2{font-size:15px;margin:6px 0 10px}
+.step p{font-size:13.5px;color:#c3ccdb;margin:0 0 10px}
+.step p:last-child{margin-bottom:0}
+.step b{color:var(--text)}
+
+.code{background:#0d1017;border:1px solid var(--line);border-radius:10px;padding:11px;
+  font-size:9.5px;line-height:1.6;color:#8fd0a0;direction:ltr;text-align:left;
+  word-break:break-all;max-height:88px;overflow:auto;margin:0 0 10px}
+.btn{background:var(--accent);color:#fff;border:none;border-radius:12px;padding:14px 18px;
+  font-size:15px;font-weight:700;font-family:inherit;cursor:pointer;width:100%;
+  transition:transform .08s,background .2s}
+.btn:active{transform:scale(.98)}
+.btn.done{background:var(--ok)}
+.btn.ghost{background:var(--surface-2);border:1px solid var(--line);color:var(--text);font-weight:600}
+
+.path{background:var(--surface-2);border:1px solid var(--line);border-radius:10px;
+  padding:10px 12px;font-size:13px;margin:10px 0;color:#cfe0ff}
+.path span{color:var(--muted);padding:0 4px}
+
+.tip{background:rgba(245,165,36,.08);border:1px solid rgba(245,165,36,.35);border-radius:10px;
+  padding:10px 12px;font-size:12.5px;color:#f0d59a;margin-top:10px}
+.final{background:rgba(48,163,108,.09);border:1px solid rgba(48,163,108,.4);
+  border-radius:var(--radius);padding:18px 16px;margin-top:22px}
+.final h2{font-size:15px;margin:0 0 10px;color:#9ee0bb}
+a.tvlink{display:block;text-align:center;background:var(--surface-2);border:1px solid var(--line);
+  border-radius:12px;padding:14px;color:var(--accent);text-decoration:none;font-size:15px;
+  font-weight:600;margin-top:10px;direction:ltr}
+.ipbox{display:flex;gap:8px;align-items:center;margin-top:10px}
+.ipbox input{flex:1;background:var(--surface-2);border:1px solid var(--line);border-radius:10px;
+  color:var(--text);padding:11px;font-size:15px;font-family:inherit;direction:ltr;text-align:center;outline:none}
+.ipbox input:focus{border-color:var(--accent)}
+.ipbox label{font-size:12px;color:var(--muted);white-space:nowrap}
+.toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%);background:var(--ok);
+  color:#fff;padding:13px 22px;border-radius:12px;font-size:14px;font-weight:600;z-index:9;
+  box-shadow:0 8px 28px rgba(0,0,0,.5)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>تجهيز الريموت</h1>
+  <p class="sub">مرة وحدة بس. بعدها ضغطتين وينفتح الريموت.</p>
+
+  <div class="step">
+    <div class="step-n">١</div>
+    <h2>انسخ كود الاختصار</h2>
+    <div class="code" id="code"></div>
+    <button class="btn" id="copyBtn">📋 نسخ الكود</button>
+    <div class="tip">لو ما نفع الزر: اضغط مطوّلاً على الكود فوق ← «تحديد الكل» ← «نسخ»</div>
+  </div>
+
+  <div class="step">
+    <div class="step-n">٢</div>
+    <h2>أنشئ إشارة مرجعية</h2>
+    <p>وأنت في هذي الصفحة نفسها:</p>
+    <div class="path">
+      زر المشاركة <span>↑</span> «إضافة إشارة مرجعية» <span>↑</span> سمّها <b>ريموت</b> <span>↑</span> حفظ
+    </div>
+    <p>زر المشاركة هو المربع اللي فيه سهم لفوق، تحت الشاشة.</p>
+  </div>
+
+  <div class="step">
+    <div class="step-n">٣</div>
+    <h2>بدّل عنوان الإشارة</h2>
+    <p>افتح الإشارات المرجعية — أيقونة الكتاب المفتوح تحت الشاشة:</p>
+    <div class="path">
+      «تحرير» <span>↑</span> اضغط <b>ريموت</b> <span>↑</span> خانة العنوان
+    </div>
+    <p><b>امسح العنوان القديم كامل</b>، وألصق الكود اللي نسخته، ثم «تم».</p>
+    <div class="tip">لازم يبدأ العنوان الجديد بكلمة <b>javascript:</b> — لو ما بدأ فيها، النسخ ما ضبط.</div>
+  </div>
+
+  <div class="final">
+    <h2>✅ خلصنا — كيف تستخدمه</h2>
+    <div class="ipbox">
+      <label>عنوان تلفزيونك</label>
+      <input id="ip" type="text" inputmode="decimal" value="192.168.8.77">
+    </div>
+    <a class="tvlink" id="tvlink" href="http://192.168.8.77:3000">افتح صفحة التلفزيون ←</a>
+    <p style="font-size:13px;color:#c3ccdb;margin:14px 0 0">
+      بتشوف كلمة <b>Hello world</b> — هذي صفحة التلفزيون، طبيعية.<br><br>
+      بعدها افتح الإشارات المرجعية واضغط <b>ريموت</b> — وينفتح الريموت ويتصل لحاله.
+    </p>
+    <div class="tip" style="margin-top:14px">
+      لو صفحة التلفزيون ما فتحت، جرّب المنفذ الآخر:
+      <a href="#" id="alt" style="color:#f5a524">https://عنوانك:3001</a>
+      واقبل تحذير الأمان.
+    </div>
+  </div>
+
+</div>
+<script>
+"use strict";
+var BOOKMARKLET =
+  "javascript:(function(){var s=document.createElement('script');" +
+  "s.src='" + location.origin + "/tv-app.js?'+Date.now();" +
+  "document.documentElement.appendChild(s)})()";
+
+document.getElementById("code").textContent = BOOKMARKLET;
+
+document.getElementById("copyBtn").onclick = function(){
+  var btn = this;
+  function ok(){
+    btn.textContent = "✓ تم النسخ";
+    btn.classList.add("done");
+    var t = document.createElement("div");
+    t.className = "toast";
+    t.textContent = "انسخته! كمّل للخطوة ٢";
+    document.body.appendChild(t);
+    setTimeout(function(){ t.remove(); }, 2600);
+    setTimeout(function(){ btn.textContent = "📋 نسخ الكود"; btn.classList.remove("done"); }, 4000);
+  }
+  if (navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(BOOKMARKLET).then(ok, fallback);
+  } else fallback();
+
+  function fallback(){
+    // بعض المتصفحات تمنع النسخ البرمجي — نحدد النص ليدوياً
+    var r = document.createRange();
+    r.selectNodeContents(document.getElementById("code"));
+    var sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(r);
+    btn.textContent = "حدّدناه لك — اضغط «نسخ»";
+  }
+};
+
+// تحديث الروابط حسب عنوان التلفزيون
+function sync(){
+  var ip = document.getElementById("ip").value.trim() || "192.168.8.77";
+  document.getElementById("tvlink").href = "http://" + ip + ":3000";
+  document.getElementById("alt").href = "https://" + ip + ":3001";
+  document.getElementById("alt").textContent = "https://" + ip + ":3001";
+}
+document.getElementById("ip").addEventListener("input", sync);
+sync();
+</script>
+</body>
+</html>
