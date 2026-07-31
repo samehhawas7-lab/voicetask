@@ -1338,6 +1338,15 @@ function bind(){
     paint();
   })();
 
+  // يجمّد النظام الصفحة حين تُترك فينقطع المقبس، فنصل فور العودة إليها
+  // بدل انتظار مهلة إعادة الوصل.
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState !== "visible") return;
+    if (tv.status === "ready" || tv.status === "connecting" || !tv.ip) return;
+    diag("عادت الصفحة للواجهة — إعادة وصل فورية");
+    tv.connect(tv.ip);
+  });
+
   $("padRepair").onclick = () => {
     if (!confirm("إقران جديد؟\n\nبيطلع سؤال على شاشة التلفزيون، اضغط «موافق» بالريموت الأصلي.\nهذا يجدّد الأذونات وقد يحل مشكلة أزرار التنقل.")) return;
     const btn = $("padRepair");
