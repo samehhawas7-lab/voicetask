@@ -228,6 +228,7 @@ input::placeholder{color:#5c6579}
 <div class="warnbar" id="padWarn" hidden>
   <span id="padWarnText"></span>
   <button id="padRetry">إعادة المحاولة</button>
+  <button id="padRepair">إقران جديد</button>
 </div>
 
 <!-- ===== الصفحات ===== -->
@@ -583,9 +584,10 @@ class WebOSRemote {
       : ["ws://" + ip + ":3000", "wss://" + ip + ":3001"];
   }
 
-  async connect(ip){
+  async connect(ip, opts){
     this.disconnect();
     this.ip = ip;
+    this._forcePair = !!(opts && opts.forcePair);
     const urls = this._urls(ip);
     let lastError = null;
 
@@ -629,9 +631,10 @@ class WebOSRemote {
       ws.onopen = () => {
         this.ws = ws;
         diag("   المقبس انفتح، جاري إرسال طلب الإقران");
-        const key = store.get("webos_key_" + this.ip);
-        diag("   مفتاح محفوظ: " + (key ? "نعم" : "لا — التلفزيون بيسأل عن الموافقة"));
-        const payload = { forcePairing:false, pairingType:"PROMPT", manifest: MANIFEST };
+        const key = this._forcePair ? null : store.get("webos_key_" + this.ip);
+        diag("   مفتاح محفوظ: " + (key ? "نعم" : this._forcePair
+          ? "تجاهلناه عمداً — إقران جديد" : "لا — التلفزيون بيسأل عن الموافقة"));
+        const payload = { forcePairing: !!this._forcePair, pairingType:"PROMPT", manifest: MANIFEST };
         if (key) payload["client-key"] = key;
         ws.send(JSON.stringify({ type:"register", id:"register_0", payload }));
         // ما نعتبرها ناجحة إلا بعد ردّ registered
@@ -920,6 +923,17 @@ class WebOSRemote {
     this.ws = this.pointer = null;
     this.pending.clear();
     this._set("disconnected");
+  }
+
+  // إقران من الصفر: يمسح المنح القديمة ليطلب التلفزيون موافقة جديدة
+  async repair(){
+    const ip = this.ip;
+    if (!ip) throw new Error("ما فيه عنوان تلفزيون");
+    diag("── إقران جديد: مسح المفتاح القديم ──");
+    store.del("webos_key_" + ip);
+    this.disconnect();
+    await new Promise(r => setTimeout(r, 400));
+    return this.connect(ip, { forcePair: true });
   }
 
   forget(){
@@ -1233,6 +1247,16 @@ function bind(){
     btn.addEventListener("contextmenu", e => e.preventDefault());
     paint();
   })();
+
+  $("padRepair").onclick = () => {
+    if (!confirm("إقران جديد؟\n\nبيطلع سؤال على شاشة التلفزيون، اضغط «موافق» بالريموت الأصلي.\nهذا يجدّد الأذونات وقد يحل مشكلة أزرار التنقل.")) return;
+    const btn = $("padRepair");
+    btn.disabled = true; btn.textContent = "جاري…";
+    tv.repair()
+      .then(() => toast("وافق من شاشة التلفزيون"))
+      .catch(e => toast(e.message, true))
+      .finally(() => { btn.disabled = false; btn.textContent = "إقران جديد"; });
+  };
 
   $("padRetry").onclick = () => {
     const btn = $("padRetry");
