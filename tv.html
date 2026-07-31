@@ -1069,27 +1069,36 @@ async function launchApp(id, params){
   lastLaunch = { id, at: now };
 
   const payload = params ? { id, params } : { id };
+  const wait = (ms) => new Promise(r => setTimeout(r, ms));
+
+  // يقرّ التلفزيون بقبول الأمر ولو لم ينفّذه، فلا يكفي ردّه دليلاً.
+  // نتحقق من التطبيق الشغّال فعلاً، وننتقل إلى الخدمة الأخرى إن لم يتغيّر.
   for (const uri of [SSAP.launch, SSAP.launchAlt]){
+    const name = uri.replace("ssap://", "");
     try {
       const r = await tv.request(uri, payload);
       if (r && r.returnValue === false){
-        diag("إطلاق " + id + " عبر " + uri.split("/").pop() + ": ✗ " +
-             (r.errorText || r.errorCode || "رفض"));
+        diag("إطلاق " + id + " عبر " + name + ": ✗ " + (r.errorText || r.errorCode || "رفض"));
         continue;
       }
-      diag("✓ قبل التلفزيون إطلاق " + id + " عبر " + uri.replace("ssap://", "") +
-           " — رده: " + JSON.stringify(r || {}).slice(0, 200));
-      setTimeout(() => {
-        tv.request(SSAP.fgApp)
-          .then(p => diag("   الشغّال بعد ثانيتين: " + ((p && p.appId) || "غير معروف")))
-          .catch(() => {});
-      }, 2000);
-      return r;
+      diag("قبل التلفزيون الأمر عبر " + name + " — نتحقق من الأثر");
     } catch (e){
-      diag("إطلاق " + id + " عبر " + uri.replace("ssap://", "") + ": ✗ " + e.message);
+      diag("إطلاق " + id + " عبر " + name + ": ✗ " + e.message);
+      continue;
     }
+
+    await wait(1600);
+    let fg = null;
+    try { fg = await tv.request(SSAP.fgApp); } catch {}
+    const running = fg && fg.appId;
+    if (running === id){
+      diag("✓ فُتح " + id + " فعلاً عبر " + name);
+      return true;
+    }
+    diag("✗ الأمر قُبل ولم يتغيّر الشغّال (لا يزال " + (running || "غير معروف") + ")");
   }
-  throw new Error("التلفزيون رفض فتح " + id);
+
+  throw new Error("التلفزيون يقبل الأمر ولا يفتح التطبيق");
 }
 
 function launchKind(kind, fallback){
