@@ -435,7 +435,66 @@ class WebOSRemote {
       }
     }
     diag("انتهت كل المحاولات بالفشل");
+
+    // التلفزيون رفض ترويسة Origin. المتصفح لا يسمح بحذفها، لكن الصفحة
+    // داخل إطار معزول تحمل أصلاً معتماً فترسل "null". نجرّب إن كان
+    // التلفزيون يقبلها — الاحتمال ضعيف لكنه آخر ما تبقّى.
+    if (this.originBlocked){
+      diag("── تجربة أخيرة: الاتصال بأصل معتم (Origin: null) ──");
+      const verdict = await this._probeNullOrigin(ip);
+      diag(verdict.accepted
+        ? "✅ التلفزيون قبل الأصل المعتم — الطريق مفتوح"
+        : "✗ رُفض أيضاً (" + verdict.detail + ") — لا سبيل من المتصفح");
+      if (verdict.accepted){
+        this._set("error", "الأصل المعتم مقبول — أبلغ المطوّر لبناء الجسر");
+        return;
+      }
+    }
+
     this._set("error", lastError ? lastError.message : "تعذّر الاتصال");
+  }
+
+  // يفتح إطاراً معزولاً يحاول الاتصال، ويبلّغ بالنتيجة عبر postMessage
+  _probeNullOrigin(ip){
+    return new Promise((resolve) => {
+      const key = store.get("webos_key_" + ip);
+      const payload = { forcePairing:false, pairingType:"PROMPT", manifest: MANIFEST };
+      if (key) payload["client-key"] = key;
+      const register = JSON.stringify({ type:"register", id:"register_0", payload });
+
+      const inner =
+        "<script>(function(){" +
+        "var done=function(r){parent.postMessage(JSON.stringify(r),'*')};" +
+        "try{var w=new WebSocket('wss://" + ip + ":3001');}catch(e){return done({error:e.message})}" +
+        "var t=setTimeout(function(){done({error:'مهلة'})},6000);" +
+        "w.onopen=function(){w.send(" + JSON.stringify(register) + ")};" +
+        "w.onmessage=function(e){clearTimeout(t);done({accepted:true,data:String(e.data).slice(0,150)})};" +
+        "w.onclose=function(e){clearTimeout(t);done({code:e.code,reason:e.reason})};" +
+        "})()<\/script>";
+
+      const frame = document.createElement("iframe");
+      frame.setAttribute("sandbox", "allow-scripts"); // بلا allow-same-origin ⇒ أصل معتم
+      frame.style.display = "none";
+      frame.srcdoc = inner;
+
+      let settled = false;
+      const finish = (result) => {
+        if (settled) return;
+        settled = true;
+        window.removeEventListener("message", onMsg);
+        frame.remove();
+        resolve(result);
+      };
+      const onMsg = (ev) => {
+        let r; try { r = JSON.parse(ev.data); } catch { return; }
+        if (r.accepted) return finish({ accepted:true, detail:r.data });
+        finish({ accepted:false, detail: r.error || ("رمز " + r.code + (r.reason ? " — " + r.reason : "")) });
+      };
+
+      window.addEventListener("message", onMsg);
+      document.body.appendChild(frame);
+      setTimeout(() => finish({ accepted:false, detail:"لا رد من الإطار" }), 9000);
+    });
   }
 
   _open(url){
