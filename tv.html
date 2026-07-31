@@ -438,7 +438,8 @@ const SSAP = {
   sysInfo: "ssap://system/getSystemInfo",
   screenOff: "ssap://com.webos.service.tvpower/power/turnOffScreen",
   screenOn:  "ssap://com.webos.service.tvpower/power/turnOnScreen",
-  toast:   "ssap://system.notifications/createToast"
+  toast:   "ssap://system.notifications/createToast",
+  services: "ssap://api/getServiceList"
 };
 
 // تخزين بسيط يتحمّل منع التخزين في بعض المتصفحات
@@ -727,7 +728,11 @@ class WebOSRemote {
       this._openPointer(path);
     } catch (e){
       diag("⚠ فشل طلب قناة الأزرار: " + e.message);
-      this.onPointer(false, e.message);
+      const has = await this._checkInputService();
+      const note = has === null ? "" :
+        (has ? " · خدمة الإدخال موجودة في التلفزيون"
+             : " · التلفزيون لا يوفّر خدمة الإدخال أصلاً");
+      this.onPointer(false, e.message + note);
     }
     this.subscribe(SSAP.getVol, (p) => this.onVolume(p));
     this.subscribe(SSAP.fgApp, (p) => this.onApp(p && p.appId));
@@ -796,6 +801,19 @@ class WebOSRemote {
         }, true);
       } catch (e){ finish(reject, e); }
     });
+  }
+
+  // قائمة خدمات التلفزيون تحسم ما إذا كانت خدمة الإدخال موجودة أصلاً
+  async _checkInputService(){
+    try {
+      const list = await this.request(SSAP.services);
+      const names = ((list && list.services) || []).map(x => x.name).filter(Boolean);
+      diag("خدمات التلفزيون (" + names.length + "): " + names.join(", ").slice(0, 500));
+      return names.some(n => /networkinput/i.test(n));
+    } catch (e){
+      diag("تعذّر جلب قائمة الخدمات: " + e.message);
+      return null;
+    }
   }
 
   async retryPointer(){
