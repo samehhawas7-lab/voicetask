@@ -1055,7 +1055,19 @@ function findApp(kind){
 }
 
 // تختلف خدمة الإطلاق بين الطرازات، فنجرّب المعروفتين قبل أن نُعلن الفشل
+let lastLaunch = { id: null, at: 0 };
+
 async function launchApp(id, params){
+  // الضغطات المتكررة ترسل أوامر متزاحمة يبطئ التلفزيون في هضمها،
+  // فنتجاهل تكرار التطبيق نفسه خلال ثانيتين.
+  const now = Date.now();
+  if (lastLaunch.id === id && now - lastLaunch.at < 2000){
+    diag("تجاهلت ضغطة مكررة على " + id);
+    toast("جاري الفتح… امنح التلفزيون لحظة");
+    return;
+  }
+  lastLaunch = { id, at: now };
+
   const payload = params ? { id, params } : { id };
   for (const uri of [SSAP.launch, SSAP.launchAlt]){
     try {
