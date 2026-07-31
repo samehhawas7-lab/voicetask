@@ -50,6 +50,9 @@ body{display:flex;flex-direction:column;height:100dvh;
   padding:10px 16px;font-size:12px;color:#f0d59a;flex:none}
 .warnbar span{display:block;line-height:1.7;word-break:break-word;max-height:5.2em;overflow-y:auto}
 .warnbar .acts{display:flex;gap:8px;margin-top:8px}
+.key.blocked,.dpad-btn.blocked,.dpad-ok.blocked{opacity:.3;pointer-events:none}
+.pad.blocked{opacity:.35}
+.pad.blocked p::after{content:"\A\A(معطّلة — التلفزيون يمنع الإدخال من المتصفحات)";white-space:pre}
 .warnbar button{background:var(--surface-2);border:1px solid var(--line);color:var(--text);
   border-radius:10px;padding:9px 12px;font-size:12px;font-family:inherit;cursor:pointer;flex:1}
 .pages{flex:1;display:flex;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;direction:ltr;
@@ -1036,10 +1039,18 @@ tv.onApps = (points) => {
 tv.onPointer = (ok, reason) => {
   const bar = $("padWarn");
   bar.hidden = !!ok;
+
+  // ما لا يعمل يجب أن يبدو معطّلاً، لا أن يوهم المستخدم بأنه صالح
+  document.querySelectorAll("[data-btn]").forEach(el => el.classList.toggle("blocked", !ok));
+  const pad = $("pad");
+  if (pad) pad.classList.toggle("blocked", !ok);
   if (!ok){
-    let text = "أزرار التنقل ولوحة اللمس معطّلة — " + (reason || "قناة الأزرار مغلقة");
-    if (tv.lastPointerReply) text += "  ·  رد التلفزيون: " + tv.lastPointerReply;
-    $("padWarnText").textContent = text;
+    const denied = /401|permission/i.test(reason || "") ||
+                   /401|permission/i.test(tv.lastPointerReply || "");
+    $("padWarnText").textContent = denied
+      ? "التلفزيون يمنع الإدخال من المتصفحات، فأزرار التنقل ولوحة اللمس معطّلة. "
+        + "بقية الريموت يعمل كاملاً."
+      : "أزرار التنقل معطّلة — " + (reason || "قناة الأزرار مغلقة");
   }
 };
 
