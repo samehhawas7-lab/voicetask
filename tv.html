@@ -384,6 +384,111 @@ const store = {
   del(k){ try { localStorage.removeItem(k); } catch { if(this._m) delete this._m[k]; } }
 };
 
+// ============================================================
+//  جسر المقابس
+//
+//  التلفزيون يفحص ترويسة Origin ويرفض كل اتصال قادم من صفحة ويب.
+//  والمتصفح لا يسمح بتعديل هذه الترويسة… إلا أن الصفحة داخل إطار
+//  معزول (sandbox بلا allow-same-origin) تحمل أصلاً معتماً فترسل
+//  القيمة "null" — وهذه يقبلها التلفزيون.
+//
+//  لذلك تُفتح كل المقابس داخل الإطار، وتتبادل الصفحة معه الرسائل
+//  عبر postMessage. الصنف RelaySocket يحاكي واجهة WebSocket نفسها
+//  فيبقى بقية الكود كما هو دون تغيير.
+// ============================================================
+
+const RELAY_DOC =
+  '<!DOCTYPE html><meta charset="utf-8"><script>(function(){' +
+  'var socks={};' +
+  'function post(o){parent.postMessage(JSON.stringify(o),"*")}' +
+  'window.addEventListener("message",function(ev){' +
+  'var m;try{m=JSON.parse(ev.data)}catch(e){return}' +
+  'if(m.op==="open"){' +
+  'try{var w=new WebSocket(m.url);socks[m.id]=w;' +
+  'w.onopen=function(){post({id:m.id,ev:"open"})};' +
+  'w.onmessage=function(e){post({id:m.id,ev:"message",data:String(e.data)})};' +
+  'w.onerror=function(){post({id:m.id,ev:"error"})};' +
+  'w.onclose=function(e){post({id:m.id,ev:"close",code:e.code,reason:e.reason});delete socks[m.id]};' +
+  '}catch(e){post({id:m.id,ev:"close",code:0,reason:e.message})}' +
+  '}else if(m.op==="send"){if(socks[m.id])try{socks[m.id].send(m.data)}catch(e){}}' +
+  'else if(m.op==="close"){if(socks[m.id])try{socks[m.id].close()}catch(e){}}' +
+  '});post({ev:"ready"});})()<\/script>';
+
+const relay = {
+  frame: null,
+  ready: null,
+  sockets: new Map(),
+  seq: 0,
+
+  init(){
+    if (this.ready) return this.ready;
+    this.ready = new Promise((resolve, reject) => {
+      const frame = document.createElement("iframe");
+      frame.setAttribute("sandbox", "allow-scripts"); // بلا allow-same-origin ⇒ أصل معتم
+      frame.style.display = "none";
+      frame.srcdoc = RELAY_DOC;
+
+      const onMsg = (ev) => {
+        if (ev.source !== frame.contentWindow) return;
+        let m; try { m = JSON.parse(ev.data); } catch { return; }
+        if (m.ev === "ready"){ diag("جسر المقابس جاهز (أصل معتم)"); return resolve(); }
+        const sock = this.sockets.get(m.id);
+        if (sock) sock._handle(m);
+      };
+
+      window.addEventListener("message", onMsg);
+      document.body.appendChild(frame);
+      this.frame = frame;
+      setTimeout(() => reject(new Error("تعذّر تجهيز الجسر")), 5000);
+    });
+    return this.ready;
+  },
+
+  post(msg){
+    if (this.frame && this.frame.contentWindow){
+      this.frame.contentWindow.postMessage(JSON.stringify(msg), "*");
+    }
+  }
+};
+
+// واجهة مطابقة لـ WebSocket، لكن الاتصال الفعلي يجري داخل الإطار
+class RelaySocket {
+  constructor(url){
+    this.url = url;
+    this.readyState = 0;
+    this.onopen = this.onmessage = this.onclose = this.onerror = null;
+    this._id = "s" + (++relay.seq);
+    relay.sockets.set(this._id, this);
+    relay.init().then(
+      () => relay.post({ id: this._id, op: "open", url }),
+      (e) => this._handle({ ev: "close", code: 0, reason: e.message })
+    );
+  }
+
+  _handle(m){
+    if (m.ev === "open"){
+      this.readyState = 1;
+      if (this.onopen) this.onopen();
+    } else if (m.ev === "message"){
+      if (this.onmessage) this.onmessage({ data: m.data });
+    } else if (m.ev === "error"){
+      if (this.onerror) this.onerror();
+    } else if (m.ev === "close"){
+      this.readyState = 3;
+      relay.sockets.delete(this._id);
+      if (this.onclose) this.onclose({ code: m.code, reason: m.reason });
+    }
+  }
+
+  send(data){ relay.post({ id: this._id, op: "send", data }); }
+
+  close(){
+    relay.post({ id: this._id, op: "close" });
+    this.readyState = 3;
+    relay.sockets.delete(this._id);
+  }
+}
+
 // ---------- المتحكم ----------
 class WebOSRemote {
   constructor(){
@@ -436,71 +541,14 @@ class WebOSRemote {
     }
     diag("انتهت كل المحاولات بالفشل");
 
-    // التلفزيون رفض ترويسة Origin. المتصفح لا يسمح بحذفها، لكن الصفحة
-    // داخل إطار معزول تحمل أصلاً معتماً فترسل "null". نجرّب إن كان
-    // التلفزيون يقبلها — الاحتمال ضعيف لكنه آخر ما تبقّى.
-    if (this.originBlocked){
-      diag("── تجربة أخيرة: الاتصال بأصل معتم (Origin: null) ──");
-      const verdict = await this._probeNullOrigin(ip);
-      diag(verdict.accepted
-        ? "✅ التلفزيون قبل الأصل المعتم — الطريق مفتوح"
-        : "✗ رُفض أيضاً (" + verdict.detail + ") — لا سبيل من المتصفح");
-      if (verdict.accepted){
-        this._set("error", "الأصل المعتم مقبول — أبلغ المطوّر لبناء الجسر");
-        return;
-      }
-    }
-
     this._set("error", lastError ? lastError.message : "تعذّر الاتصال");
   }
 
-  // يفتح إطاراً معزولاً يحاول الاتصال، ويبلّغ بالنتيجة عبر postMessage
-  _probeNullOrigin(ip){
-    return new Promise((resolve) => {
-      const key = store.get("webos_key_" + ip);
-      const payload = { forcePairing:false, pairingType:"PROMPT", manifest: MANIFEST };
-      if (key) payload["client-key"] = key;
-      const register = JSON.stringify({ type:"register", id:"register_0", payload });
-
-      const inner =
-        "<script>(function(){" +
-        "var done=function(r){parent.postMessage(JSON.stringify(r),'*')};" +
-        "try{var w=new WebSocket('wss://" + ip + ":3001');}catch(e){return done({error:e.message})}" +
-        "var t=setTimeout(function(){done({error:'مهلة'})},6000);" +
-        "w.onopen=function(){w.send(" + JSON.stringify(register) + ")};" +
-        "w.onmessage=function(e){clearTimeout(t);done({accepted:true,data:String(e.data).slice(0,150)})};" +
-        "w.onclose=function(e){clearTimeout(t);done({code:e.code,reason:e.reason})};" +
-        "})()<\/script>";
-
-      const frame = document.createElement("iframe");
-      frame.setAttribute("sandbox", "allow-scripts"); // بلا allow-same-origin ⇒ أصل معتم
-      frame.style.display = "none";
-      frame.srcdoc = inner;
-
-      let settled = false;
-      const finish = (result) => {
-        if (settled) return;
-        settled = true;
-        window.removeEventListener("message", onMsg);
-        frame.remove();
-        resolve(result);
-      };
-      const onMsg = (ev) => {
-        let r; try { r = JSON.parse(ev.data); } catch { return; }
-        if (r.accepted) return finish({ accepted:true, detail:r.data });
-        finish({ accepted:false, detail: r.error || ("رمز " + r.code + (r.reason ? " — " + r.reason : "")) });
-      };
-
-      window.addEventListener("message", onMsg);
-      document.body.appendChild(frame);
-      setTimeout(() => finish({ accepted:false, detail:"لا رد من الإطار" }), 9000);
-    });
-  }
 
   _open(url){
     return new Promise((resolve, reject) => {
       let ws;
-      try { ws = new WebSocket(url); } catch (e) { return reject(new Error("رابط غير صالح")); }
+      try { ws = new RelaySocket(url); } catch (e) { return reject(new Error("رابط غير صالح")); }
 
       // مهلة قصيرة: التلفزيون المطفي ما يرد أبداً، وما نبي المستخدم ينتظر طويل
       const timer = setTimeout(() => {
@@ -585,7 +633,7 @@ class WebOSRemote {
 
   _openPointer(path){
     try {
-      const ws = new WebSocket(path);
+      const ws = new RelaySocket(path);
       ws.onopen = () => { this.pointer = ws; };
       ws.onclose = () => { if (this.pointer === ws) this.pointer = null; };
       ws.onerror = () => {};

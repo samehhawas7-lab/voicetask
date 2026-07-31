@@ -38,7 +38,14 @@ server.on("upgrade", (req, socket, head) => {
 });
 
 // ---------- قناة التحكم ----------
-wss.on("connection", (ws) => {
+wss.on("connection", (ws, req) => {
+  // التلفزيون الحقيقي يرفض أي اتصال يحمل ترويسة Origin لصفحة ويب،
+  // ويقبل الأصل المعتم "null" الذي ترسله الأطر المعزولة.
+  const origin = req && req.headers && req.headers.origin;
+  if (origin && origin !== "null") {
+    log.push({ type: "rejected", reason: "origin " + origin });
+    return ws.close(1008, "invalid origin");
+  }
   ws.on("message", (raw) => {
     let msg;
     try { msg = JSON.parse(raw.toString()); } catch { return; }
