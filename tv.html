@@ -576,6 +576,7 @@ class WebOSRemote {
         try { msg = JSON.parse(event.data); } catch { return; }
 
         if (msg.type === "registered" && msg.payload && msg.payload["client-key"]){
+          this.controlUrl = url;   // نبني عليها عنوان قناة الأزرار
           store.set("webos_key_" + this.ip, msg.payload["client-key"]);
           store.set("webos_ip", this.ip);
           this._set("ready");
@@ -655,8 +656,15 @@ class WebOSRemote {
     this._startHeartbeat();
     try {
       const res = await this.request(SSAP.pointer);
-      if (res && res.socketPath) this._openPointer(res.socketPath);
-    } catch {}
+      if (res && res.socketPath){
+        diag("عنوان قناة الأزرار من التلفزيون: " + res.socketPath);
+        this._openPointer(res.socketPath);
+      } else {
+        diag("⚠ التلفزيون ما أعطى عنواناً لقناة الأزرار");
+      }
+    } catch (e){
+      diag("⚠ فشل طلب قناة الأزرار: " + e.message);
+    }
     this.subscribe(SSAP.getVol, (p) => this.onVolume(p));
     this.subscribe(SSAP.fgApp, (p) => this.onApp(p && p.appId));
     this.request(SSAP.apps).then((p) => {
@@ -664,13 +672,37 @@ class WebOSRemote {
     }).catch(() => {});
   }
 
-  _openPointer(path){
+  // التلفزيون يعطي أحياناً عنواناً غير مشفّر على منفذ 3000، وهو مقفل في
+  // بعض الأجهزة ويمنعه المتصفح أصلاً داخل صفحة مشفّرة. نأخذ المسار فقط
+  // ونعيد بناء العنوان على نفس القناة التي نجح عليها الاتصال.
+  _pointerUrl(raw){
+    let path = raw;
     try {
-      const ws = new RelaySocket(path);
-      ws.onopen = () => { this.pointer = ws; };
-      ws.onclose = () => { if (this.pointer === ws) this.pointer = null; };
-      ws.onerror = () => {};
-    } catch {}
+      const u = new URL(raw);
+      path = u.pathname + (u.search || "");
+    } catch {
+      const i = raw.indexOf("/", raw.indexOf("//") + 2);
+      if (i > -1) path = raw.slice(i);
+    }
+    // القاعدة تُؤخذ من القناة التي نجح عليها الاتصال فعلاً، لا من قيمة ثابتة
+    const base = (this.controlUrl || "wss://" + this.ip + ":3001").replace(/\/+$/, "");
+    return base + path;
+  }
+
+  _openPointer(raw){
+    const url = this._pointerUrl(raw);
+    if (url !== raw) diag("أُعيد توجيه قناة الأزرار إلى: " + url);
+    try {
+      const ws = new RelaySocket(url);
+      ws.onopen  = () => { this.pointer = ws; diag("✓ قناة الأزرار جاهزة"); };
+      ws.onclose = (ev) => {
+        if (this.pointer === ws) this.pointer = null;
+        diag("✗ أُغلقت قناة الأزرار (رمز " + (ev && ev.code) + ")");
+      };
+      ws.onerror = () => diag("✗ خطأ في قناة الأزرار");
+    } catch (e){
+      diag("✗ تعذّر فتح قناة الأزرار: " + e.message);
+    }
   }
 
   _send(type, uri, payload, handler, keep){
@@ -697,8 +729,12 @@ class WebOSRemote {
 
   // زر من قناة الأزرار (أسرع بكثير من SSAP للتنقل)
   button(name){
-    if (!this.pointer || this.pointer.readyState !== 1) throw new Error("قناة الأزرار غير جاهزة");
+    if (!this.pointer || this.pointer.readyState !== 1){
+      diag("✗ الزر " + name + " لم يُرسل — قناة الأزرار غير جاهزة");
+      throw new Error("قناة الأزرار غير جاهزة");
+    }
     this.pointer.send("type:button\nname:" + name + "\n\n");
+    if (!this._btnLogged){ this._btnLogged = true; diag("✓ أول زر أُرسل بنجاح (" + name + ")"); }
   }
 
   disconnect(){
