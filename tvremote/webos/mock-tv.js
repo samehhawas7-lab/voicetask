@@ -85,7 +85,10 @@ wss.on("connection", (ws, req) => {
 
     switch (msg.uri) {
       case "ssap://com.webos.service.networkinput/getPointerInputSocket":
-        return reply({ socketPath: `ws://127.0.0.1:${PORT}${POINTER_PATH}` });
+        // BAD_POINTER=1 يحاكي تلفزيوناً يعطي عنواناً لا يُفتح، لاختبار مسار الفشل
+        return reply({ socketPath: process.env.BAD_POINTER
+          ? `ws://127.0.0.1:59999${POINTER_PATH}`
+          : `ws://127.0.0.1:${PORT}${POINTER_PATH}` });
 
       case "ssap://audio/getVolume":
         return reply({ volume, muted });
@@ -141,6 +144,8 @@ function findSub(ws, uri) {
 
 // ---------- مقبس الأزرار ----------
 pointerWss.on("connection", (ws) => {
+  // NO_POINTER=1 يحاكي تلفزيوناً يرفض قناة الأزرار تماماً
+  if (process.env.NO_POINTER) { log.push({ type: "pointer_refused" }); return ws.close(1008, "refused"); }
   ws.on("message", (raw) => {
     const text = raw.toString();
     const name = (text.match(/name:(\w+)/) || [])[1];

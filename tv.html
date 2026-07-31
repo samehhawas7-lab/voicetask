@@ -46,6 +46,11 @@ body{display:flex;flex-direction:column;height:100dvh;
 .dot.error{background:var(--danger);box-shadow:0 0 0 3px rgba(229,72,77,.18)}
 
 /* ---------- الصفحات ---------- */
+.warnbar{display:flex;align-items:center;gap:10px;background:rgba(245,165,36,.12);
+  border-bottom:1px solid rgba(245,165,36,.4);padding:10px 16px;font-size:12px;color:#f0d59a;flex:none}
+.warnbar span{flex:1;line-height:1.6}
+.warnbar button{background:var(--surface-2);border:1px solid var(--line);color:var(--text);
+  border-radius:10px;padding:8px 12px;font-size:12px;font-family:inherit;cursor:pointer;flex:none}
 .pages{flex:1;display:flex;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;direction:ltr;
   -webkit-overflow-scrolling:touch;scrollbar-width:none}
 .pages::-webkit-scrollbar{display:none}
@@ -218,6 +223,11 @@ input::placeholder{color:#5c6579}
     </p>
     <button class="btn ghost wide" id="cancelPairBtn">إلغاء</button>
   </div>
+</div>
+
+<div class="warnbar" id="padWarn" hidden>
+  <span id="padWarnText"></span>
+  <button id="padRetry">إعادة المحاولة</button>
 </div>
 
 <!-- ===== الصفحات ===== -->
@@ -557,6 +567,7 @@ class WebOSRemote {
     this.onApp = () => {};
     this.onApps = () => {};
     this.onReady = () => {};
+    this.onPointer = () => {};
   }
 
   _set(status, detail){
@@ -717,9 +728,11 @@ class WebOSRemote {
         this._openPointer(res.socketPath);
       } else {
         diag("⚠ التلفزيون ما أعطى عنواناً لقناة الأزرار");
+        this.onPointer(false, "التلفزيون ما أعطى عنواناً للقناة");
       }
     } catch (e){
       diag("⚠ فشل طلب قناة الأزرار: " + e.message);
+      this.onPointer(false, "فشل طلب القناة: " + e.message);
     }
     this.subscribe(SSAP.getVol, (p) => this.onVolume(p));
     this.subscribe(SSAP.fgApp, (p) => this.onApp(p && p.appId));
@@ -747,6 +760,15 @@ class WebOSRemote {
 
   // نجرّب العنوان المعاد بناؤه ثم العنوان الأصلي كما أعطاه التلفزيون،
   // لأن أي واحد منهما قد يكون الصحيح حسب طراز الجهاز وإصدار نظامه.
+  async retryPointer(){
+    if (this.status !== "ready") throw new Error("التلفزيون غير متصل");
+    diag("── إعادة محاولة قناة الأزرار ──");
+    const res = await this.request(SSAP.pointer);
+    if (!res || !res.socketPath) throw new Error("التلفزيون ما أعطى عنواناً");
+    diag("العنوان الجديد: " + res.socketPath);
+    this._openPointer(res.socketPath);
+  }
+
   _openPointer(raw){
     const candidates = [];
     const rebuilt = this._pointerUrl(raw);
@@ -756,27 +778,37 @@ class WebOSRemote {
     const attempt = (i) => {
       if (i >= candidates.length){
         diag("✗ فشلت كل عناوين قناة الأزرار — أزرار التنقل لن تعمل");
+        this.onPointer(false, "التلفزيون رفض فتح قناة الأزرار");
         return;
       }
       const url = candidates[i];
       diag("محاولة قناة الأزرار " + (i+1) + "/" + candidates.length + ": " + url);
-      let settled = false;
+      let settled = false, openedAt = 0;
       try {
         const ws = new RelaySocket(url);
         ws.onopen = () => {
           settled = true;
+          openedAt = Date.now();
           this.pointer = ws;
           diag("✓ قناة الأزرار جاهزة عبر " + url);
+          this.onPointer(true);
         };
         ws.onclose = (ev) => {
+          const code = ev && ev.code;
           if (this.pointer === ws) this.pointer = null;
+
           if (!settled){
             settled = true;
-            diag("   أُغلقت (رمز " + (ev && ev.code) + ") — نجرّب التالي");
-            attempt(i + 1);
-          } else {
-            diag("   انقطعت قناة الأزرار (رمز " + (ev && ev.code) + ")");
+            diag("   أُغلقت قبل أن تفتح (رمز " + code + ") — نجرّب التالي");
+            return attempt(i + 1);
           }
+
+          // فتحٌ يتبعه إغلاق فوري رفضٌ مقنّع، لا انقطاع عارض،
+          // فنكمل إلى العنوان التالي بدل أن نحسبها ناجحة
+          const quick = Date.now() - openedAt < 3000;
+          diag("   " + (quick ? "أُغلقت فور فتحها" : "انقطعت") + " (رمز " + code + ")");
+          this.onPointer(false, "التلفزيون أغلق قناة الأزرار (رمز " + code + ")");
+          if (quick) attempt(i + 1);
         };
         ws.onerror = () => diag("   خطأ في المقبس");
       } catch (e){
@@ -870,6 +902,7 @@ tv.onStatus = (status, detail) => {
 
   const ready = status === "ready";
   $("pages").hidden      = !ready;
+  if (!ready) $("padWarn").hidden = true;
   $("dots").hidden       = !ready;
   $("pairPanel").hidden  = status !== "pairing";
   $("setupPanel").hidden = (ready || status === "pairing");
@@ -921,6 +954,16 @@ tv.onApps = (points) => {
     };
     grid.appendChild(btn);
   });
+};
+
+// حالة قناة الأزرار تُعرض أمام المستخدم مباشرة بدل أن تبقى في السجل
+tv.onPointer = (ok, reason) => {
+  const bar = $("padWarn");
+  bar.hidden = !!ok;
+  if (!ok){
+    $("padWarnText").textContent =
+      "أزرار التنقل ولوحة اللمس معطّلة — " + (reason || "قناة الأزرار مغلقة");
+  }
 };
 
 // اسم الطراز في الرأس — لمسة تعريفية مثل التطبيقات الاحترافية
@@ -1130,6 +1173,15 @@ function bind(){
     btn.addEventListener("contextmenu", e => e.preventDefault());
     paint();
   })();
+
+  $("padRetry").onclick = () => {
+    const btn = $("padRetry");
+    btn.disabled = true; btn.textContent = "جاري…";
+    tv.retryPointer()
+      .then(() => toast("تمت إعادة المحاولة"))
+      .catch(e => toast(e.message, true))
+      .finally(() => { btn.disabled = false; btn.textContent = "إعادة المحاولة"; });
+  };
 
   $("connectBtn").onclick = () => {
     const ip = $("ipInput").value.trim();
