@@ -531,6 +531,15 @@ class RelaySocket {
     this.onopen = this.onmessage = this.onclose = this.onerror = null;
     this._id = "s" + (++relay.seq);
     relay.sockets.set(this._id, this);
+    if (typeof window.__TV_PROXY__ !== "undefined"){
+      // خلف الخادم نفتح المقبس مباشرة — الخادم هو من يخاطب التلفزيون
+      this._direct = new WebSocket(url);
+      this._direct.onopen    = () => this._handle({ ev: "open" });
+      this._direct.onmessage = (e) => this._handle({ ev: "message", data: String(e.data) });
+      this._direct.onerror   = () => this._handle({ ev: "error" });
+      this._direct.onclose   = (e) => this._handle({ ev: "close", code: e.code, reason: e.reason });
+      return;
+    }
     relay.init().then(
       () => relay.post({ id: this._id, op: "open", url }),
       (e) => this._handle({ ev: "close", code: 0, reason: e.message })
@@ -552,10 +561,14 @@ class RelaySocket {
     }
   }
 
-  send(data){ relay.post({ id: this._id, op: "send", data }); }
+  send(data){
+    if (this._direct) return this._direct.send(data);
+    relay.post({ id: this._id, op: "send", data });
+  }
 
   close(){
-    relay.post({ id: this._id, op: "close" });
+    if (this._direct){ try { this._direct.close(); } catch {} }
+    else relay.post({ id: this._id, op: "close" });
     this.readyState = 3;
     relay.sockets.delete(this._id);
   }
@@ -584,7 +597,14 @@ class WebOSRemote {
   }
 
   // الصفحة على https تفرض wss؛ غير كذا نجرّب العادي أول لأنه بدون مشاكل شهادات
+  get viaServer(){ return typeof window.__TV_PROXY__ !== "undefined"; }
+
   _urls(ip){
+    // خلف خادم البيت: نكلّم الخادم، وهو يكلّم التلفزيون بأذونات كاملة
+    if (this.viaServer){
+      return [location.origin.replace(/^http/, "ws") +
+              "/?target=" + encodeURIComponent("wss://" + ip + ":3001")];
+    }
     return location.protocol === "https:"
       ? ["wss://" + ip + ":3001"]
       : ["ws://" + ip + ":3000", "wss://" + ip + ":3001"];
@@ -761,6 +781,10 @@ class WebOSRemote {
     } catch {
       const i = raw.indexOf("/", raw.indexOf("//") + 2);
       if (i > -1) path = raw.slice(i);
+    }
+    if (this.viaServer){
+      return location.origin.replace(/^http/, "ws") + "/?target=" +
+             encodeURIComponent("wss://" + this.ip + ":3001" + path);
     }
     // القاعدة تُؤخذ من القناة التي نجح عليها الاتصال فعلاً، لا من قيمة ثابتة
     const base = (this.controlUrl || "wss://" + this.ip + ":3001").replace(/\/+$/, "");
@@ -1406,6 +1430,15 @@ $("copyDiagBtn").onclick = () => {
     toast("انسخها يدوياً من فوق", true);
   }
 };
+
+if (typeof window.__TV_PROXY__ !== "undefined"){
+  diag("وضع الخادم: الأوامر تمر عبر " + location.host + " بأذونات كاملة");
+  const fromServer = window.__TV_PROXY__;
+  if (fromServer && fromServer !== "auto"){
+    $("ipInput").value = fromServer;
+    store.set("webos_ip", fromServer);
+  }
+}
 
 const savedIp = store.get("webos_ip");
 if (savedIp){

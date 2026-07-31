@@ -85,6 +85,14 @@ wss.on("connection", (ws, req) => {
 
     switch (msg.uri) {
       case "ssap://com.webos.service.networkinput/getPointerInputSocket":
+        // التلفزيون الحقيقي يمنح الإدخال للبرامج (بلا Origin) ويمنعه عن
+        // المتصفحات (بأي Origin ولو كان null) بـ 401.
+        if (origin) {
+          log.push({ type: "denied", reason: "401 origin=" + origin });
+          return ws.send(JSON.stringify({
+            type: "error", id: msg.id, error: "401 insufficient permissions", payload: {}
+          }));
+        }
         // BAD_POINTER=1 يحاكي تلفزيوناً يعطي عنواناً لا يُفتح، لاختبار مسار الفشل
         return reply({ socketPath: process.env.BAD_POINTER
           ? `ws://127.0.0.1:59999${POINTER_PATH}`
