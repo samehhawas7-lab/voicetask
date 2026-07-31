@@ -46,6 +46,16 @@ wss.on("connection", (ws) => {
 
     // الإقران
     if (msg.type === "register") {
+      // التلفزيون الحقيقي يتحقق من توقيع كتلة signed ويغلق الاتصال لو عُدّلت.
+      // نحاكي ذلك حتى لا يمر تعديلها دون أن نلاحظ.
+      const signed = msg.payload && msg.payload.manifest && msg.payload.manifest.signed;
+      const names = signed && signed.localizedAppNames;
+      if (!signed || signed.appId !== "com.lge.test" ||
+          !names || names[""] !== "LG Remote App" || !names["ko-KR"]) {
+        log.push({ type: "rejected", reason: "بطاقة التعريف لا تطابق التوقيع" });
+        console.error("[mock] رفض الإقران: كتلة signed معدّلة — التوقيع باطل");
+        return ws.close();
+      }
       const hasKey = msg.payload && msg.payload["client-key"] === CLIENT_KEY;
       const respond = () => ws.send(JSON.stringify({
         type: "registered", id: msg.id, payload: { "client-key": CLIENT_KEY }

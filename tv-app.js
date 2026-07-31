@@ -53,7 +53,11 @@ function diag(line){
   }
 }
 
-// بطاقة تعريف التطبيق — التلفزيون يطلبها عند الإقران
+// بطاقة تعريف التطبيق — التلفزيون يطلبها عند الإقران.
+//
+// ⚠️ محتوى كتلة signed موقّع رقمياً بالتوقيع في signatures أدناه.
+// أي تعديل داخلها — حتى تغيير اسم التطبيق — يُبطل التوقيع فيغلق
+// التلفزيون الاتصال فور استلام الطلب. تُترك كما هي حرفياً.
 const MANIFEST = {
   manifestVersion: 1,
   appVersion: "1.1",
@@ -61,7 +65,7 @@ const MANIFEST = {
     created: "20140509",
     appId: "com.lge.test",
     vendorId: "com.lge",
-    localizedAppNames: { "": "KMC Web Remote", "ar-SA": "ريموت KMC" },
+    localizedAppNames: { "": "LG Remote App", "ko-KR": "리모트 앱", "zxx-XX": "ЛГ Rэмotэ AПП" },
     localizedVendorNames: { "": "LG Electronics" },
     permissions: ["TEST_SECURE","CONTROL_INPUT_TEXT","CONTROL_MOUSE_AND_KEYBOARD",
       "READ_INSTALLED_APPS","READ_LGE_SDX","READ_NOTIFICATIONS","SEARCH","WRITE_SETTINGS",
@@ -227,9 +231,12 @@ class WebOSRemote {
         diag("   خطأ في المقبس (غالباً: المنفذ مقفل، أو شهادة مرفوضة، أو المتصفح منع الاتصال)");
         done(reject, new Error("فشل الاتصال بـ " + url));
       };
-      ws.onclose = () => {
+      ws.onclose = (ev) => {
+        // رمز الإغلاق يميّز سبب الرفض: 1006 انقطاع مفاجئ، 1002 خطأ بروتوكول
+        const why = "رمز " + (ev && ev.code) + (ev && ev.reason ? " — " + ev.reason : "");
+        diag("   أُغلق الاتصال من الطرف الآخر (" + why + ")");
         if (this.ws === ws){ this.ws = null; if (this.status === "ready") this._set("disconnected"); }
-        done(reject, new Error("انقطع الاتصال"));
+        done(reject, new Error("التلفزيون أغلق الاتصال (" + why + ")"));
       };
     });
   }
