@@ -494,11 +494,19 @@ class WebOSRemote {
         done(reject, new Error("فشل الاتصال بـ " + url));
       };
       ws.onclose = (ev) => {
-        // رمز الإغلاق يميّز سبب الرفض: 1006 انقطاع مفاجئ، 1002 خطأ بروتوكول
-        const why = "رمز " + (ev && ev.code) + (ev && ev.reason ? " — " + ev.reason : "");
+        const code = ev && ev.code;
+        const why = "رمز " + code + (ev && ev.reason ? " — " + ev.reason : "");
         diag("   أُغلق الاتصال من الطرف الآخر (" + why + ")");
+
+        // 1008 = رفض سياسة. التلفزيون يفحص ترويسة Origin ويرفض المتصفحات
+        // كلها بلا استثناء — حتى القادمة من مصدره هو. والمتصفح ممنوع من
+        // تعديل هذه الترويسة، فلا سبيل لتجاوزها من صفحة ويب إطلاقاً.
+        if (code === 1008) this.originBlocked = true;
+
         if (this.ws === ws){ this.ws = null; if (this.status === "ready") this._set("disconnected"); }
-        done(reject, new Error("التلفزيون أغلق الاتصال (" + why + ")"));
+        done(reject, new Error(code === 1008
+          ? "التلفزيون يرفض التحكم من المتصفحات"
+          : "التلفزيون أغلق الاتصال (" + why + ")"));
       };
     });
   }
@@ -788,6 +796,19 @@ function showTroubleshoot(detail){
   const box = $("setupNotice");
   const secure = location.protocol === "https:";
   box.hidden = false;
+
+  // الرفض بسبب Origin نهائي — لا تحايل عليه، فنقولها صراحة
+  if (tv.originBlocked){
+    box.innerHTML =
+      "<b>تلفزيونك يرفض التحكم من المتصفحات — وهذا بتصميمه، مو عطل.</b><br><br>" +
+      "كل اتصال من متصفح يحمل ترويسة <code>Origin</code>، والتلفزيون يفحصها " +
+      "ويرفضها حماية من صفحات الويب الخبيثة. والمتصفح ممنوع من تعديلها، " +
+      "فما فيه أي طريقة تتجاوزها من صفحة ويب.<br><br>" +
+      "<b>البدائل:</b><br>" +
+      "• تطبيق أصلي من الأب ستور — التطبيقات الأصلية لا ترسل هذه الترويسة<br>" +
+      "• خادم صغير داخل شبكتك يتوسّط بينك وبين التلفزيون";
+    return;
+  }
 
   if (!secure){
     box.innerHTML =
