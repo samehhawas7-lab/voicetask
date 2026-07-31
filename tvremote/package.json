@@ -12,6 +12,7 @@
     "node": ">=18"
   },
   "dependencies": {
-    "androidtv-remote": "^1.0.10"
+    "androidtv-remote": "^1.0.10",
+    "ws": "^8.21.1"
   }
 }

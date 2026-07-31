@@ -1,0 +1,711 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#0b0d12">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>ريموت KMC</title>
+<style>
+/* ============================================================
+   ريموت KMC — webOS — ملف واحد مستقل، يشتغل بدون خادم
+   ============================================================ */
+:root{
+  --bg:#0b0d12; --surface:#151922; --surface-2:#1d222d; --surface-3:#262c3a;
+  --line:#2c3342; --text:#e8ecf4; --muted:#8a94a8;
+  --accent:#3d8bff; --accent-dim:#1e4a8c;
+  --danger:#e5484d; --ok:#30a46c; --warn:#f5a524; --radius:16px;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+[hidden]{display:none !important}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--text);
+  font-family:"SF Arabic","Noto Kufi Arabic",-apple-system,BlinkMacSystemFont,"Segoe UI",Tahoma,sans-serif;
+  overscroll-behavior:none}
+body{min-height:100dvh;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
+.shell{max-width:420px;margin:0 auto;padding:12px 14px 32px}
+
+.topbar{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 4px 16px}
+.brand{display:flex;align-items:center;gap:10px}
+.brand-name{font-size:17px;font-weight:700}
+.brand-sub{font-size:12px;color:var(--muted);margin-top:2px}
+.dot{width:10px;height:10px;border-radius:50%;background:var(--muted);flex:none;transition:background .25s,box-shadow .25s}
+.dot.ready{background:var(--ok);box-shadow:0 0 0 4px rgba(48,163,108,.16)}
+.dot.busy{background:var(--warn);box-shadow:0 0 0 4px rgba(245,165,36,.16)}
+.dot.error{background:var(--danger);box-shadow:0 0 0 4px rgba(229,72,77,.16)}
+.icon-btn{width:40px;height:40px;border-radius:12px;border:1px solid var(--line);
+  background:var(--surface);color:var(--text);font-size:18px;cursor:pointer}
+
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:18px 16px;margin-bottom:16px}
+.panel-title{margin:0 0 14px;font-size:15px;font-weight:700}
+.field{margin-bottom:18px}.field:last-child{margin-bottom:0}
+.field label{display:block;font-size:12px;color:var(--muted);margin-bottom:8px}
+.row{display:flex;gap:8px}.row input{flex:1;min-width:0}
+input[type=text]{background:var(--surface-2);border:1px solid var(--line);border-radius:12px;color:var(--text);
+  padding:12px 14px;font-size:16px;font-family:inherit;width:100%;outline:none;direction:ltr;text-align:right}
+input[type=text]:focus{border-color:var(--accent)}
+input::placeholder{color:#5c6579}
+.hint{font-size:11.5px;color:var(--muted);margin:8px 0 0;line-height:1.7}
+.btn{background:var(--accent);color:#fff;border:none;border-radius:12px;padding:12px 18px;font-size:14px;
+  font-weight:600;font-family:inherit;cursor:pointer;white-space:nowrap;transition:transform .08s,filter .15s}
+.btn:active{transform:scale(.97);filter:brightness(.9)}
+.btn:disabled{opacity:.5}
+.btn.ghost{background:var(--surface-2);border:1px solid var(--line);color:var(--text)}
+.btn.wide{width:100%;margin-top:8px}
+.btn.small{padding:10px 14px;font-size:13px}
+.notice{background:rgba(61,139,255,.09);border:1px solid var(--accent-dim);border-radius:12px;
+  padding:12px 14px;font-size:12.5px;line-height:1.8;color:#cfe0ff;margin-top:14px}
+
+.remote{display:flex;flex-direction:column;gap:14px}
+.key{background:var(--surface-2);border:1px solid var(--line);border-radius:14px;color:var(--text);
+  font-size:19px;font-family:inherit;height:54px;cursor:pointer;display:flex;align-items:center;
+  justify-content:center;transition:transform .06s,background .12s;user-select:none}
+.key:active,.key.pressed{background:var(--surface-3);transform:scale(.94)}
+.key.accent{background:var(--accent-dim);border-color:#2f5f9e}
+.key.power{color:var(--danger);font-size:22px}
+.key.tall{height:60px;font-size:22px}
+.key.small{height:44px;width:52px;font-size:17px;flex:none}
+.row-3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.row-5{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;direction:ltr}
+.row-5 .key{height:48px;font-size:15px;letter-spacing:-2px}
+
+.dpad{position:relative;width:100%;aspect-ratio:1;max-width:260px;margin:4px auto;
+  background:radial-gradient(circle at 50% 50%,var(--surface-2) 0 32%,var(--surface) 32% 100%);
+  border:1px solid var(--line);border-radius:50%}
+.dpad-btn{position:absolute;border:none;background:transparent;cursor:pointer;width:34%;height:34%;transition:background .12s}
+.dpad-btn::after{content:"";position:absolute;inset:0;margin:auto;width:0;height:0;border:9px solid transparent}
+.dpad-btn:active,.dpad-btn.pressed{background:rgba(61,139,255,.14)}
+.dpad-btn.up{top:2%;left:33%;border-radius:50% 50% 8px 8px}
+.dpad-btn.down{bottom:2%;left:33%;border-radius:8px 8px 50% 50%}
+.dpad-btn.left{left:2%;top:33%;border-radius:50% 8px 8px 50%}
+.dpad-btn.right{right:2%;top:33%;border-radius:8px 50% 50% 8px}
+.dpad-btn.up::after{border-bottom-color:var(--text);margin-bottom:14px}
+.dpad-btn.down::after{border-top-color:var(--text);margin-top:14px}
+.dpad-btn.left::after{border-right-color:var(--text);margin-right:14px}
+.dpad-btn.right::after{border-left-color:var(--text);margin-left:14px}
+.dpad-ok{position:absolute;inset:0;margin:auto;width:34%;height:34%;border-radius:50%;
+  background:var(--surface-3);border:1px solid var(--line);color:var(--text);font-size:15px;
+  font-weight:700;font-family:inherit;cursor:pointer;transition:transform .07s,background .12s}
+.dpad-ok:active,.dpad-ok.pressed{background:var(--accent-dim);transform:scale(.92)}
+
+.rockers{display:grid;grid-template-columns:1fr 1.15fr 1fr;gap:10px;align-items:center}
+.rocker{display:flex;flex-direction:column;gap:6px;background:var(--surface);border:1px solid var(--line);
+  border-radius:var(--radius);padding:8px}
+.rocker-label{text-align:center;font-size:11px;color:var(--muted)}
+.rocker-mid{display:flex;flex-direction:column;gap:8px}
+.rocker-mid .key{height:44px;font-size:15px}
+
+.typing{display:flex;gap:8px;align-items:center}
+.typing input{flex:1;min-width:0;direction:rtl;text-align:right}
+
+.apps{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;max-height:212px;overflow-y:auto;
+  -webkit-overflow-scrolling:touch}
+.app{background:var(--surface-2);border:1px solid var(--line);border-radius:12px;color:var(--text);
+  font-size:10.5px;font-family:inherit;font-weight:600;min-height:62px;cursor:pointer;padding:6px 3px;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;
+  transition:transform .07s,background .12s;overflow:hidden}
+.app:active{background:var(--surface-3);transform:scale(.95)}
+.app img{width:26px;height:26px;border-radius:6px;object-fit:cover}
+.app span{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+.numpad-wrap{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:12px 14px}
+.numpad-wrap summary{cursor:pointer;font-size:13px;color:var(--muted);list-style:none}
+.numpad-wrap summary::-webkit-details-marker{display:none}
+.numpad-wrap summary::before{content:"▾ "}
+.numpad-wrap[open] summary::before{content:"▴ "}
+.numpad{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px}
+.numpad .key{height:48px;font-size:17px}
+
+.now-playing{text-align:center;font-size:11.5px;color:var(--muted);padding:6px;direction:ltr;word-break:break-all}
+.vol-badge{display:inline-block;background:var(--surface-3);border-radius:999px;padding:2px 10px;font-size:11px;color:var(--text)}
+
+.toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom));transform:translateX(-50%);
+  background:var(--surface-3);border:1px solid var(--line);color:var(--text);padding:12px 18px;
+  border-radius:12px;font-size:13px;max-width:90vw;text-align:center;z-index:50;
+  box-shadow:0 8px 28px rgba(0,0,0,.45)}
+.toast.error{border-color:var(--danger)}
+@media (prefers-reduced-motion:reduce){*{animation:none !important;transition:none !important}}
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <header class="topbar">
+    <div class="brand">
+      <span class="dot" id="statusDot"></span>
+      <div>
+        <div class="brand-name">ريموت KMC</div>
+        <div class="brand-sub" id="statusText">غير متصل</div>
+      </div>
+    </div>
+    <button class="icon-btn" id="settingsBtn" aria-label="الإعدادات">⚙</button>
+  </header>
+
+  <!-- ===== التوصيل ===== -->
+  <section class="panel" id="setupPanel">
+    <h2 class="panel-title">توصيل التلفزيون</h2>
+    <div class="field">
+      <label for="ipInput">عنوان IP للتلفزيون</label>
+      <div class="row">
+        <input id="ipInput" type="text" inputmode="decimal" placeholder="192.168.8.77" autocomplete="off">
+        <button class="btn" id="connectBtn">توصيل</button>
+      </div>
+      <p class="hint">تلقاه في: الإعدادات ← الاتصال ← إعدادات Wi-Fi ← متقدم</p>
+    </div>
+    <div id="setupNotice" class="notice" hidden></div>
+  </section>
+
+  <!-- ===== انتظار الموافقة ===== -->
+  <section class="panel" id="pairPanel" hidden>
+    <h2 class="panel-title">وافق من التلفزيون</h2>
+    <p class="hint" style="font-size:13px">
+      ظهرت على شاشة التلفزيون رسالة تسأل عن السماح لهذا الجهاز.<br>
+      اضغط <b>«موافق / Yes»</b> بريموت التلفزيون الأصلي.<br><br>
+      مرة وحدة بس — بعدها يتذكرك.
+    </p>
+    <button class="btn ghost wide" id="cancelPairBtn">إلغاء</button>
+  </section>
+
+  <!-- ===== الريموت ===== -->
+  <main class="remote" id="remote" hidden>
+    <div class="row-3">
+      <button class="key power" data-cmd="power" title="إطفاء">⏻</button>
+      <button class="key" data-cmd="mute" title="كتم">🔇</button>
+      <button class="key" data-btn="MENU" title="القائمة">☰</button>
+    </div>
+
+    <div class="dpad">
+      <button class="dpad-btn up"    data-btn="UP"    aria-label="فوق"></button>
+      <button class="dpad-btn down"  data-btn="DOWN"  aria-label="تحت"></button>
+      <button class="dpad-btn left"  data-btn="LEFT"  aria-label="يسار"></button>
+      <button class="dpad-btn right" data-btn="RIGHT" aria-label="يمين"></button>
+      <button class="dpad-ok"        data-btn="ENTER">OK</button>
+    </div>
+
+    <div class="row-3">
+      <button class="key" data-btn="BACK" title="رجوع">↩</button>
+      <button class="key" data-btn="HOME" title="الرئيسية">⌂</button>
+      <button class="key" data-btn="EXIT" title="خروج">✕</button>
+    </div>
+
+    <div class="rockers">
+      <div class="rocker">
+        <button class="key tall" data-cmd="volUp" data-repeat>＋</button>
+        <span class="rocker-label" id="volLabel">الصوت</span>
+        <button class="key tall" data-cmd="volDown" data-repeat>－</button>
+      </div>
+      <div class="rocker-mid">
+        <button class="key" data-btn="INFO" title="معلومات">ℹ</button>
+        <button class="key" data-cmd="livetv" title="التلفزيون">TV</button>
+        <button class="key" data-btn="CC" title="ترجمة">CC</button>
+      </div>
+      <div class="rocker">
+        <button class="key tall" data-cmd="chUp" data-repeat>▲</button>
+        <span class="rocker-label">القناة</span>
+        <button class="key tall" data-cmd="chDown" data-repeat>▼</button>
+      </div>
+    </div>
+
+    <div class="row-5">
+      <button class="key" data-cmd="rewind" title="إرجاع">◀◀</button>
+      <button class="key" data-cmd="play" title="تشغيل">▶</button>
+      <button class="key accent" data-cmd="pause" title="إيقاف مؤقت">❚❚</button>
+      <button class="key" data-cmd="stop" title="إيقاف">■</button>
+      <button class="key" data-cmd="forward" title="تقديم">▶▶</button>
+    </div>
+
+    <!-- الكتابة: webOS يدعم العربي هنا -->
+    <div class="typing">
+      <input id="textInput" type="text" placeholder="اكتب بالعربي أو الإنجليزي…" autocomplete="off">
+      <button class="btn small" id="sendTextBtn">إرسال</button>
+      <button class="key small" data-cmd="del" title="مسح">⌫</button>
+    </div>
+
+    <div class="apps" id="appsGrid"></div>
+
+    <details class="numpad-wrap">
+      <summary>لوحة الأرقام</summary>
+      <div class="numpad">
+        <button class="key" data-btn="1">1</button>
+        <button class="key" data-btn="2">2</button>
+        <button class="key" data-btn="3">3</button>
+        <button class="key" data-btn="4">4</button>
+        <button class="key" data-btn="5">5</button>
+        <button class="key" data-btn="6">6</button>
+        <button class="key" data-btn="7">7</button>
+        <button class="key" data-btn="8">8</button>
+        <button class="key" data-btn="9">9</button>
+        <button class="key" data-btn="DASH">−</button>
+        <button class="key" data-btn="0">0</button>
+        <button class="key" data-btn="ENTER">↵</button>
+      </div>
+    </details>
+
+    <div class="now-playing" id="nowPlaying" hidden></div>
+  </main>
+
+  <div class="toast" id="toast" hidden></div>
+</div>
+
+<script>
+"use strict";
+/* ============================================================
+   بروتوكول SSAP الخاص بـ webOS
+   - قناة التحكم:  ws://<ip>:3000  أو  wss://<ip>:3001
+   - قناة الأزرار: مقبس منفصل نطلب عنوانه من التلفزيون
+   ============================================================ */
+
+const $ = (id) => document.getElementById(id);
+
+// بطاقة تعريف التطبيق — التلفزيون يطلبها عند الإقران
+const MANIFEST = {
+  manifestVersion: 1,
+  appVersion: "1.1",
+  signed: {
+    created: "20140509",
+    appId: "com.lge.test",
+    vendorId: "com.lge",
+    localizedAppNames: { "": "KMC Web Remote", "ar-SA": "ريموت KMC" },
+    localizedVendorNames: { "": "LG Electronics" },
+    permissions: ["TEST_SECURE","CONTROL_INPUT_TEXT","CONTROL_MOUSE_AND_KEYBOARD",
+      "READ_INSTALLED_APPS","READ_LGE_SDX","READ_NOTIFICATIONS","SEARCH","WRITE_SETTINGS",
+      "WRITE_NOTIFICATION_ALERT","CONTROL_POWER","READ_CURRENT_CHANNEL","READ_RUNNING_APPS",
+      "READ_UPDATE_INFO","UPDATE_FROM_REMOTE_APP","READ_LGE_TV_INPUT_EVENTS","READ_TV_CURRENT_TIME"],
+    serial: "2f930e2d2cfe083771f68e4fe7bb07"
+  },
+  permissions: ["LAUNCH","LAUNCH_WEBAPP","APP_TO_APP","CLOSE","TEST_OPEN","TEST_PROTECTED",
+    "CONTROL_AUDIO","CONTROL_DISPLAY","CONTROL_INPUT_JOYSTICK","CONTROL_INPUT_MEDIA_RECORDING",
+    "CONTROL_INPUT_MEDIA_PLAYBACK","CONTROL_INPUT_TV","CONTROL_POWER","READ_APP_STATUS",
+    "READ_CURRENT_CHANNEL","READ_INPUT_DEVICE_LIST","READ_NETWORK_STATE","READ_RUNNING_APPS",
+    "READ_TV_CHANNEL_LIST","WRITE_NOTIFICATION_TOAST","READ_POWER_STATE","READ_COUNTRY_INFO",
+    "READ_SETTINGS","CONTROL_TV_SCREEN","CONTROL_TV_STANBY","CONTROL_FAVORITE_GROUP",
+    "CONTROL_USER_INFO","CHECK_BLUETOOTH_DEVICE","CONTROL_BLUETOOTH","CONTROL_TIMER_INFO",
+    "STB_INTERNAL_CONNECTION","CONTROL_RECORDING","READ_RECORDING_STATE","WRITE_RECORDING_LIST",
+    "READ_RECORDING_LIST","READ_RECORDING_SCHEDULE","WRITE_RECORDING_SCHEDULE",
+    "READ_STORAGE_DEVICE_LIST","READ_TV_PROGRAM_INFO","CONTROL_BOX_CHANNEL",
+    "READ_TV_ACR_AUTH_TOKEN","READ_TV_CONTENT_STATE","READ_TV_CURRENT_TIME",
+    "ADD_LAUNCHER_CHANNEL","SET_CHANNEL_SKIP","CONTROL_CHANNEL_BLOCK","DELETE_SELECT_CHANNEL",
+    "CONTROL_CHANNEL_GROUP","SCAN_TV_CHANNELS","CONTROL_TV_POWER","CONTROL_WOL"],
+  signatures: [{
+    signatureVersion: 1,
+    signature: "eyJhbGdvcml0aG0iOiJSU0EtU0hBMjU2Iiwia2V5SWQiOiJ0ZXN0LXNpZ25pbmctY2VydCIsInNpZ25hdHVyZVZlcnNpb24iOjF9.hrVRgjCwXVvE2OOSpDZ58hR+59aFNwYDyjQgKk3auukd7pcegmE2CzPCa0bJ0ZsRAcKkCTJrWo5iDzNhMBWRyaMOv5zWSrthlf7G128qvIlpMT0YNY+n/FaOHE73uLrS/g7swl3/qH/BGFG2Hu4RlL48eb3lLKqTt2xKHdCs6Cd4RMfJPYnzgvI4BNrFUKsjkcu+WD4OO2A27Pq1n50cMchmcaXadJhGrOqH5YmHdOCj5NSHzJYrsW0HPlpuAx/ECMeIZYDh6RMqaFM2DXzdKX9NmmyqzJ3o/0lkk/N97gfVRLW5hA29yeAwaCViZNCP8iC9aO0q9fQojoa7NQnAtw=="
+  }]
+};
+
+// أوامر SSAP المستخدمة
+const SSAP = {
+  power:   "ssap://system/turnOff",
+  volUp:   "ssap://audio/volumeUp",
+  volDown: "ssap://audio/volumeDown",
+  setMute: "ssap://audio/setMute",
+  getVol:  "ssap://audio/getVolume",
+  chUp:    "ssap://tv/channelUp",
+  chDown:  "ssap://tv/channelDown",
+  play:    "ssap://media.controls/play",
+  pause:   "ssap://media.controls/pause",
+  stop:    "ssap://media.controls/stop",
+  rewind:  "ssap://media.controls/rewind",
+  forward: "ssap://media.controls/fastForward",
+  launch:  "ssap://system.launcher/launch",
+  apps:    "ssap://com.webos.applicationManager/listLaunchPoints",
+  fgApp:   "ssap://com.webos.applicationManager/getForegroundAppInfo",
+  insert:  "ssap://com.webos.service.ime/insertText",
+  del:     "ssap://com.webos.service.ime/deleteCharacters",
+  enter:   "ssap://com.webos.service.ime/sendEnterKey",
+  pointer: "ssap://com.webos.service.networkinput/getPointerInputSocket"
+};
+
+// تخزين بسيط يتحمّل منع التخزين في بعض المتصفحات
+const store = {
+  get(k){ try { return localStorage.getItem(k); } catch { return this._m && this._m[k]; } },
+  set(k,v){ try { localStorage.setItem(k,v); } catch { (this._m = this._m||{})[k]=v; } },
+  del(k){ try { localStorage.removeItem(k); } catch { if(this._m) delete this._m[k]; } }
+};
+
+// ---------- المتحكم ----------
+class WebOSRemote {
+  constructor(){
+    this.ws = null;
+    this.pointer = null;
+    this.ip = null;
+    this.counter = 0;
+    this.pending = new Map();
+    this.status = "disconnected";
+    this.onStatus = () => {};
+    this.onVolume = () => {};
+    this.onApp = () => {};
+    this.onApps = () => {};
+  }
+
+  _set(status, detail){
+    this.status = status;
+    this.onStatus(status, detail);
+  }
+
+  // الصفحة على https تفرض wss؛ غير كذا نجرّب العادي أول لأنه بدون مشاكل شهادات
+  _urls(ip){
+    return location.protocol === "https:"
+      ? ["wss://" + ip + ":3001"]
+      : ["ws://" + ip + ":3000", "wss://" + ip + ":3001"];
+  }
+
+  async connect(ip){
+    this.disconnect();
+    this.ip = ip;
+    const urls = this._urls(ip);
+    let lastError = null;
+
+    for (const url of urls){
+      this._set("connecting");
+      try {
+        await this._open(url);
+        return;
+      } catch (e) {
+        lastError = e;
+      }
+    }
+    this._set("error", lastError ? lastError.message : "تعذّر الاتصال");
+  }
+
+  _open(url){
+    return new Promise((resolve, reject) => {
+      let ws;
+      try { ws = new WebSocket(url); } catch (e) { return reject(new Error("رابط غير صالح")); }
+
+      // مهلة: التلفزيون المطفي ما يرد أبداً
+      const timer = setTimeout(() => {
+        try { ws.close(); } catch {}
+        reject(new Error("ما فيه رد من التلفزيون"));
+      }, 8000);
+
+      let settled = false;
+      const done = (fn, arg) => { if (settled) return; settled = true; clearTimeout(timer); fn(arg); };
+
+      ws.onopen = () => {
+        this.ws = ws;
+        const key = store.get("webos_key_" + this.ip);
+        const payload = { forcePairing:false, pairingType:"PROMPT", manifest: MANIFEST };
+        if (key) payload["client-key"] = key;
+        ws.send(JSON.stringify({ type:"register", id:"register_0", payload }));
+        // ما نعتبرها ناجحة إلا بعد ردّ registered
+        if (!key) this._set("pairing");
+      };
+
+      ws.onmessage = (event) => {
+        let msg;
+        try { msg = JSON.parse(event.data); } catch { return; }
+
+        if (msg.type === "registered" && msg.payload && msg.payload["client-key"]){
+          store.set("webos_key_" + this.ip, msg.payload["client-key"]);
+          store.set("webos_ip", this.ip);
+          this._set("ready");
+          this._afterReady();
+          return done(resolve);
+        }
+
+        if (msg.type === "error" && msg.id === "register_0"){
+          // مفتاح قديم مرفوض: نمسحه ونعيد الإقران
+          store.del("webos_key_" + this.ip);
+          return done(reject, new Error("رُفض الإقران — جرّب مرة ثانية"));
+        }
+
+        const entry = this.pending.get(msg.id);
+        if (entry){
+          if (!entry.keep) this.pending.delete(msg.id);
+          entry.handler(msg.payload || {});
+        }
+      };
+
+      ws.onerror = () => done(reject, new Error("فشل الاتصال بـ " + url));
+      ws.onclose = () => {
+        if (this.ws === ws){ this.ws = null; if (this.status === "ready") this._set("disconnected"); }
+        done(reject, new Error("انقطع الاتصال"));
+      };
+    });
+  }
+
+  // بعد الجاهزية: نفتح قناة الأزرار ونشترك في الصوت والتطبيق الحالي
+  async _afterReady(){
+    try {
+      const res = await this.request(SSAP.pointer);
+      if (res && res.socketPath) this._openPointer(res.socketPath);
+    } catch {}
+    this.subscribe(SSAP.getVol, (p) => this.onVolume(p));
+    this.subscribe(SSAP.fgApp, (p) => this.onApp(p && p.appId));
+    this.request(SSAP.apps).then((p) => {
+      if (p && p.launchPoints) this.onApps(p.launchPoints);
+    }).catch(() => {});
+  }
+
+  _openPointer(path){
+    try {
+      const ws = new WebSocket(path);
+      ws.onopen = () => { this.pointer = ws; };
+      ws.onclose = () => { if (this.pointer === ws) this.pointer = null; };
+      ws.onerror = () => {};
+    } catch {}
+  }
+
+  _send(type, uri, payload, handler, keep){
+    if (!this.ws || this.ws.readyState !== 1) throw new Error("التلفزيون غير متصل");
+    const id = "cmd_" + (++this.counter);
+    if (handler) this.pending.set(id, { handler, keep });
+    this.ws.send(JSON.stringify({ type, id, uri, payload: payload || {} }));
+    return id;
+  }
+
+  request(uri, payload){
+    return new Promise((resolve, reject) => {
+      let id;
+      const timer = setTimeout(() => { this.pending.delete(id); reject(new Error("انتهت المهلة")); }, 6000);
+      try {
+        id = this._send("request", uri, payload, (p) => { clearTimeout(timer); resolve(p); }, false);
+      } catch (e) { clearTimeout(timer); reject(e); }
+    });
+  }
+
+  subscribe(uri, handler){
+    try { this._send("subscribe", uri, null, handler, true); } catch {}
+  }
+
+  // زر من قناة الأزرار (أسرع بكثير من SSAP للتنقل)
+  button(name){
+    if (!this.pointer || this.pointer.readyState !== 1) throw new Error("قناة الأزرار غير جاهزة");
+    this.pointer.send("type:button\nname:" + name + "\n\n");
+  }
+
+  disconnect(){
+    for (const s of [this.ws, this.pointer]){
+      if (s) { try { s.onclose = null; s.close(); } catch {} }
+    }
+    this.ws = this.pointer = null;
+    this.pending.clear();
+    this._set("disconnected");
+  }
+
+  forget(){
+    if (this.ip) store.del("webos_key_" + this.ip);
+    store.del("webos_ip");
+    this.disconnect();
+  }
+}
+
+// ============================================================
+//  الواجهة
+// ============================================================
+const tv = new WebOSRemote();
+let muted = false;
+
+let toastTimer = null;
+function toast(msg, isError){
+  const el = $("toast");
+  el.textContent = msg;
+  el.classList.toggle("error", !!isError);
+  el.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.hidden = true, 2600);
+}
+function buzz(ms){ if (navigator.vibrate) navigator.vibrate(ms || 12); }
+
+const STATUS_TEXT = {
+  disconnected:"غير متصل", connecting:"جاري الاتصال…",
+  pairing:"بانتظار موافقتك على التلفزيون", ready:"متصل", error:"فشل الاتصال"
+};
+
+tv.onStatus = (status, detail) => {
+  const dot = $("statusDot");
+  dot.className = "dot";
+  if (status === "ready") dot.classList.add("ready");
+  else if (status === "error") dot.classList.add("error");
+  else if (status !== "disconnected") dot.classList.add("busy");
+
+  $("statusText").textContent = detail || (status === "ready" && tv.ip ? "متصل بـ " + tv.ip : STATUS_TEXT[status]);
+
+  $("remote").hidden     = status !== "ready";
+  $("pairPanel").hidden  = status !== "pairing";
+  $("setupPanel").hidden = (status === "ready" || status === "pairing");
+  $("connectBtn").disabled = status === "connecting";
+
+  if (status === "error") showTroubleshoot(detail);
+};
+
+tv.onVolume = (p) => {
+  if (!p || typeof p.volume !== "number") return;
+  muted = !!p.muted;
+  $("volLabel").innerHTML = '<span class="vol-badge">' + (muted ? "مكتوم" : p.volume) + '</span>';
+};
+
+tv.onApp = (appId) => {
+  const el = $("nowPlaying");
+  el.hidden = !appId;
+  el.textContent = appId || "";
+};
+
+// شبكة التطبيقات تُبنى من التطبيقات المثبتة فعلاً على التلفزيون
+tv.onApps = (points) => {
+  const grid = $("appsGrid");
+  grid.innerHTML = "";
+  const skip = /^(com\.webos\.app\.(hdmi|component|av|externalinput)|com\.webos\.exampleapp)/;
+  points
+    .filter(p => p.id && p.title && !skip.test(p.id))
+    .sort((a,b) => (a.title||"").localeCompare(b.title||""))
+    .forEach(p => {
+      const btn = document.createElement("button");
+      btn.className = "app";
+      if (p.icon){
+        const img = document.createElement("img");
+        img.src = p.icon;
+        img.onerror = () => img.remove();
+        btn.appendChild(img);
+      }
+      const label = document.createElement("span");
+      label.textContent = p.title;
+      btn.appendChild(label);
+      btn.onclick = () => {
+        buzz();
+        tv.request(SSAP.launch, { id: p.id }).catch(e => toast(e.message, true));
+      };
+      grid.appendChild(btn);
+    });
+};
+
+// ---------- تنفيذ الأوامر ----------
+function runCmd(cmd){
+  switch (cmd){
+    case "power":
+      if (!confirm("إطفاء التلفزيون؟\n\nتنبيه: ما تقدر تشغّله مرة ثانية من هذا التطبيق.")) return;
+      return tv.request(SSAP.power);
+    case "mute":   return tv.request(SSAP.setMute, { mute: !muted });
+    case "volUp":  return tv.request(SSAP.volUp);
+    case "volDown":return tv.request(SSAP.volDown);
+    case "chUp":   return tv.request(SSAP.chUp);
+    case "chDown": return tv.request(SSAP.chDown);
+    case "play":   return tv.request(SSAP.play);
+    case "pause":  return tv.request(SSAP.pause);
+    case "stop":   return tv.request(SSAP.stop);
+    case "rewind": return tv.request(SSAP.rewind);
+    case "forward":return tv.request(SSAP.forward);
+    case "del":    return tv.request(SSAP.del, { count: 1 });
+    case "livetv": return tv.request(SSAP.launch, { id: "com.webos.app.livetv" });
+    default: return Promise.reject(new Error("أمر غير معروف"));
+  }
+}
+
+function bind(){
+  // أزرار قناة الأزرار (التنقل والأرقام)
+  document.querySelectorAll("[data-btn]").forEach(el => {
+    const name = el.dataset.btn;
+    el.addEventListener("pointerdown", (e) => {
+      e.preventDefault();
+      el.classList.add("pressed");
+      buzz();
+      try { tv.button(name); } catch (err) { toast(err.message, true); }
+    });
+    const off = () => el.classList.remove("pressed");
+    el.addEventListener("pointerup", off);
+    el.addEventListener("pointerleave", off);
+    el.addEventListener("pointercancel", off);
+    el.addEventListener("contextmenu", e => e.preventDefault());
+  });
+
+  // أوامر SSAP، مع تكرار عند الضغط المطوّل
+  document.querySelectorAll("[data-cmd]").forEach(el => {
+    const cmd = el.dataset.cmd;
+    const repeatable = el.hasAttribute("data-repeat");
+    let holdTimer = null, repeatTimer = null;
+
+    const fire = () => { runCmd(cmd).catch(e => toast(e.message, true)); };
+
+    el.addEventListener("pointerdown", (e) => {
+      e.preventDefault();
+      el.classList.add("pressed");
+      buzz();
+      fire();
+      if (repeatable){
+        holdTimer = setTimeout(() => { repeatTimer = setInterval(fire, 200); }, 450);
+      }
+    });
+    const stop = () => {
+      el.classList.remove("pressed");
+      clearTimeout(holdTimer); clearInterval(repeatTimer);
+      holdTimer = repeatTimer = null;
+    };
+    el.addEventListener("pointerup", stop);
+    el.addEventListener("pointerleave", stop);
+    el.addEventListener("pointercancel", stop);
+    el.addEventListener("contextmenu", e => e.preventDefault());
+  });
+
+  // لوحة مفاتيح الكمبيوتر
+  const KEYS = { ArrowUp:"UP", ArrowDown:"DOWN", ArrowLeft:"LEFT", ArrowRight:"RIGHT",
+                 Enter:"ENTER", Backspace:"BACK", Escape:"EXIT", Home:"HOME" };
+  document.addEventListener("keydown", (e) => {
+    if (e.target.tagName === "INPUT") return;
+    if (tv.status !== "ready") return;
+    const name = KEYS[e.key];
+    if (name){ e.preventDefault(); try { tv.button(name); } catch {} return; }
+    if (e.key === "+"){ e.preventDefault(); runCmd("volUp").catch(()=>{}); }
+    if (e.key === "-"){ e.preventDefault(); runCmd("volDown").catch(()=>{}); }
+  });
+
+  $("connectBtn").onclick = () => {
+    const ip = $("ipInput").value.trim();
+    if (!/^\d{1,3}(\.\d{1,3}){3}$/.test(ip)) return toast("اكتب عنوان IP صحيح", true);
+    store.set("webos_ip", ip);
+    tv.connect(ip);
+  };
+  $("ipInput").addEventListener("keydown", e => { if (e.key === "Enter") $("connectBtn").click(); });
+
+  $("cancelPairBtn").onclick = () => tv.disconnect();
+
+  $("settingsBtn").onclick = () => {
+    if (tv.status === "ready"){
+      if (confirm("قطع الاتصال؟")) tv.disconnect();
+    } else if (confirm("نسيان الإقران المحفوظ والبدء من جديد؟")){
+      tv.forget();
+      toast("تم المسح");
+    }
+  };
+
+  $("sendTextBtn").onclick = () => {
+    const input = $("textInput");
+    const text = input.value;
+    if (!text) return;
+    tv.request(SSAP.insert, { text: text, replace: false })
+      .then(() => { input.value = ""; })
+      .catch(e => toast(e.message, true));
+  };
+  $("textInput").addEventListener("keydown", e => {
+    if (e.key === "Enter"){ e.preventDefault(); $("sendTextBtn").click(); }
+  });
+}
+
+// نصائح عند فشل الاتصال — تختلف حسب طريقة فتح الصفحة
+function showTroubleshoot(detail){
+  const box = $("setupNotice");
+  const secure = location.protocol === "https:";
+  box.hidden = false;
+  box.innerHTML = secure
+    ? "<b>الصفحة مفتوحة عبر HTTPS</b><br>" +
+      "المتصفح يمنع الاتصال بالتلفزيون إلا بشهادة موثوقة. سوّ التالي مرة وحدة:<br>" +
+      "١. افتح تبويب جديد على <code style='direction:ltr;display:inline-block'>https://" +
+      ($("ipInput").value.trim() || "IP") + ":3001</code><br>" +
+      "٢. بيطلع تحذير أمان — اضغط «إظهار التفاصيل» ثم «زيارة الموقع»<br>" +
+      "٣. ارجع هنا واضغط توصيل<br><br>" +
+      "لو ما نفع، احفظ الملف على جوالك وافتحه من تطبيق «الملفات» — تختفي المشكلة."
+    : "<b>تأكد من التالي:</b><br>" +
+      "• التلفزيون مشغّل (مو نائم)<br>" +
+      "• جوالك والتلفزيون على نفس الواي فاي<br>" +
+      "• عنوان IP صحيح — يتغير أحياناً بعد إعادة تشغيل الراوتر";
+}
+
+// ---------- التشغيل ----------
+bind();
+const savedIp = store.get("webos_ip");
+if (savedIp){
+  $("ipInput").value = savedIp;
+  if (store.get("webos_key_" + savedIp)) tv.connect(savedIp);
+}
+</script>
+</body>
+</html>
