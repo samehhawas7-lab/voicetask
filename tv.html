@@ -1022,7 +1022,31 @@ tv.onApp = (appId) => {
   });
 };
 
+let installedApps = [];
+
+// أسماء التطبيقات تختلف بين الطرازات، فنستخرجها من التلفزيون نفسه
+// بدل الاعتماد على معرّف ثابت قد لا يوجد عنده.
+function findApp(kind){
+  const rules = {
+    web:    [/browser/i, /^com\.webos\.app\.browser$/i, /متصفح|إنترنت|web|internet/i],
+    livetv: [/livetv/i, /^com\.webos\.app\.livetv$/i, /live\s*tv|بث|تلفزيون/i],
+    input:  [/inputcommon|externalinput/i, /^com\.webos\.app\.hdmi/i, /input|hdmi|مدخل/i]
+  }[kind] || [];
+  for (const re of rules){
+    const hit = installedApps.find(a => re.test(a.id) || re.test(a.title || ""));
+    if (hit) return hit.id;
+  }
+  return null;
+}
+
+function launchKind(kind, fallback){
+  const id = findApp(kind) || fallback;
+  if (!id) return Promise.reject(new Error("ما لقيت هذا التطبيق على تلفزيونك"));
+  return tv.request(SSAP.launch, { id });
+}
+
 tv.onApps = (points) => {
+  installedApps = points || [];
   const grid = $("appsGrid");
   grid.innerHTML = "";
   const skip = /^(com\.webos\.app\.(hdmi|component|av|externalinput)|com\.webos\.exampleapp)/;
@@ -1100,9 +1124,9 @@ function runCmd(cmd){
     case "rewind": return tv.request(SSAP.rewind);
     case "forward":return tv.request(SSAP.forward);
     case "del":    return tv.request(SSAP.del, { count: 1 });
-    case "livetv": return tv.request(SSAP.launch, { id: "com.webos.app.livetv" });
-    case "web":    return tv.request(SSAP.launch, { id: "com.webos.app.browser" });
-    case "input":  return tv.request(SSAP.launch, { id: "com.webos.app.inputcommon" });
+    case "livetv": return launchKind("livetv", "com.webos.app.livetv");
+    case "web":    return launchKind("web", "com.webos.app.browser");
+    case "input":  return launchKind("input", "com.webos.app.inputcommon");
     default: return Promise.reject(new Error("أمر غير معروف"));
   }
 }
