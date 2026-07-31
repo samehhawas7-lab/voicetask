@@ -722,17 +722,12 @@ class WebOSRemote {
     this._startHeartbeat();
     this.onReady();
     try {
-      const res = await this.request(SSAP.pointer);
-      if (res && res.socketPath){
-        diag("عنوان قناة الأزرار من التلفزيون: " + res.socketPath);
-        this._openPointer(res.socketPath);
-      } else {
-        diag("⚠ التلفزيون ما أعطى عنواناً لقناة الأزرار");
-        this.onPointer(false, "التلفزيون ما أعطى عنواناً للقناة");
-      }
+      const path = await this._askPointerPath();
+      diag("عنوان قناة الأزرار من التلفزيون: " + path);
+      this._openPointer(path);
     } catch (e){
       diag("⚠ فشل طلب قناة الأزرار: " + e.message);
-      this.onPointer(false, "فشل طلب القناة: " + e.message);
+      this.onPointer(false, e.message);
     }
     this.subscribe(SSAP.getVol, (p) => this.onVolume(p));
     this.subscribe(SSAP.fgApp, (p) => this.onApp(p && p.appId));
@@ -760,13 +755,43 @@ class WebOSRemote {
 
   // نجرّب العنوان المعاد بناؤه ثم العنوان الأصلي كما أعطاه التلفزيون،
   // لأن أي واحد منهما قد يكون الصحيح حسب طراز الجهاز وإصدار نظامه.
+  // بعض الطرازات ترد أولاً بردٍّ بلا عنوان ثم ترسل العنوان في رسالة تالية،
+  // فنُبقي المستمع حياً ونأخذ أول ردّ يحمل socketPath فعلاً.
+  _askPointerPath(){
+    return new Promise((resolve, reject) => {
+      let id, done = false;
+      const finish = (fn, arg) => {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        this.pending.delete(id);
+        fn(arg);
+      };
+      const timer = setTimeout(
+        () => finish(reject, new Error("التلفزيون ما رد بعنوان القناة خلال ٨ ثوانٍ")), 8000);
+
+      try {
+        id = this._send("request", SSAP.pointer, null, (payload) => {
+          const raw = JSON.stringify(payload || {});
+          diag("   رد التلفزيون: " + raw.slice(0, 240));
+          this.lastPointerReply = raw.slice(0, 160);
+          if (payload && payload.socketPath) return finish(resolve, payload.socketPath);
+          if (payload && payload.returnValue === false){
+            const why = payload.errorText || payload.errorCode || "رفض بلا سبب معلن";
+            return finish(reject, new Error("التلفزيون رفض الطلب: " + why));
+          }
+          // ردّ بلا عنوان ولا خطأ: ننتظر الرسالة التالية حتى تنتهي المهلة
+        }, true);
+      } catch (e){ finish(reject, e); }
+    });
+  }
+
   async retryPointer(){
     if (this.status !== "ready") throw new Error("التلفزيون غير متصل");
     diag("── إعادة محاولة قناة الأزرار ──");
-    const res = await this.request(SSAP.pointer);
-    if (!res || !res.socketPath) throw new Error("التلفزيون ما أعطى عنواناً");
-    diag("العنوان الجديد: " + res.socketPath);
-    this._openPointer(res.socketPath);
+    const path = await this._askPointerPath();
+    diag("العنوان الجديد: " + path);
+    this._openPointer(path);
   }
 
   _openPointer(raw){
@@ -961,8 +986,9 @@ tv.onPointer = (ok, reason) => {
   const bar = $("padWarn");
   bar.hidden = !!ok;
   if (!ok){
-    $("padWarnText").textContent =
-      "أزرار التنقل ولوحة اللمس معطّلة — " + (reason || "قناة الأزرار مغلقة");
+    let text = "أزرار التنقل ولوحة اللمس معطّلة — " + (reason || "قناة الأزرار مغلقة");
+    if (tv.lastPointerReply) text += "  ·  رد التلفزيون: " + tv.lastPointerReply;
+    $("padWarnText").textContent = text;
   }
 };
 
