@@ -140,6 +140,19 @@ body{display:flex;flex-direction:column;height:100dvh;
 .info dd{margin:0;direction:ltr;text-align:left;font-family:ui-monospace,Menlo,monospace;
   overflow-wrap:anywhere}
 .act-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
+.chip{display:inline-block;background:var(--warn);color:#231a08;border-radius:8px;
+  padding:2px 8px;font-size:10.5px;font-weight:700;vertical-align:middle;margin-inline-start:6px}
+.steps{margin-top:12px;font-size:12.5px;line-height:2.1;color:var(--muted)}
+.steps div{display:flex;align-items:center;gap:9px}
+.steps i{width:16px;height:16px;border-radius:50%;border:1.5px solid var(--line);flex:none;
+  display:flex;align-items:center;justify-content:center;font-size:9px;font-style:normal}
+.steps div.now{color:var(--text)}
+.steps div.now i{border-color:var(--accent);border-top-color:transparent;
+  animation:spin 1s linear infinite}
+.steps div.done{color:var(--text)}
+.steps div.done i{background:var(--ok);border-color:var(--ok);color:#08210f}
+.steps div.fail i{background:var(--danger);border-color:var(--danger);color:#2b0d0d}
+@keyframes spin{to{transform:rotate(360deg)}}
 
 /* لوحة اللمس */
 .pad{background:var(--surface-2);border:1px solid var(--line);border-radius:18px;
@@ -323,6 +336,7 @@ input::placeholder{color:#5c6579}
       <svg><use href="#i-dish"></use></svg><b>غسالة الأطباق</b><small>سامسونج</small>
     </button>
     <button class="tile" data-go="dev-maint" style="grid-column:1/-1">
+      <i class="pip" id="pipMaint"></i>
       <svg><use href="#i-tool"></use></svg><b>الصيانة والأوامر</b><small>حالة الخادم وأوامره</small>
     </button>
   </div>
@@ -629,6 +643,7 @@ input::placeholder{color:#5c6579}
       <dt>التلفزيون</dt>   <dd id="infoTv">—</dd>
       <dt>بطاقة الشبكة</dt><dd id="infoMac">—</dd>
       <dt>القناة</dt>      <dd id="infoLink">—</dd>
+      <dt>النسخة</dt>      <dd id="infoVer">—</dd>
     </dl>
   </div>
 
@@ -640,11 +655,18 @@ input::placeholder{color:#5c6579}
   </div>
 
   <div class="card">
-    <h3>تحديث الخادم</h3>
-    <p>من اللابتوب: زر ويندوز ← <b>powershell</b> ← بالزر الأيمن ← تشغيل
-       كمسؤول، ثم الصق. يجلب آخر نسخة ويحافظ على إعداداتك.</p>
-    <div class="code" data-copy>irm https://raw.githubusercontent.com/samehhawas7-lab/voicetask/main/tvremote/windows/install.ps1 | iex</div>
-    <button class="key sm" data-copy-for="prev">نسخ</button>
+    <h3>تحديث الخادم <span class="chip" id="updChip" hidden>يوجد تحديث</span></h3>
+    <p id="updNote">يجلب آخر نسخة ويعيد تشغيل الخادم وحده — بلا لمس اللابتوب.</p>
+    <button class="key" id="updBtn" style="width:100%">تحديث الآن</button>
+    <div class="steps" id="updSteps" hidden></div>
+    <details style="margin-top:12px">
+      <summary style="font-size:12px;color:var(--muted);cursor:pointer">
+        الطريقة اليدوية — إن تعذّر الوصول للخادم</summary>
+      <p style="margin-top:10px">على اللابتوب: زر ويندوز ← <b>powershell</b> ←
+         بالزر الأيمن ← تشغيل كمسؤول ← <b>Esc</b> ← الصق.</p>
+      <div class="code" data-copy>irm https://raw.githubusercontent.com/samehhawas7-lab/voicetask/main/tvremote/windows/install.ps1 | iex</div>
+      <button class="key sm" data-copy-for="prev">نسخ</button>
+    </details>
   </div>
 
   <div class="card">
@@ -1592,7 +1614,7 @@ function show(id){
     const ip = $("ipInput").value.trim() || store.get("webos_ip");
     if (ip && store.get("webos_key_" + ip)) tv.connect(ip);
   }
-  if (id === "dev-maint") paintInfo();
+  if (id === "dev-maint"){ paintInfo(); if (window.__checkVersion) window.__checkVersion(); }
   if (id === "dev-proj" && window.__projCheck) window.__projCheck();
 }
 
@@ -1952,8 +1974,7 @@ function wakeTv(btn){
   diag("أطلب من الخادم إيقاظ التلفزيون");
   toast("أُرسلت إشارة التشغيل — يأخذ نحو عشر ثوانٍ");
 
-  return fetch("/power-on", { cache: "no-store" })
-    .then(r => r.json())
+  return post("/power-on")
     .then(r => {
       if (r.ok){
         diag("استيقظ التلفزيون على " + r.tv);
@@ -1983,7 +2004,7 @@ function wakeTv(btn){
   if (cf) cf.onclick = () => {
     if (!onServer) return toast("يحتاج الخادم", true);
     cf.disabled = true; const t = cf.textContent; cf.textContent = "جاري البحث…";
-    fetch("/find-tv", { cache: "no-store" }).then(r => r.json())
+    post("/find-tv")
       .then(r => { paintInfo(); toast(r.ok ? "التلفزيون على " + r.tv : "ما لقيته في الشبكة", !r.ok); })
       .catch(() => toast("تعذّر الوصول للخادم", true))
       .finally(() => { cf.disabled = false; cf.textContent = t; });
@@ -2057,7 +2078,7 @@ function wakeTv(btn){
   $("projFind").onclick = () => {
     const b = $("projFind"); b.disabled = true; b.textContent = "جاري البحث…";
     say("جاري البحث…", "أمسح الشبكة", "أبحث عن جهاز يفتح منفذ ADB — يأخذ نحو نصف دقيقة.");
-    fetch("/proj/find", { cache:"no-store" }).then(r => r.json()).then(r => {
+    post("/proj/find").then(r => {
       if (r.ok){ toast("وجدته على " + r.ip); check(); }
       else { toast("ما لقيته في الشبكة", true); say("لم يُوجد", "ما وجدت جهازاً يقبل ADB",
              "فعّل «تصحيح USB عبر الشبكة» من خيارات المطوّر في البروجيكتر."); }
@@ -2078,8 +2099,7 @@ function wakeTv(btn){
     if (!name) return;
     buzz(12);
     if (el) { el.classList.add("pressed"); setTimeout(() => el.classList.remove("pressed"), 110); }
-    fetch("/proj/key?name=" + encodeURIComponent(name), { cache:"no-store" })
-      .then(r => r.json())
+    post("/proj/key?name=" + encodeURIComponent(name))
       .then(r => { if (!r.ok) toast(r.why || "ما استجاب البروجيكتر", true); })
       .catch(() => toast("تعذّر الوصول للخادم", true));
   };
@@ -2088,8 +2108,8 @@ function wakeTv(btn){
     el.addEventListener("click", () => press(el.dataset.pk, el));
   });
 
-  $("projWake").onclick  = () => { buzz(20); fetch("/proj/wake",  {cache:"no-store"}).then(()=>toast("أُرسلت إشارة التشغيل")); };
-  $("projSleep").onclick = () => { buzz(20); fetch("/proj/sleep", {cache:"no-store"}).then(()=>toast("أُطفئت الشاشة")); };
+  $("projWake").onclick  = () => { buzz(20); post("/proj/wake").then(()=>toast("أُرسلت إشارة التشغيل")); };
+  $("projSleep").onclick = () => { buzz(20); post("/proj/sleep").then(()=>toast("أُطفئت الشاشة")); };
 
   let appsLoaded = false;
   function loadApps(){
@@ -2113,8 +2133,7 @@ function wakeTv(btn){
         btn.append(g, s2);
         btn.onclick = () => {
           buzz();
-          fetch("/proj/app?pkg=" + encodeURIComponent(a.pkg), { cache:"no-store" })
-            .then(r2 => r2.json())
+          post("/proj/app?pkg=" + encodeURIComponent(a.pkg))
             .then(r2 => toast(r2.ok ? "فُتح " + a.name : (r2.why || "ما فُتح"), !r2.ok))
             .catch(() => toast("تعذّر الوصول للخادم", true));
         };
@@ -2125,6 +2144,99 @@ function wakeTv(btn){
 
   // نفحصه أول ما تُفتح صفحته لا عند تحميل التطبيق: المسح يكلّف
   window.__projCheck = check;
+})();
+
+
+/* ============================================================
+   التحديث من داخل التطبيق
+   الخادم يقتل نفسه في أثنائه ثم يعود بالمهمة المجدولة، فالانقطاع
+   متوقَّع لا خطأ. نستطلع /health حتى يردّ، ثم نعيد تحميل الصفحة
+   لتُحمَّل الواجهة الجديدة معه.
+   ============================================================ */
+function post(path){
+  return fetch(path, { method:"POST", cache:"no-store" }).then(r => r.json());
+}
+
+(function setupUpdate(){
+  const btn = $("updBtn"), box = $("updSteps"), chip = $("updChip"), note = $("updNote");
+  if (!btn) return;
+
+  const STEPS = ["يُطلب التحديث", "يُنزَّل ويُثبَّت", "يُعاد تشغيل الخادم", "تم"];
+  let state = [];
+
+  const draw = () => {
+    box.innerHTML = "";
+    STEPS.forEach((t, i) => {
+      const d = document.createElement("div");
+      d.className = state[i] || "";
+      const ic = document.createElement("i");
+      ic.textContent = state[i] === "done" ? "✓" : (state[i] === "fail" ? "✕" : "");
+      d.append(ic, document.createTextNode(t));
+      box.appendChild(d);
+    });
+  };
+  const mark = (i, v) => { state[i] = v; draw(); };
+
+  btn.onclick = () => {
+    if (!onServer) return toast("افتح الريموت من عنوان اللابتوب أولاً", true);
+    if (!confirm("تحديث الخادم؟\n\nينقطع الريموت نحو دقيقة ثم يعود وحده.")) return;
+
+    btn.disabled = true;
+    box.hidden = false;
+    state = ["now", "", "", ""];
+    draw();
+
+    post("/update").then(r => {
+      if (!r.ok){ mark(0, "fail"); toast(r.why || "تعذّر بدء التحديث", true); btn.disabled = false; return; }
+      mark(0, "done"); mark(1, "now");
+      waitForServer();
+    }).catch(() => {
+      // انقطاع الاتصال هنا وارد: قد يموت الخادم قبل أن يصلنا ردّه
+      mark(0, "done"); mark(1, "now");
+      waitForServer();
+    });
+  };
+
+  // ثلاث مراحل نراها من الخارج: يعمل الآن، ثم ينقطع، ثم يعود
+  function waitForServer(){
+    const started = Date.now();
+    let sawDown = false;
+    const tick = () => {
+      if (Date.now() - started > 180000){
+        mark(1, "fail");
+        toast("طال الانتظار — راجع update.log على اللابتوب", true);
+        btn.disabled = false;
+        return;
+      }
+      fetch("/health", { cache:"no-store" }).then(r => r.json()).then(() => {
+        if (!sawDown) return setTimeout(tick, 3000);      // لم ينقطع بعد
+        mark(1, "done"); mark(2, "done"); mark(3, "done");
+        toast("تم التحديث — تُعاد الصفحة الآن");
+        setTimeout(() => location.reload(), 1200);
+      }).catch(() => {
+        if (!sawDown){ sawDown = true; mark(1, "done"); mark(2, "now"); }
+        setTimeout(tick, 3000);
+      });
+    };
+    setTimeout(tick, 4000);
+  }
+
+  window.__checkVersion = () => {
+    if (!onServer){ note.textContent = "التحديث يحتاج الخادم."; btn.disabled = true; return; }
+    fetch("/version", { cache:"no-store" }).then(r => r.json()).then(v => {
+      const when = v.installedAt
+        ? new Date(v.installedAt).toLocaleDateString("ar", { day:"numeric", month:"long" })
+        : "غير معروف";
+      const el = $("infoVer");
+      if (el) el.textContent = when + (v.updateAvailable ? " · يوجد أحدث" : "");
+      chip.hidden = !v.updateAvailable;
+      const pip = $("pipMaint");
+      if (pip) pip.className = "pip" + (v.updateAvailable ? " wait" : "");
+      note.textContent = v.updateAvailable
+        ? "يوجد إصدار أحدث. الضغط يجلبه ويعيد تشغيل الخادم وحده."
+        : "أنت على آخر نسخة. الضغط يعيد التثبيت على أي حال.";
+    }).catch(() => {});
+  };
 })();
 
 function paintInfo(){
@@ -2149,6 +2261,7 @@ function paintInfo(){
 }
 setInterval(() => { if (!document.hidden) paintInfo(); }, 5000);
 paintInfo();
+if (window.__checkVersion) window.__checkVersion();
 
 if (onServer){
   diag("وضع الخادم: الأوامر تمر عبر " + location.host + " بأذونات كاملة");

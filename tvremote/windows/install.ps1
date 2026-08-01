@@ -151,6 +151,19 @@ $cfg = [ordered]@{
 # مسار node مثبَّت للمهمة: SYSTEM قد يقلع قبل أن يلتقط PATH الجهاز
 [IO.File]::WriteAllText((Join-Path $WinDir "node-path.cmd"),
   "set `"NODE_EXE=$nodeExe`"`r`n", (New-Object Text.ASCIIEncoding))
+# رقم النسخة المنصّبة: به يعرف التطبيق أن ثمّة تحديثاً فيعرض زرّه.
+# وتعذُّر السؤال لا يُفشل التنصيب — يُكتب فارغاً ويُكتفى بالتاريخ.
+$sha = ""
+try {
+  $sha = (Invoke-RestMethod -Uri "https://api.github.com/repos/samehhawas7-lab/voicetask/commits/main" `
+            -Headers @{ "User-Agent" = "kmc-remote"; "Accept" = "application/vnd.github.sha" } `
+            -TimeoutSec 8 -ErrorAction Stop).ToString().Trim()
+  if ($sha -notmatch '^[0-9a-f]{40}$') { $sha = "" }
+} catch { $sha = "" }
+$ver = [ordered]@{ sha = $sha; installedAt = (Get-Date).ToString("o") }
+[IO.File]::WriteAllText((Join-Path $WinDir "version.json"),
+  ($ver | ConvertTo-Json), (New-Object Text.UTF8Encoding($false)))
+
 $macNote = if ($cfg.tvMac) { "  ·  MAC kept" } else { "" }
 Ok ("TV " + $cfg.tvIp + "  ·  server port " + $Port + $macNote)
 

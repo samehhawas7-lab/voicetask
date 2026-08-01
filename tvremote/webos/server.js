@@ -23,6 +23,7 @@ const { WebSocketServer, WebSocket } = require("ws");
 const { discover, verify } = require("./discover");
 const { wake, macOf } = require("./wol");
 const adb = require("./adb");
+const { spawn } = require("child_process");
 
 // حين يعمل الخادم خدمةً في الخلفية لا سبيل لتمرير متغيّرات البيئة إليه،
 // فيقرأ إعداداته من ملف بجانبه يكتبه المنصّب
@@ -179,6 +180,80 @@ async function projectorApps() {
   return projApps;
 }
 
+
+// ---------- التحديث الذاتي ----------
+// كل ميزة كانت تُسلَّم بأمرٍ يُلصق في PowerShell على اللابتوب، وهي أكثر
+// خطوة تعثّر فيها صاحب البيت. فصار الخادم يحدّث نفسه بطلبٍ من التطبيق.
+const REPO = "samehhawas7-lab/voicetask";
+const INSTALLER = "https://raw.githubusercontent.com/" + REPO + "/main/tvremote/windows/install.ps1";
+const VERSION_FILE = path.join(__dirname, "..", "windows", "version.json");
+
+function installedVersion() {
+  try {
+    const raw = fs.readFileSync(VERSION_FILE, "utf8");
+    return JSON.parse(raw.replace(/^\uFEFF/, ""));
+  } catch { return { sha: "", installedAt: null }; }
+}
+
+// نسأل GitHub عن آخر تعديل، ونحفظ الجواب عشر دقائق: الصفحة تسأل كل
+// خمس ثوانٍ وهي مفتوحة، ولا معنى لإرهاق الخدمة بذلك
+let latestCache = { at: 0, sha: "" };
+function latestSha() {
+  if (Date.now() - latestCache.at < 600000) return Promise.resolve(latestCache.sha);
+  return new Promise((resolve) => {
+    const req = https.get({
+      host: "api.github.com",
+      path: "/repos/" + REPO + "/commits/main",
+      headers: { "User-Agent": "kmc-remote", "Accept": "application/vnd.github.sha" },
+      timeout: 6000,
+    }, (r) => {
+      let body = "";
+      r.on("data", (c) => { body += c; if (body.length > 4096) r.destroy(); });
+      r.on("end", () => {
+        const sha = /^[0-9a-f]{40}$/.test(body.trim()) ? body.trim() : "";
+        if (sha) latestCache = { at: Date.now(), sha };
+        resolve(sha);
+      });
+    });
+    req.on("timeout", () => { req.destroy(); resolve(""); });
+    req.on("error", () => resolve(""));      // بلا إنترنت: لا نعرف، ولا نضجّ
+  });
+}
+
+let updating = false;
+
+function startUpdate() {
+  if (process.platform !== "win32" && !process.env.UPDATE_CMD) {
+    return { ok: false, code: 501, why: "التحديث الذاتي لويندوز وحده" };
+  }
+  if (updating) return { ok: false, code: 409, why: "التحديث جارٍ بالفعل" };
+  updating = true;
+
+  const logFile = path.join(__dirname, "..", "windows", "update.log");
+  const cmd = process.env.UPDATE_CMD || "powershell.exe";
+  const args = process.env.UPDATE_CMD ? [] : [
+    "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command",
+    "& { irm '" + INSTALLER + "' | iex } *> '" + logFile + "'",
+  ];
+
+  try {
+    // منفصلاً وجوباً: المنصّب يقتل عمليات node التابعة للمشروع، وهذا
+    // الخادم منها. ولولا الفصل لمات المنصّب مع من أطلقه قبل أن يُتمّ.
+    const child = spawn(cmd, args, {
+      detached: true,
+      stdio: "ignore",
+      windowsHide: true,
+      shell: !!process.env.UPDATE_CMD,
+    });
+    child.unref();
+    log("update started -> " + logFile);
+    return { ok: true, log: logFile };
+  } catch (e) {
+    updating = false;
+    return { ok: false, code: 500, why: e.message };
+  }
+}
+
 // ---------- تقديم الواجهة ----------
 // نحقن راية تخبر الصفحة أنها تعمل خلف خادم، فتوجّه اتصالها إليه
 function servePage(res) {
@@ -201,6 +276,45 @@ const server = http.createServer((req, res) => {
     res.writeHead(code, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
     res.end(JSON.stringify(body));
   };
+
+  // النقاط المغيِّرة تشغّل أوامر على أجهزة البيت، وواحدة منها تشغّل
+  // منصِّباً بصلاحيات النظام. وصفحةُ ويبٍ خبيثة تُفتح في الجوال تستطيع
+  // طرقَ عنوانٍ في الشبكة المحلية بصورة مخفيّة. فيُشترط فيها أمران:
+  //   • أن تكون POST — فالصور والوسوم لا تُصدر إلا GET
+  //   • ألّا تحمل Origin من مضيف آخر — وغيابه مقبول، إذ لا يرسله
+  //     المتصفح في طلبات نفس الأصل، وهي حالتنا
+  const CHANGING = ["/update", "/power-on", "/find-tv",
+                    "/proj/find", "/proj/key", "/proj/app", "/proj/wake", "/proj/sleep"];
+  if (CHANGING.includes(url.pathname)) {
+    if (req.method !== "POST") {
+      return json(405, { ok: false, why: "هذه النقطة تُطلب بـ POST" });
+    }
+    const origin = req.headers.origin;
+    if (origin) {
+      let host = "";
+      try { host = new URL(origin).host; } catch {}
+      if (host !== req.headers.host) {
+        log("blocked cross-origin " + req.method + " " + url.pathname + " from " + origin);
+        return json(403, { ok: false, why: "طلب من أصل آخر" });
+      }
+    }
+  }
+
+  if (url.pathname === "/version") {
+    const inst = installedVersion();
+    return latestSha().then((latest) => json(200, {
+      ok: true,
+      installed: inst.sha || null,
+      installedAt: inst.installedAt || null,
+      latest: latest || null,
+      updateAvailable: !!(latest && inst.sha && latest !== inst.sha),
+      updating,
+    }));
+  }
+  if (url.pathname === "/update") {
+    const r = startUpdate();
+    return json(r.ok ? 200 : (r.code || 500), r);
+  }
 
   if (url.pathname === "/health") {
     return json(200, { ok: true, tv: tvIp || null, mac: tvMac || null, seeking: !!seeking });
@@ -415,3 +529,5 @@ server.listen(PORT, "0.0.0.0", () => {
 });
 
 module.exports = server;
+// سطحٌ للاختبار وحده: يسمح بفحص قراءة النسخة ومقارنتها بلا شبكة
+module.exports.__test = { latestSha, installedVersion, startUpdate };
