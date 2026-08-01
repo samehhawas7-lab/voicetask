@@ -123,6 +123,21 @@ body{display:flex;flex-direction:column;height:100dvh;
 .colors button:active{background:var(--surface-3)}
 .colors i{display:block;width:32px;height:7px;border-radius:4px}
 
+/* صفحة الأوامر */
+.card{background:var(--surface-2);border:1px solid var(--line);border-radius:16px;
+  padding:14px;margin-bottom:12px}
+.card h3{margin:0 0 8px;font-size:13.5px;font-weight:700}
+.card p{margin:0 0 10px;font-size:12px;color:var(--muted);line-height:1.85}
+.code{direction:ltr;text-align:left;background:var(--surface);border:1px solid var(--line);
+  border-radius:10px;padding:10px;font-size:11px;line-height:1.6;
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--text);
+  overflow-x:auto;white-space:pre;margin:0 0 8px}
+.info{display:grid;grid-template-columns:auto 1fr;gap:7px 14px;font-size:12.5px;margin:0}
+.info dt{color:var(--muted)}
+.info dd{margin:0;direction:ltr;text-align:left;font-family:ui-monospace,Menlo,monospace;
+  overflow-wrap:anywhere}
+.act-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
+
 /* لوحة اللمس */
 .pad{background:var(--surface-2);border:1px solid var(--line);border-radius:18px;
   height:min(46vh,340px);margin-bottom:12px;touch-action:none;position:relative;
@@ -211,6 +226,7 @@ input::placeholder{color:#5c6579}
       </div>
       <p class="hint">تلقاه في: الإعدادات ← الاتصال ← Wi-Fi ← متقدم</p>
     </div>
+    <button class="btn ghost wide" id="wakeBtn" hidden>تشغيل التلفزيون وهو مطفأ</button>
     <div id="setupNotice" class="notice" hidden></div>
     <details class="diag" id="diagWrap">
       <summary>تفاصيل تقنية</summary>
@@ -357,6 +373,65 @@ input::placeholder{color:#5c6579}
       <button class="key sm" data-btn="LIST">LIST</button>
       <button class="key sm" data-btn="QMENU">Q.MENU</button>
     </div>
+  </section>
+
+  <!-- ٥) أوامر المشروع -->
+  <section class="page" data-name="أوامر المشروع">
+
+    <div class="card">
+      <h3>الحالة</h3>
+      <dl class="info">
+        <dt>الخادم</dt>      <dd id="infoServer">—</dd>
+        <dt>التلفزيون</dt>   <dd id="infoTv">—</dd>
+        <dt>بطاقة الشبكة</dt><dd id="infoMac">—</dd>
+        <dt>القناة</dt>      <dd id="infoLink">—</dd>
+      </dl>
+    </div>
+
+    <div class="act-row">
+      <button class="key sm" id="cmdWake">تشغيل التلفزيون</button>
+      <button class="key sm" id="cmdFind">بحث عن التلفزيون</button>
+      <button class="key sm" id="cmdRepair">إقران جديد</button>
+      <button class="key sm" id="cmdReload">تحديث الصفحة</button>
+    </div>
+
+    <div class="card">
+      <h3>تحديث الخادم</h3>
+      <p>من اللابتوب: زر ويندوز ← <b>powershell</b> ← بالزر الأيمن ← تشغيل
+         كمسؤول، ثم الصق. يجلب آخر نسخة ويحافظ على إعداداتك.</p>
+      <div class="code" data-copy>irm https://raw.githubusercontent.com/samehhawas7-lab/voicetask/main/tvremote/windows/install.ps1 | iex</div>
+      <button class="key sm" data-copy-for="prev">نسخ</button>
+    </div>
+
+    <div class="card">
+      <h3>تثبيت عنوان اللابتوب</h3>
+      <p>يمنع تبدّل العنوان بعد إعادة تشغيل الراوتر. يتحقّق من بقاء
+         الاتصال ويرجع وحده إن انقطع.</p>
+      <div class="code" data-copy>powershell -ExecutionPolicy Bypass -File C:\kmc-remote\tvremote\windows\set-static-ip.ps1</div>
+      <button class="key sm" data-copy-for="prev">نسخ</button>
+    </div>
+
+    <div class="card">
+      <h3>إعادة تشغيل الخادم</h3>
+      <p>حين يتوقف الريموت ولا ينفع التحديث.</p>
+      <div class="code" data-copy>Stop-ScheduledTask "KMC TV Remote"; Start-ScheduledTask "KMC TV Remote"</div>
+      <button class="key sm" data-copy-for="prev">نسخ</button>
+    </div>
+
+    <div class="card">
+      <h3>سجل الخادم</h3>
+      <p>آخر أربعين سطراً — ابعثها لي عند أي خلل.</p>
+      <div class="code" data-copy>Get-Content C:\kmc-remote\tvremote\windows\server.log -Tail 40</div>
+      <button class="key sm" data-copy-for="prev">نسخ</button>
+    </div>
+
+    <div class="card">
+      <h3>تفاصيل تقنية</h3>
+      <p>سجل هذه الجلسة داخل الجوال.</p>
+      <div class="code" id="cmdDiag" style="max-height:180px;white-space:pre-wrap"></div>
+      <button class="key sm" id="cmdCopyDiag">نسخ التفاصيل</button>
+    </div>
+
   </section>
 
 </div>
@@ -1173,9 +1248,12 @@ tv.onReady = () => {
 function runCmd(cmd){
   switch (cmd){
     case "power":
-      // إطفاء كامل: التلفزيون يدخل السكون وإيقاظه يحتاج حزمة شبكة
-      // لا يستطيع المتصفح إرسالها، فلا رجعة منه إلا بالريموت الأصلي
-      if (!confirm("إطفاء كامل للتلفزيون؟\n\nما راح تقدر تشغّله من جوالك — تحتاج الريموت الأصلي.\n\nلو تبي إطفاء ترجع منه، اضغط الزر ضغطة قصيرة بدل المطوّلة.")) return Promise.resolve();
+      // إطفاء كامل: التلفزيون يدخل السكون. وإيقاظه يحتاج حزمة شبكة لا
+      // يملكها المتصفح — لكن الخادم يملكها، فمع الخادم الإطفاء ذو رجعة
+      if (!confirm(onServer
+            ? "إطفاء كامل للتلفزيون؟\n\nتقدر ترجّعه من التطبيق — زر «تشغيل التلفزيون» في صفحة الأوامر."
+            : "إطفاء كامل للتلفزيون؟\n\nما راح تقدر تشغّله من جوالك — تحتاج الريموت الأصلي.\n\nلو تبي إطفاء ترجع منه، اضغط الزر ضغطة قصيرة بدل المطوّلة."))
+        return Promise.resolve();
       return tv.request(SSAP.power);
     case "screenOff": return tv.request(SSAP.screenOff);
     case "screenOn":  return tv.request(SSAP.screenOn);
@@ -1523,7 +1601,102 @@ $("copyDiagBtn").onclick = () => {
   }
 };
 
-if (typeof window.__TV_PROXY__ !== "undefined"){
+/* ============================================================
+   الإيقاظ وصفحة الأوامر — لا تعملان إلا خلف الخادم
+   المتصفح لا يملك UDP ولا البثّ العام، فالإيقاظ من عنده مستحيل.
+   أما الخادم فبرنامج عادي يرسل الحزمة في جزء من الثانية.
+   ============================================================ */
+const onServer = typeof window.__TV_PROXY__ !== "undefined";
+
+function wakeTv(btn){
+  if (!onServer){
+    toast("الإيقاظ يحتاج الخادم — افتح الريموت من عنوان اللابتوب", true);
+    return Promise.resolve(false);
+  }
+  const label = btn ? btn.textContent : "";
+  if (btn){ btn.disabled = true; btn.textContent = "جاري الإيقاظ…"; }
+  diag("أطلب من الخادم إيقاظ التلفزيون");
+  toast("أُرسلت إشارة التشغيل — يأخذ نحو عشر ثوانٍ");
+
+  return fetch("/power-on", { cache: "no-store" })
+    .then(r => r.json())
+    .then(r => {
+      if (r.ok){
+        diag("استيقظ التلفزيون على " + r.tv);
+        toast("اشتغل التلفزيون");
+        if (tv.status === "disconnected") tv.connect(r.tv || $("ipInput").value.trim());
+        return true;
+      }
+      diag("فشل الإيقاظ: " + r.why);
+      toast(r.why || "ما استجاب التلفزيون", true);
+      return false;
+    })
+    .catch(e => { diag("خطأ في الإيقاظ: " + e.message); toast("تعذّر الوصول للخادم", true); return false; })
+    .finally(() => { if (btn){ btn.disabled = false; btn.textContent = label; } });
+}
+
+(function setupCommandsPage(){
+  const wake = $("wakeBtn");
+  if (wake){
+    wake.hidden = !onServer;
+    wake.onclick = () => wakeTv(wake);
+  }
+
+  const cw = $("cmdWake");
+  if (cw) cw.onclick = () => wakeTv(cw);
+
+  const cf = $("cmdFind");
+  if (cf) cf.onclick = () => {
+    if (!onServer) return toast("يحتاج الخادم", true);
+    cf.disabled = true; const t = cf.textContent; cf.textContent = "جاري البحث…";
+    fetch("/find-tv", { cache: "no-store" }).then(r => r.json())
+      .then(r => { paintInfo(); toast(r.ok ? "التلفزيون على " + r.tv : "ما لقيته في الشبكة", !r.ok); })
+      .catch(() => toast("تعذّر الوصول للخادم", true))
+      .finally(() => { cf.disabled = false; cf.textContent = t; });
+  };
+
+  const cr = $("cmdRepair");
+  if (cr) cr.onclick = () => $("padRepair").click();
+
+  const cl = $("cmdReload");
+  if (cl) cl.onclick = () => location.reload();
+
+  // زر نسخ لكل كتلة أمر — النسخ من الشاشة على الجوال متعب
+  document.querySelectorAll("[data-copy-for]").forEach(btn => {
+    const code = btn.previousElementSibling;
+    btn.onclick = () => {
+      const text = code ? code.textContent : "";
+      if (navigator.clipboard && navigator.clipboard.writeText){
+        navigator.clipboard.writeText(text)
+          .then(() => toast("نُسخ — الصقه في PowerShell"),
+                () => toast("انسخه يدوياً من فوق", true));
+      } else toast("انسخه يدوياً من فوق", true);
+    };
+  });
+
+  const cd = $("cmdCopyDiag");
+  if (cd) cd.onclick = () => $("copyDiagBtn").click();
+})();
+
+function paintInfo(){
+  const set = (id, v) => { const el = $(id); if (el) el.textContent = v; };
+  set("infoServer", onServer ? location.host : "بلا خادم (اتصال مباشر)");
+  set("infoTv", tv.ip || "—");
+  set("infoLink", tv.status === "connected"
+      ? (tv.pointer && tv.pointer.readyState === 1 ? "متصلة + أزرار التنقل" : "متصلة بلا أزرار تنقل")
+      : "غير متصلة");
+  const dl = $("cmdDiag");
+  if (dl) dl.textContent = diagLines.slice(-40).join("\n");
+
+  if (!onServer) return set("infoMac", "—");
+  fetch("/health", { cache: "no-store" }).then(r => r.json())
+    .then(h => { set("infoTv", h.tv || tv.ip || "—"); set("infoMac", h.mac || "غير معروف بعد"); })
+    .catch(() => set("infoMac", "—"));
+}
+setInterval(() => { if (!document.hidden) paintInfo(); }, 5000);
+paintInfo();
+
+if (onServer){
   diag("وضع الخادم: الأوامر تمر عبر " + location.host + " بأذونات كاملة");
   const fromServer = window.__TV_PROXY__;
   if (fromServer && fromServer !== "auto"){

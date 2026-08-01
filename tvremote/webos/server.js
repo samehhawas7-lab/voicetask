@@ -20,7 +20,8 @@ const https = require("https");
 const fs = require("fs");
 const path = require("path");
 const { WebSocketServer, WebSocket } = require("ws");
-const { discover } = require("./discover");
+const { discover, verify } = require("./discover");
+const { wake, macOf } = require("./wol");
 
 // حين يعمل الخادم خدمةً في الخلفية لا سبيل لتمرير متغيّرات البيئة إليه،
 // فيقرأ إعداداته من ملف بجانبه يكتبه المنصّب
@@ -42,28 +43,62 @@ const PAGE = path.join(__dirname, "..", "..", "tv.html");
 // إعادة تشغيل، وكثير من راوترات الجيل الخامس لا تتيح حجزه. فبدل أن
 // نُلزم صاحب البيت بضبط راوتره، يعثر الخادم على التلفزيون بنفسه.
 let tvIp = process.env.TV_IP || CFG.tvIp || "";
+let tvMac = CFG.tvMac || "";        // يلزم لإيقاظه وهو مطفأ
 let seeking = null;                 // وعد المسح الجاري، كيلا نمسح مرّتين معاً
 
-function saveTvIp(ip) {
-  if (!ip || ip === CFG.tvIp) return;
-  CFG.tvIp = ip;
+function saveConfig() {
   try {
     fs.writeFileSync(path.join(__dirname, "config.json"),
-      JSON.stringify({ tvIp: ip, tvPort: TV_PORT, port: PORT }, null, 2));
+      JSON.stringify({ tvIp, tvMac, tvPort: TV_PORT, port: PORT }, null, 2));
   } catch { /* القرص للقراءة فقط أحياناً — لا يمنع العمل */ }
+}
+
+// عنوان البطاقة لا يظهر في جدول ARP إلا لمن خاطبناه حديثاً، فنلتقطه
+// والتلفزيون شغّال ونحفظه — لأننا سنحتاجه بالضبط حين يكون مطفأً
+async function rememberMac() {
+  if (!tvIp) return;
+  const mac = await macOf(tvIp);
+  if (mac && mac !== tvMac) {
+    tvMac = mac;
+    log("عنوان بطاقة التلفزيون: " + mac);
+    saveConfig();
+  }
 }
 
 /** يتحقّق من العنوان المعروف، وإن سقط بحث عن التلفزيون في الشبكة */
 function ensureTv() {
   if (seeking) return seeking;
   seeking = discover(log, tvIp)
-    .then((ip) => {
-      if (ip && ip !== tvIp) { log("عنوان التلفزيون صار " + ip); saveTvIp(ip); }
-      if (ip) tvIp = ip;
+    .then(async (ip) => {
+      if (ip && ip !== tvIp) { log("عنوان التلفزيون صار " + ip); tvIp = ip; saveConfig(); }
+      if (ip) { tvIp = ip; await rememberMac(); }
       return ip;
     })
     .finally(() => { seeking = null; });
   return seeking;
+}
+
+/**
+ * يوقظ التلفزيون ثم ينتظر ظهوره على الشبكة.
+ * الحزمة تصل في جزء من الثانية، لكن webOS يأخذ نحو عشر ثوانٍ حتى يفتح
+ * منفذه — فننتظر بدل أن نُبلّغ بالنجاح قبل أوانه.
+ */
+async function powerOn() {
+  if (!tvMac) {
+    await ensureTv();               // قد يكون شغّالاً فنلتقط بطاقته الآن
+    if (!tvMac) return { ok: false, why: "ما أعرف عنوان بطاقة التلفزيون بعد — شغّله مرة واحدة يدوياً وأنا أحفظه" };
+  }
+  try {
+    const n = await wake(tvMac);
+    log("أُرسلت حزمة الإيقاظ إلى " + tvMac + " (" + n + " مرة)");
+  } catch (e) {
+    return { ok: false, why: "تعذّر إرسال حزمة الإيقاظ: " + e.message };
+  }
+  for (let i = 0; i < 12; i++) {
+    await new Promise((r) => setTimeout(r, 2000));
+    if (await verify(tvIp)) { log("✓ التلفزيون استيقظ"); return { ok: true, tv: tvIp }; }
+  }
+  return { ok: false, why: "أُرسلت الحزمة لكن التلفزيون ما استجاب — فعّل «تشغيل التلفزيون عبر Wi-Fi» من إعداداته" };
 }
 
 // ---------- تقديم الواجهة ----------
@@ -84,16 +119,22 @@ function servePage(res) {
 
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, "http://localhost");
+  const json = (code, body) => {
+    res.writeHead(code, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+    res.end(JSON.stringify(body));
+  };
+
   if (url.pathname === "/health") {
-    res.writeHead(200, { "Content-Type": "application/json" });
-    return res.end(JSON.stringify({ ok: true, tv: tvIp || null, seeking: !!seeking }));
+    return json(200, { ok: true, tv: tvIp || null, mac: tvMac || null, seeking: !!seeking });
   }
   // زر يدوي لإعادة البحث حين يُنقل التلفزيون أو يتبدّل عنوانه
   if (url.pathname === "/find-tv") {
-    return ensureTv().then((ip) => {
-      res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ ok: !!ip, tv: ip || null }));
-    });
+    return ensureTv().then((ip) => json(200, { ok: !!ip, tv: ip || null, mac: tvMac || null }));
+  }
+  // إيقاظه وهو مطفأ — ما لا يقدر عليه المتصفح وحده
+  if (url.pathname === "/power-on") {
+    return powerOn().then((r) => json(r.ok ? 200 : 503, r))
+                    .catch((e) => json(500, { ok: false, why: e.message }));
   }
   servePage(res);
 });
