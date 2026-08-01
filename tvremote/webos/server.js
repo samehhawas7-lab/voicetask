@@ -60,7 +60,7 @@ async function rememberMac() {
   const mac = await macOf(tvIp);
   if (mac && mac !== tvMac) {
     tvMac = mac;
-    log("عنوان بطاقة التلفزيون: " + mac);
+    log("TV MAC address: " + mac);
     saveConfig();
   }
 }
@@ -70,7 +70,7 @@ function ensureTv() {
   if (seeking) return seeking;
   seeking = discover(log, tvIp)
     .then(async (ip) => {
-      if (ip && ip !== tvIp) { log("عنوان التلفزيون صار " + ip); tvIp = ip; saveConfig(); }
+      if (ip && ip !== tvIp) { log("TV address is now " + ip); tvIp = ip; saveConfig(); }
       if (ip) { tvIp = ip; await rememberMac(); }
       return ip;
     })
@@ -90,13 +90,13 @@ async function powerOn() {
   }
   try {
     const n = await wake(tvMac);
-    log("أُرسلت حزمة الإيقاظ إلى " + tvMac + " (" + n + " مرة)");
+    log("wake packet sent to " + tvMac + " (x" + n + ")");
   } catch (e) {
     return { ok: false, why: "تعذّر إرسال حزمة الإيقاظ: " + e.message };
   }
   for (let i = 0; i < 12; i++) {
     await new Promise((r) => setTimeout(r, 2000));
-    if (await verify(tvIp)) { log("✓ التلفزيون استيقظ"); return { ok: true, tv: tvIp }; }
+    if (await verify(tvIp)) { log("OK  TV is awake"); return { ok: true, tv: tvIp }; }
   }
   return { ok: false, why: "أُرسلت الحزمة لكن التلفزيون ما استجاب — فعّل «تشغيل التلفزيون عبر Wi-Fi» من إعداداته" };
 }
@@ -190,7 +190,7 @@ wss.on("connection", async (client, req) => {
     const target = retarget(raw);
     if (!target) return bail(1008, "هدف غير صالح");
 
-    log("→ فتح قناة إلى " + target);
+    log("->  opening channel to " + target);
     upstream = new WebSocket(target, {
       rejectUnauthorized: false,   // شهادة التلفزيون موقّعة ذاتياً
       handshakeTimeout: 8000,
@@ -199,7 +199,7 @@ wss.on("connection", async (client, req) => {
 
     upstream.on("open", () => {
       ready = true;
-      log("✓ التلفزيون رد على " + target);
+      log("OK  TV answered on " + target);
       for (const m of queue.splice(0)) upstream.send(m);
     });
 
@@ -209,20 +209,20 @@ wss.on("connection", async (client, req) => {
 
     upstream.on("close", (code, reason) => {
       if (!ready) return;          // فشل الوصل يعالجه معالج الخطأ أدناه
-      log("✗ أُغلقت قناة التلفزيون (" + code + (reason ? " " + reason : "") + ")");
+      log("--  TV channel closed (" + code + (reason ? " " + reason : "") + ")");
       bail(code, reason && reason.toString());
     });
 
     // تعذّر الوصول غالباً يعني أن الراوتر أعطى التلفزيون عنواناً جديداً،
     // فنبحث عنه مرة ونعيد المحاولة بدل أن نُفشل الطلب على المستخدم
     upstream.on("error", async (e) => {
-      log("✗ خطأ نحو التلفزيون: " + e.message);
+      log("ERR error towards TV: " + e.message);
       if (ready || searched || process.env.TV_URL) return bail(1011, "تعذّر الوصول للتلفزيون");
       searched = true;
       const before = tvIp;
       const found = await ensureTv();
       if (found && found !== before && client.readyState === WebSocket.OPEN) {
-        log("أعيد المحاولة على " + found);
+        log("retrying on " + found);
         return open();
       }
       bail(1011, "تعذّر الوصول للتلفزيون");
@@ -261,13 +261,13 @@ function localAddresses() {
 server.listen(PORT, "0.0.0.0", () => {
   const addrs = localAddresses();
   console.log("──────────────────────────────────────────");
-  console.log("  ريموت KMC — الخادم يعمل");
+  console.log("  KMC TV Remote - server running");
   console.log("");
-  console.log("  افتح من جوالك:");
+  console.log("  open on your phone:");
   for (const a of addrs) console.log(`     http://${a}:${PORT}`);
-  if (!addrs.length) console.log("     (ما لقيت عنواناً — تأكد من اتصال الواي فاي)");
+  if (!addrs.length) console.log("     (no address found - check the Wi-Fi connection)");
   console.log("");
-  console.log("  التلفزيون: " + (tvIp ? tvIp + ":" + TV_PORT : "يُبحث عنه…"));
+  console.log("  TV: " + (tvIp ? tvIp + ":" + TV_PORT : "searching..."));
   console.log("──────────────────────────────────────────");
 
   // نتحقّق من العنوان المحفوظ فور الإقلاع، فيكون جاهزاً قبل أول ضغطة زر

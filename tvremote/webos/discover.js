@@ -76,9 +76,9 @@ async function discover(log = () => {}, prefer = "") {
   if (prefer && (await verify(prefer))) return prefer;
 
   const bases = subnets();
-  if (!bases.length) { log("ما لقيت شبكة محلية"); return null; }
+  if (!bases.length) { log("no local network found"); return null; }
 
-  log("أبحث عن التلفزيون في " + bases.map((b) => b + ".x").join(" و ") + " …");
+  log("searching for the TV in " + bases.map((b) => b + ".x").join(" and ") + " ...");
 
   const targets = [];
   for (const b of bases) {
@@ -99,12 +99,12 @@ async function discover(log = () => {}, prefer = "") {
   }));
 
   for (const ip of open) {
-    if (await isWebOS(ip)) { log("✓ التلفزيون على " + ip); return ip; }
+    if (await isWebOS(ip)) { log("OK  TV found at " + ip); return ip; }
   }
 
   log(open.length
-    ? "فتحت " + open.length + " أجهزة المنفذ لكن لا واحد منها تلفزيون webOS"
-    : "ما وجدت تلفزيوناً — تأكد أنه موصول بالكهرباء وعلى نفس الشبكة");
+    ? "" + open.length + " host(s) had the port open but none is a webOS TV"
+    : "no TV found - check it is plugged in and on the same network");
   return null;
 }
 
