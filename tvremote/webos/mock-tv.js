@@ -127,6 +127,10 @@ wss.on("connection", (ws, req) => {
           { id: "shahid",             title: "Shahid",      icon: "" }
         ]});
 
+      case "ssap://com.webos.service.connectionmanager/getinfo":
+        return reply({ wifiInfo: { macAddress: "A8:23:FE:11:22:33", ipAddress: "192.168.8.77" },
+                       wiredInfo: { macAddress: "00:00:00:00:00:00" } });
+
       case "ssap://com.webos.applicationManager/getForegroundAppInfo":
         return reply({ appId: "netflix" });
 

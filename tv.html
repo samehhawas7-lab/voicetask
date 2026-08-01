@@ -692,6 +692,20 @@ input::placeholder{color:#5c6579}
   </div>
 
   <div class="card">
+    <h3>لا يشتغل التلفزيون بزرّ «تشغيل»؟</h3>
+    <p>الخادم يرسل حزمة الإيقاظ إلى ثلاث وجهات وخمس دفعات. فإن لم يستجب
+       فالسبب في التلفزيون لا في الشبكة. تحقّق من اثنين بريموته الأصلي:</p>
+    <p style="color:var(--text)">
+      <b>١)</b> الإعدادات ← عام ← الأجهزة ← إعدادات إضافية ←
+      <b>تشغيل التلفاز بالهاتف المحمول</b> ← فعّل <b>«قم بالتشغيل عبر Wi-Fi»</b>
+      <br><br>
+      <b>٢)</b> الإعدادات ← عام ← <b>Quick Start+</b> ← فعّله
+    </p>
+    <p>الثاني هو ما يُبقي بطاقة الشبكة مغذّاة في السكون. وبدونه تنام
+       البطاقة مع التلفزيون فلا تسمع شيئاً — وهذا أشيع سبب.</p>
+  </div>
+
+  <div class="card">
     <h3>تفاصيل تقنية</h3>
     <p>سجل هذه الجلسة داخل الجوال.</p>
     <div class="code" id="cmdDiag" style="max-height:180px;white-space:pre-wrap"></div>
@@ -1551,6 +1565,23 @@ tv.onPointer = (ok, reason) => {
 
 // اسم الطراز في الرأس — لمسة تعريفية مثل التطبيقات الاحترافية
 tv.onReady = () => {
+  // بطاقةُ الشبكة من التلفزيون نفسه أوثق من استنتاجها من جدول ARP،
+  // وعليها يقوم إيقاظه وهو مطفأ. نسألها مرة عند كل جهوز.
+  if (onServer){
+    tv.request("ssap://com.webos.service.connectionmanager/getinfo").then(net => {
+      const pick = (o) => (o && typeof o.macAddress === "string") ? o.macAddress : "";
+      const mac = (pick(net && net.wifiInfo) || pick(net && net.wifi) ||
+                   pick(net && net.wiredInfo) || pick(net && net.wired) || "").toLowerCase();
+      if (!/^([0-9a-f]{2}:){5}[0-9a-f]{2}$/.test(mac)) return;
+      diag("بطاقة التلفزيون من التلفزيون نفسه: " + mac);
+      fetch("/tv-mac", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mac }),
+      }).then(() => paintInfo()).catch(() => {});
+    }).catch(() => {});
+  }
+
   tv.request(SSAP.sysInfo).then(info => {
     const model = info && (info.modelName || info.model);
     $("modelName").textContent = model ? "webOS TV " + model : "متصل بـ " + tv.ip;

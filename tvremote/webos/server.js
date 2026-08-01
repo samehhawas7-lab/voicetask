@@ -94,17 +94,29 @@ async function powerOn() {
     await ensureTv();               // قد يكون شغّالاً فنلتقط بطاقته الآن
     if (!tvMac) return { ok: false, why: "ما أعرف عنوان بطاقة التلفزيون بعد — شغّله مرة واحدة يدوياً وأنا أحفظه" };
   }
+  let info;
   try {
-    const n = await wake(tvMac);
-    log("wake packet sent to " + tvMac + " (x" + n + ")");
+    info = await wake(tvMac, { ip: tvIp });
+    log("wake: " + info.sent + " packets to " + info.targets.join(", ") +
+        (info.pinned ? " (neighbour pinned)" : ""));
   } catch (e) {
     return { ok: false, why: "تعذّر إرسال حزمة الإيقاظ: " + e.message };
   }
-  for (let i = 0; i < 12; i++) {
+  // ننتظر نصف دقيقة: webOS يأخذ نحو عشر ثوانٍ ليفتح منفذه بعد الإقلاع
+  for (let i = 0; i < 14; i++) {
+    if (await verify(tvIp)) { log("OK  TV is awake"); return { ok: true, tv: tvIp, mac: tvMac }; }
     await new Promise((r) => setTimeout(r, 2000));
-    if (await verify(tvIp)) { log("OK  TV is awake"); return { ok: true, tv: tvIp }; }
   }
-  return { ok: false, why: "أُرسلت الحزمة لكن التلفزيون ما استجاب — فعّل «تشغيل التلفزيون عبر Wi-Fi» من إعداداته" };
+  return {
+    ok: false,
+    mac: tvMac,
+    sent: info.sent,
+    targets: info.targets,
+    pinned: info.pinned,
+    why: "أُرسلت " + info.sent + " حزمة إلى " + info.targets.length +
+         " وجهة، والتلفزيون ما استجاب. الغالب أن «تشغيل التلفزيون عبر Wi-Fi» " +
+         "غير مفعّل، أو أن بطاقة شبكته تنام معه — راجع الخطوات في التطبيق.",
+  };
 }
 
 
@@ -283,7 +295,7 @@ const server = http.createServer((req, res) => {
   //   • أن تكون POST — فالصور والوسوم لا تُصدر إلا GET
   //   • ألّا تحمل Origin من مضيف آخر — وغيابه مقبول، إذ لا يرسله
   //     المتصفح في طلبات نفس الأصل، وهي حالتنا
-  const CHANGING = ["/update", "/power-on", "/find-tv",
+  const CHANGING = ["/update", "/power-on", "/find-tv", "/tv-mac",
                     "/proj/find", "/proj/key", "/proj/app", "/proj/wake", "/proj/sleep"];
   if (CHANGING.includes(url.pathname)) {
     if (req.method !== "POST") {
@@ -298,6 +310,22 @@ const server = http.createServer((req, res) => {
         return json(403, { ok: false, why: "طلب من أصل آخر" });
       }
     }
+  }
+
+  // التلفزيون نفسه أوثق من جدول ARP: الجدول قد يعطي بطاقة الراوتر أو
+  // بطاقةَ منفذٍ سلكيٍّ غير مستعمل، والتلفزيون يعرف بطاقته يقيناً
+  if (url.pathname === "/tv-mac") {
+    let body = "";
+    req.on("data", (c) => { body += c; if (body.length > 512) req.destroy(); });
+    return req.on("end", () => {
+      let mac = "";
+      try { mac = String(JSON.parse(body || "{}").mac || "").toLowerCase(); } catch {}
+      if (!/^([0-9a-f]{2}:){5}[0-9a-f]{2}$/.test(mac) || /^(00:){5}00$/.test(mac)) {
+        return json(400, { ok: false, why: "عنوان بطاقة غير صالح" });
+      }
+      if (mac !== tvMac) { tvMac = mac; saveConfig(); log("TV reported its MAC: " + mac); }
+      json(200, { ok: true, mac: tvMac });
+    });
   }
 
   if (url.pathname === "/version") {
