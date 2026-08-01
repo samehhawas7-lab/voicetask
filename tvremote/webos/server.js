@@ -21,9 +21,21 @@ const fs = require("fs");
 const path = require("path");
 const { WebSocketServer, WebSocket } = require("ws");
 
-const PORT = Number(process.env.PORT || 8099);
-const TV_IP = process.env.TV_IP || "";
-const TV_PORT = Number(process.env.TV_PORT || 3001);
+// حين يعمل الخادم خدمةً في الخلفية لا سبيل لتمرير متغيّرات البيئة إليه،
+// فيقرأ إعداداته من ملف بجانبه يكتبه المنصّب
+function fileConfig() {
+  try {
+    const raw = fs.readFileSync(path.join(__dirname, "config.json"), "utf8");
+    return JSON.parse(raw.replace(/^﻿/, ""));   // محرّرات ويندوز تضيف BOM خفيّاً
+  } catch {
+    return {};
+  }
+}
+const CFG = fileConfig();
+
+const PORT = Number(process.env.PORT || CFG.port || 8099);
+const TV_IP = process.env.TV_IP || CFG.tvIp || "";
+const TV_PORT = Number(process.env.TV_PORT || CFG.tvPort || 3001);
 const PAGE = path.join(__dirname, "..", "..", "tv.html");
 
 // ---------- تقديم الواجهة ----------
