@@ -693,7 +693,11 @@ tv.onStatus = (status, detail) => {
   if (typeof screenSub === "function") screenSub("dev-tv", ready ? "متصل" : (STATUS_TEXT[status] || status));
   $("connectBtn").disabled = status === "connecting";
 
-  if (!ready) $("modelName").textContent = detail || STATUS_TEXT[status] || status;
+  // حالة التلفزيون تخصّ صفحته وحدها: كانت تكتب فوق عنوان الشاشة
+  // الرئيسية فتقول «غير متصل» وليس ثمّة ما يُتصل به هناك أصلاً
+  if (!ready && currentScreen === "dev-tv"){
+    $("modelName").textContent = detail || STATUS_TEXT[status] || status;
+  }
   if (status === "error") showTroubleshoot(detail);
 };
 
@@ -1360,6 +1364,11 @@ function wakeTv(btn){
 
 function paintInfo(){
   const set = (id, v) => { const el = $(id); if (el) el.textContent = v; };
+  const home = document.getElementById("home");
+  if (home){
+    home.dataset.sub = onServer ? "الخادم يعمل · " + location.hostname : "اختر جهازاً";
+    if (currentScreen === "home") $("modelName").textContent = home.dataset.sub;
+  }
   set("infoServer", onServer ? location.host : "بلا خادم (اتصال مباشر)");
   set("infoTv", tv.ip || "—");
   set("infoLink", tv.status === "connected"
