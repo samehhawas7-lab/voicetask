@@ -120,7 +120,11 @@ wss.on("connection", (ws, req) => {
           { id: "youtube.leanback.v4",title: "YouTube",     icon: "" },
           { id: "com.webos.app.livetv", title: "Live TV",   icon: "" },
           { id: "amazon",             title: "Prime Video", icon: "" },
-          { id: "com.webos.app.hdmi1",title: "HDMI 1",      icon: "" }
+          { id: "com.webos.app.hdmi1",title: "HDMI 1",      icon: "" },
+          { id: "com.disney.disneyplus-prod", title: "Disney+", icon: "" },
+          { id: "com.webos.app.browser", title: "Web Browser", icon: "" },
+          { id: "spotify",            title: "Spotify",     icon: "" },
+          { id: "shahid",             title: "Shahid",      icon: "" }
         ]});
 
       case "ssap://com.webos.applicationManager/getForegroundAppInfo":
