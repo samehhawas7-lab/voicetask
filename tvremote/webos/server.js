@@ -20,6 +20,7 @@ const https = require("https");
 const fs = require("fs");
 const path = require("path");
 const { WebSocketServer, WebSocket } = require("ws");
+const { discover } = require("./discover");
 
 // حين يعمل الخادم خدمةً في الخلفية لا سبيل لتمرير متغيّرات البيئة إليه،
 // فيقرأ إعداداته من ملف بجانبه يكتبه المنصّب
@@ -34,9 +35,36 @@ function fileConfig() {
 const CFG = fileConfig();
 
 const PORT = Number(process.env.PORT || CFG.port || 8099);
-const TV_IP = process.env.TV_IP || CFG.tvIp || "";
 const TV_PORT = Number(process.env.TV_PORT || CFG.tvPort || 3001);
 const PAGE = path.join(__dirname, "..", "..", "tv.html");
+
+// عنوان التلفزيون متغيّر لا ثابت: الراوتر يمنحه عنواناً جديداً بعد كل
+// إعادة تشغيل، وكثير من راوترات الجيل الخامس لا تتيح حجزه. فبدل أن
+// نُلزم صاحب البيت بضبط راوتره، يعثر الخادم على التلفزيون بنفسه.
+let tvIp = process.env.TV_IP || CFG.tvIp || "";
+let seeking = null;                 // وعد المسح الجاري، كيلا نمسح مرّتين معاً
+
+function saveTvIp(ip) {
+  if (!ip || ip === CFG.tvIp) return;
+  CFG.tvIp = ip;
+  try {
+    fs.writeFileSync(path.join(__dirname, "config.json"),
+      JSON.stringify({ tvIp: ip, tvPort: TV_PORT, port: PORT }, null, 2));
+  } catch { /* القرص للقراءة فقط أحياناً — لا يمنع العمل */ }
+}
+
+/** يتحقّق من العنوان المعروف، وإن سقط بحث عن التلفزيون في الشبكة */
+function ensureTv() {
+  if (seeking) return seeking;
+  seeking = discover(log, tvIp)
+    .then((ip) => {
+      if (ip && ip !== tvIp) { log("عنوان التلفزيون صار " + ip); saveTvIp(ip); }
+      if (ip) tvIp = ip;
+      return ip;
+    })
+    .finally(() => { seeking = null; });
+  return seeking;
+}
 
 // ---------- تقديم الواجهة ----------
 // نحقن راية تخبر الصفحة أنها تعمل خلف خادم، فتوجّه اتصالها إليه
@@ -48,7 +76,7 @@ function servePage(res) {
     res.writeHead(500, { "Content-Type": "text/plain; charset=utf-8" });
     return res.end("ما لقيت ملف tv.html بجذر المستودع");
   }
-  const flag = `<script>window.__TV_PROXY__=${JSON.stringify(TV_IP || "auto")};</script>\n`;
+  const flag = `<script>window.__TV_PROXY__=${JSON.stringify(tvIp || "auto")};</script>\n`;
   html = html.replace("<script>", flag + "<script>");
   res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" });
   res.end(html);
@@ -58,7 +86,14 @@ const server = http.createServer((req, res) => {
   const url = new URL(req.url, "http://localhost");
   if (url.pathname === "/health") {
     res.writeHead(200, { "Content-Type": "application/json" });
-    return res.end(JSON.stringify({ ok: true, tv: TV_IP || null }));
+    return res.end(JSON.stringify({ ok: true, tv: tvIp || null, seeking: !!seeking }));
+  }
+  // زر يدوي لإعادة البحث حين يُنقل التلفزيون أو يتبدّل عنوانه
+  if (url.pathname === "/find-tv") {
+    return ensureTv().then((ip) => {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ ok: !!ip, tv: ip || null }));
+    });
   }
   servePage(res);
 });
@@ -69,72 +104,100 @@ const server = http.createServer((req, res) => {
 // ترويسة Origin، فيعامله التلفزيون معاملة البرامج لا صفحات الويب.
 const wss = new WebSocketServer({ server });
 
-wss.on("connection", (client, req) => {
-  const url = new URL(req.url, "http://localhost");
-  let target = url.searchParams.get("target") || `wss://${TV_IP}:${TV_PORT}`;
-
-  // TV_URL يفرض الوجهة كاملة (للاختبار أو لتلفزيون بمنفذ غير معتاد)
-  if (process.env.TV_URL) {
+// نستبدل المضيف بعنوان التلفزيون المعروف ونُبقي المنفذ والمسار: قناة
+// المؤشّر تأتي بمنفذ ومسار خاصّين. وفي هذا أمنٌ أيضاً — يستحيل أن يُمرَّر
+// الاتصال إلى مضيف آخر مهما طلبت الصفحة.
+function retarget(raw) {
+  if (process.env.TV_URL) {                    // للاختبار أو منفذ غير معتاد
     const base = process.env.TV_URL.replace(/\/+$/, "");
-    let suffix = "";
-    try { const u = new URL(target); suffix = u.pathname === "/" ? "" : u.pathname; } catch {}
-    target = base + suffix;
+    try { const u = new URL(raw); return base + (u.pathname === "/" ? "" : u.pathname); }
+    catch { return base; }
   }
+  try {
+    const u = new URL(raw);
+    if (!/^wss?:$/.test(u.protocol)) return null;
+    u.hostname = tvIp;
+    return u.toString();
+  } catch { return null; }
+}
 
-  if (!/^wss?:\/\//.test(target)) {
-    client.close(1008, "هدف غير صالح");
-    return;
+wss.on("connection", async (client, req) => {
+  const url = new URL(req.url, "http://localhost");
+  const raw = url.searchParams.get("target") || `wss://0.0.0.0:${TV_PORT}`;
+
+  if (!tvIp && !process.env.TV_URL) await ensureTv();
+  if (!tvIp && !process.env.TV_URL) {
+    return client.close(1011, "ما وجدت التلفزيون في الشبكة");
   }
-
-  // لا نسمح بتمرير الاتصال إلى أي مضيف: الخادم جسر للتلفزيون وحده
-  if (TV_IP) {
-    let host = "";
-    try { host = new URL(target).hostname; } catch {}
-    if (host !== TV_IP && !process.env.TV_URL) {
-      log("✗ رُفض هدف خارج التلفزيون: " + target);
-      return client.close(1008, "هدف غير مسموح");
-    }
-  }
-
-  log("→ فتح قناة إلى " + target);
-
-  const upstream = new WebSocket(target, {
-    rejectUnauthorized: false,   // شهادة التلفزيون موقّعة ذاتياً
-    handshakeTimeout: 8000,
-    // بلا ترويسة Origin عمداً — هي سبب تقييد التلفزيون للمتصفحات
-  });
 
   const queue = [];
   let ready = false;
+  let upstream = null;
+  let searched = false;             // نبحث مرة واحدة لكل اتصال، لا مرّتين
 
-  upstream.on("open", () => {
-    ready = true;
-    log("✓ التلفزيون رد على " + target);
-    for (const m of queue.splice(0)) upstream.send(m);
-  });
+  // 1004 و1005 و1006 و1015 محجوزة: يرفض البروتوكول إرسالها، ومحاولة
+  // تمرير رمز إغلاق التلفزيون كما هو تُسقط الخادم كلّه
+  const sendable = (c) =>
+    (c >= 1000 && c <= 4999 && ![1004, 1005, 1006, 1015].includes(c)) ? c : 1011;
 
-  upstream.on("message", (data) => {
-    if (client.readyState === WebSocket.OPEN) client.send(data.toString());
-  });
+  const bail = (code, why) => {
+    if (client.readyState !== WebSocket.OPEN) return;
+    try { client.close(sendable(code), why || ""); } catch { client.terminate(); }
+  };
 
-  upstream.on("close", (code, reason) => {
-    log("✗ أُغلقت قناة التلفزيون (" + code + (reason ? " " + reason : "") + ")");
-    if (client.readyState === WebSocket.OPEN) client.close(code >= 1000 && code <= 4999 ? code : 1011);
-  });
+  function open() {
+    const target = retarget(raw);
+    if (!target) return bail(1008, "هدف غير صالح");
 
-  upstream.on("error", (e) => {
-    log("✗ خطأ نحو التلفزيون: " + e.message);
-    try { client.close(1011, "تعذّر الوصول للتلفزيون"); } catch {}
-  });
+    log("→ فتح قناة إلى " + target);
+    upstream = new WebSocket(target, {
+      rejectUnauthorized: false,   // شهادة التلفزيون موقّعة ذاتياً
+      handshakeTimeout: 8000,
+      // بلا ترويسة Origin عمداً — هي سبب تقييد التلفزيون للمتصفحات
+    });
+
+    upstream.on("open", () => {
+      ready = true;
+      log("✓ التلفزيون رد على " + target);
+      for (const m of queue.splice(0)) upstream.send(m);
+    });
+
+    upstream.on("message", (data) => {
+      if (client.readyState === WebSocket.OPEN) client.send(data.toString());
+    });
+
+    upstream.on("close", (code, reason) => {
+      if (!ready) return;          // فشل الوصل يعالجه معالج الخطأ أدناه
+      log("✗ أُغلقت قناة التلفزيون (" + code + (reason ? " " + reason : "") + ")");
+      bail(code, reason && reason.toString());
+    });
+
+    // تعذّر الوصول غالباً يعني أن الراوتر أعطى التلفزيون عنواناً جديداً،
+    // فنبحث عنه مرة ونعيد المحاولة بدل أن نُفشل الطلب على المستخدم
+    upstream.on("error", async (e) => {
+      log("✗ خطأ نحو التلفزيون: " + e.message);
+      if (ready || searched || process.env.TV_URL) return bail(1011, "تعذّر الوصول للتلفزيون");
+      searched = true;
+      const before = tvIp;
+      const found = await ensureTv();
+      if (found && found !== before && client.readyState === WebSocket.OPEN) {
+        log("أعيد المحاولة على " + found);
+        return open();
+      }
+      bail(1011, "تعذّر الوصول للتلفزيون");
+    });
+  }
 
   client.on("message", (data) => {
     const text = data.toString();
-    if (ready) upstream.send(text);
+    if (ready && upstream) upstream.send(text);
     else queue.push(text);          // الأوامر المبكرة تنتظر جهوز القناة
   });
 
-  client.on("close", () => { try { upstream.close(); } catch {} });
-  client.on("error", () => { try { upstream.close(); } catch {} });
+  client.on("close", () => { try { upstream && upstream.close(); } catch {} });
+  client.on("error", () => { try { upstream && upstream.close(); } catch {} });
+
+  open();
 });
 
 function log(msg) {
@@ -163,8 +226,11 @@ server.listen(PORT, "0.0.0.0", () => {
   for (const a of addrs) console.log(`     http://${a}:${PORT}`);
   if (!addrs.length) console.log("     (ما لقيت عنواناً — تأكد من اتصال الواي فاي)");
   console.log("");
-  console.log("  التلفزيون: " + (TV_IP ? TV_IP + ":" + TV_PORT : "يُحدَّد من الصفحة"));
+  console.log("  التلفزيون: " + (tvIp ? tvIp + ":" + TV_PORT : "يُبحث عنه…"));
   console.log("──────────────────────────────────────────");
+
+  // نتحقّق من العنوان المحفوظ فور الإقلاع، فيكون جاهزاً قبل أول ضغطة زر
+  if (!process.env.TV_URL) ensureTv();
 });
 
 module.exports = server;
