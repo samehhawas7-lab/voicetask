@@ -258,6 +258,22 @@ function localAddresses() {
   return out;
 }
 
+// المنفذ محجوز أحياناً بنسخة قديمة من الخادم لم تُقتل. كان الفشل صامتاً
+// فتُعيد حلقة run.cmd المحاولة أبداً بلا بيان — فنقولها صريحة في السجل.
+// ws يعيد بثّ أخطاء الخادم على نفسه، فيلزم الإنصات للاثنين وإلا بقي
+// الخطأ بلا معالج فينهار البرنامج برسالة مبهمة
+function onFatal(e) {
+  if (e.code === "EADDRINUSE") {
+    console.log("ERR port " + PORT + " is already in use - another copy of the server is still running.");
+    console.log("    fix: Stop-ScheduledTask \"KMC TV Remote\"; Get-Process node | Stop-Process -Force");
+  } else {
+    console.log("ERR server error: " + e.message);
+  }
+  process.exit(1);
+}
+server.on("error", onFatal);
+wss.on("error", onFatal);
+
 server.listen(PORT, "0.0.0.0", () => {
   const addrs = localAddresses();
   console.log("──────────────────────────────────────────");

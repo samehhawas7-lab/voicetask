@@ -194,6 +194,14 @@ $settings = New-ScheduledTaskSettingsSet `
 
 Stop-ScheduledTask       -TaskName $TaskName -ErrorAction SilentlyContinue
 Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
+
+# إيقاف المهمة يقتل cmd.exe ولا يقتل node.exe الذي أطلقه، فيبقى القديم
+# ممسكاً بالمنفذ ويفشل الجديد في الاستماع ويعيد المحاولة أبداً بصمت.
+# فنقتل ما بقي منه صراحةً — وما يخصّنا وحده لا كل node على الجهاز.
+Get-CimInstance Win32_Process -Filter "Name='node.exe' OR Name='cmd.exe'" -ErrorAction SilentlyContinue |
+  Where-Object { $_.CommandLine -and ($_.CommandLine -like "*kmc-remote*" -or $_.CommandLine -like "*tvremote*webos*") } |
+  ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+Start-Sleep -Seconds 2
 Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger `
     -Principal $principal -Settings $settings `
     -Description "KMC TV Remote home server" -ErrorAction Stop | Out-Null
@@ -226,7 +234,17 @@ if ($healthy) {
 } else {
   Write-Host "   SERVER DID NOT RESPOND YET" -ForegroundColor Yellow
   Say ""
-  Say "   log: $WinDir\server.log"
+  Say "   last lines of the log:"
+  Say ""
+  $logFile = Join-Path $WinDir "server.log"
+  if (Test-Path $logFile) {
+    Get-Content $logFile -Tail 20 -ErrorAction SilentlyContinue |
+      ForEach-Object { Write-Host "     $_" -ForegroundColor Gray }
+  } else {
+    Say "     (no log yet - the task may not have started)"
+  }
+  Say ""
+  Say "   full log: $WinDir\server.log"
 }
 Say "=============================================="
 
