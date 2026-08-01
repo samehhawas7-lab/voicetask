@@ -179,24 +179,29 @@ powershell -ExecutionPolicy Bypass -File C:\kmc-remote\tvremote\windows\uninstal
 
 ## تثبيت عنوان اللابتوب من ويندوز
 
-حين لا يتيح الراوتر حجز العناوين. اعرف وضعك الحالي أولاً:
+حين لا يتيح الراوتر حجز العناوين. أمر واحد من PowerShell بصلاحية
+المسؤول:
 
 <div dir="ltr">
 
 ```powershell
-Get-NetIPConfiguration | Select-Object InterfaceAlias, IPv4Address, IPv4DefaultGateway
+powershell -ExecutionPolicy Bypass -File C:\kmc-remote\tvremote\windows\set-static-ip.ps1
 ```
 
 </div>
 
-ثم ثبّته — بدّل الاسم والعنوانين بما ظهر لك، واختر رقماً أخيراً عالياً
-(بين ٢٠٠ و٢٥٠) كيلا يصطدم بما يوزّعه الراوتر:
+الأداة تكتشف كل شيء بنفسها — البطاقة الموصولة والبوّابة وقناع الشبكة —
+فلا تحتاج إلى كتابة اسم بطاقةٍ عربيٍّ مشوّه في نافذة لا تعرض العربية.
+ثم تختار عنواناً حرّاً يبدأ من `‎.210` (فوق ما يوزّعه الراوتر عادةً)،
+وتتحقّق بعد التغيير من بقاء الاتصال بالبوّابة، **وترجع تلقائياً إلى
+التوزيع التلقائي إن انقطع** — فلا يبقى الجهاز بلا شبكة بحال.
+
+لفرض رقم بعينه:
 
 <div dir="ltr">
 
 ```powershell
-New-NetIPAddress -InterfaceAlias "Wi-Fi" -IPAddress 192.168.8.210 -PrefixLength 24 -DefaultGateway 192.168.8.1
-Set-DnsClientServerAddress -InterfaceAlias "Wi-Fi" -ServerAddresses 192.168.8.1
+powershell -ExecutionPolicy Bypass -File C:\kmc-remote\tvremote\windows\set-static-ip.ps1 -Address 192.168.8.220
 ```
 
 </div>
@@ -206,14 +211,14 @@ Set-DnsClientServerAddress -InterfaceAlias "Wi-Fi" -ServerAddresses 192.168.8.1
 <div dir="ltr">
 
 ```powershell
-Set-NetIPInterface -InterfaceAlias "Wi-Fi" -Dhcp Enabled
-Set-DnsClientServerAddress -InterfaceAlias "Wi-Fi" -ResetServerAddresses
+powershell -ExecutionPolicy Bypass -File C:\kmc-remote\tvremote\windows\set-static-ip.ps1 -Revert
 ```
 
 </div>
 
 > عنوان ثابت على اللاسلكي يعطّل الشبكة إن نُقل الجهاز إلى شبكة أخرى.
-> فإن كان اللابتوب سيبقى في البيت فحسب — وهو الغرض — فلا بأس.
+> فإن كان اللابتوب سيبقى في البيت فحسب — وهو الغرض — فلا بأس، وإلا
+> فأرجعه بـ `-Revert`.
 
 ---
 
