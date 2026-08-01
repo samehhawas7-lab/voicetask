@@ -77,7 +77,11 @@ $tmpDir = Join-Path $env:TEMP "voicetask-extract"
 if (Test-Path $tmpDir) { Remove-Item $tmpDir -Recurse -Force }
 
 try {
-  Invoke-WebRequest -Uri $ZipUrl -OutFile $tmpZip -UseBasicParsing -ErrorAction Stop
+  # لاحقة عشوائية تكسر أي تخزين مؤقّت في الطريق: التنصيب على نسخة قديمة
+  # يترك المستخدم يشغّل أداةً لا وجود لها عنده ويحتار في سبب غيابها
+  Invoke-WebRequest -Uri ($ZipUrl + "?t=" + [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()) `
+                    -OutFile $tmpZip -UseBasicParsing -Headers @{ "Cache-Control" = "no-cache" } `
+                    -ErrorAction Stop
 } catch {
   Die "download failed - check internet and system date. ($($_.Exception.Message))"
 }
@@ -97,7 +101,14 @@ New-Item -ItemType Directory -Path $Root -Force | Out-Null
 if ($LASTEXITCODE -ge 8) { Die "copy to $Root failed (robocopy $LASTEXITCODE)" }
 Remove-Item $tmpZip -Force -ErrorAction SilentlyContinue
 Remove-Item $tmpDir -Recurse -Force -ErrorAction SilentlyContinue
-Ok "files in $Root"
+
+# نتحقّق أن النسخ وصل فعلاً بدل الاكتفاء برمز robocopy: الأدوات تُضاف
+# تباعاً، وصمتُ التنصيب عن نقصها يُوقع في حيرة طويلة
+$expect = @("tv.html", "tvremote\webos\server.js", "tvremote\windows\run.cmd",
+            "tvremote\tools\probe-device.js", "tvremote\tools\scan.js")
+$missing = @($expect | Where-Object { -not (Test-Path (Join-Path $Root $_)) })
+if ($missing.Count) { Die ("copy incomplete, missing: " + ($missing -join ", ")) }
+Ok ("files in $Root  (" + (Get-ChildItem $Root -Recurse -File).Count + " files)")
 
 $WebosDir = Join-Path $Root "tvremote\webos"
 $runCmd   = Join-Path $WinDir "run.cmd"
