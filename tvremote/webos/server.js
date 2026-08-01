@@ -22,6 +22,7 @@ const path = require("path");
 const { WebSocketServer, WebSocket } = require("ws");
 const { discover, verify } = require("./discover");
 const { wake, macOf } = require("./wol");
+const adb = require("./adb");
 
 // حين يعمل الخادم خدمةً في الخلفية لا سبيل لتمرير متغيّرات البيئة إليه،
 // فيقرأ إعداداته من ملف بجانبه يكتبه المنصّب
@@ -46,10 +47,14 @@ let tvIp = process.env.TV_IP || CFG.tvIp || "";
 let tvMac = CFG.tvMac || "";        // يلزم لإيقاظه وهو مطفأ
 let seeking = null;                 // وعد المسح الجاري، كيلا نمسح مرّتين معاً
 
+// البروجيكتر: جهاز أندرويد يُتحكَّم به عبر ADB لا عبر SSAP
+let projIp = process.env.PROJ_IP || CFG.projIp || "";
+const PROJ_PORT = Number(process.env.PROJ_PORT || CFG.projPort || 5555);
+
 function saveConfig() {
   try {
     fs.writeFileSync(path.join(__dirname, "config.json"),
-      JSON.stringify({ tvIp, tvMac, tvPort: TV_PORT, port: PORT }, null, 2));
+      JSON.stringify(Object.assign({}, CFG, { tvIp, tvMac, projIp, tvPort: TV_PORT, port: PORT }), null, 2));
   } catch { /* القرص للقراءة فقط أحياناً — لا يمنع العمل */ }
 }
 
@@ -101,6 +106,79 @@ async function powerOn() {
   return { ok: false, why: "أُرسلت الحزمة لكن التلفزيون ما استجاب — فعّل «تشغيل التلفزيون عبر Wi-Fi» من إعداداته" };
 }
 
+
+// ---------- البروجيكتر عبر ADB ----------
+// كل ما يُمرَّر إلى صدفة الجهاز يُقيَّد بمحارف بعينها. الوصل إلى صدفة
+// بصلاحيات واسعة عبر واجهة ويب لا يُترك بلا حَجر مهما بدا الطلب بريئاً.
+const KEYNAME = /^[A-Z0-9_]{1,32}$/;
+const PKGNAME = /^[a-zA-Z0-9._]{1,128}$/;
+
+// ما نعرضه من تطبيقات، ولكلٍّ أسماء حزمٍ تختلف بين الأجهزة
+const PROJ_APPS = [
+  { key: "youtube", name: "يوتيوب",       glyph: "\u25B6", color: "#e02f2f",
+    pkgs: ["com.google.android.youtube.tv", "com.google.android.youtube", "com.liskovsoft.smarttubetv.beta"] },
+  { key: "netflix", name: "نتفلكس",       glyph: "N",  color: "#c9302c",
+    pkgs: ["com.netflix.ninja", "com.netflix.mediaclient"] },
+  { key: "disney",  name: "ديزني بلس",    glyph: "D",  color: "#1f4bb8",
+    pkgs: ["com.disney.disneyplus"] },
+  { key: "prime",   name: "أمازون برايم", glyph: "P",  color: "#1f8fb8",
+    pkgs: ["com.amazon.amazonvideo.livingroom", "com.amazon.avod.thirdpartyclient"] },
+  { key: "browser", name: "المتصفح",      glyph: "\u{1F310}", color: "#31708f",
+    pkgs: ["com.android.chrome", "com.android.browser", "org.chromium.webview_shell"] },
+];
+
+let projApps = null;          // ما وُجد منها فعلاً على الجهاز
+
+/** يمسح الشبكة عن جهاز يفتح منفذ ADB */
+async function findProjector() {
+  const { subnets } = require("./discover");
+  const net2 = require("net");
+  const open = (ip) => new Promise((res) => {
+    const c = new net2.Socket(); let done = false;
+    const end = (v) => { if (!done) { done = true; c.destroy(); res(v); } };
+    c.setTimeout(700);
+    c.once("connect", () => end(true));
+    c.once("timeout", () => end(false));
+    c.once("error", () => end(false));
+    c.connect(PROJ_PORT, ip);
+  });
+  for (const base of subnets()) {
+    const ips = [];
+    for (let i = 1; i <= 254; i++) ips.push(base + "." + i);
+    let idx = 0;
+    const hits = [];
+    await Promise.all(Array.from({ length: 64 }, async () => {
+      while (idx < ips.length) { const ip = ips[idx++]; if (await open(ip)) hits.push(ip); }
+    }));
+    for (const ip of hits) {
+      const r = await adb.probe(ip, PROJ_PORT);
+      if (r.ok) return ip;
+    }
+  }
+  return null;
+}
+
+async function projShell(cmd) {
+  if (!projIp) {
+    const found = await findProjector();
+    if (!found) throw new Error("ما وجدت البروجيكتر — تأكد أنه شغّال وأن «تصحيح USB عبر الشبكة» مفعّل");
+    projIp = found; saveConfig(); log("projector found at " + found);
+  }
+  return adb.shell(projIp, cmd, PROJ_PORT);
+}
+
+/** يسأل الجهاز عن الحزم المنصّبة مرة واحدة، ويطابقها بما نعرضه */
+async function projectorApps() {
+  if (projApps) return projApps;
+  const out = await projShell("pm list packages");
+  const have = new Set(out.split(/\r?\n/).map((l) => l.replace("package:", "").trim()).filter(Boolean));
+  projApps = PROJ_APPS.map((a) => {
+    const pkg = a.pkgs.find((p) => have.has(p));
+    return pkg ? { key: a.key, name: a.name, glyph: a.glyph, color: a.color, pkg } : null;
+  }).filter(Boolean);
+  return projApps;
+}
+
 // ---------- تقديم الواجهة ----------
 // نحقن راية تخبر الصفحة أنها تعمل خلف خادم، فتوجّه اتصالها إليه
 function servePage(res) {
@@ -136,6 +214,49 @@ const server = http.createServer((req, res) => {
     return powerOn().then((r) => json(r.ok ? 200 : 503, r))
                     .catch((e) => json(500, { ok: false, why: e.message }));
   }
+  // ---------- البروجيكتر ----------
+  if (url.pathname.startsWith("/proj/")) {
+    const what = url.pathname.slice(6);
+    const fail = (e) => json(503, { ok: false, why: e.message });
+
+    if (what === "health") {
+      return (projIp ? adb.probe(projIp, PROJ_PORT) : Promise.resolve({ ok: false, why: "لم يُحدَّد عنوانه بعد" }))
+        .then((r) => json(200, Object.assign({ ip: projIp || null }, r)))
+        .catch((e) => fail(e));
+    }
+    if (what === "find") {
+      return findProjector().then((ip) => {
+        if (ip) { projIp = ip; projApps = null; saveConfig(); }
+        return json(200, { ok: !!ip, ip: ip || null });
+      }).catch(fail);
+    }
+    if (what === "apps") {
+      return projectorApps().then((a) => json(200, { ok: true, apps: a })).catch(fail);
+    }
+    if (what === "key") {
+      const name = url.searchParams.get("name") || "";
+      if (!KEYNAME.test(name)) return json(400, { ok: false, why: "اسم زرّ غير صالح" });
+      return projShell("input keyevent KEYCODE_" + name)
+        .then(() => json(200, { ok: true })).catch(fail);
+    }
+    if (what === "app") {
+      const pkg = url.searchParams.get("pkg") || "";
+      if (!PKGNAME.test(pkg)) return json(400, { ok: false, why: "اسم حزمة غير صالح" });
+      return projShell("monkey -p " + pkg + " -c android.intent.category.LAUNCHER 1")
+        .then(() => json(200, { ok: true })).catch(fail);
+    }
+    // الإيقاظ: WAKEUP يوقظ ولا يُطفئ، بخلاف POWER الذي يقلب الحالة
+    if (what === "wake") {
+      return projShell("input keyevent KEYCODE_WAKEUP")
+        .then(() => json(200, { ok: true })).catch(fail);
+    }
+    if (what === "sleep") {
+      return projShell("input keyevent KEYCODE_SLEEP")
+        .then(() => json(200, { ok: true })).catch(fail);
+    }
+    return json(404, { ok: false, why: "غير معروف" });
+  }
+
   servePage(res);
 });
 
@@ -200,6 +321,9 @@ wss.on("connection", async (client, req) => {
     upstream.on("open", () => {
       ready = true;
       log("OK  TV answered on " + target);
+      // التلفزيون شغّال يقيناً الآن، وهذه أوثق لحظة لالتقاط بطاقته:
+      // لا تظهر في جدول ARP إلا لمن خُوطب حديثاً، ولا تُعرف وهو مطفأ
+      rememberMac().catch(() => {});
       for (const m of queue.splice(0)) upstream.send(m);
     });
 

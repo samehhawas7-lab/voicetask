@@ -499,16 +499,77 @@ input::placeholder{color:#5c6579}
 </section>
 
 <!-- ===== البروجيكتر ===== -->
-<section class="screen" id="dev-proj" data-title="البروجيكتر" data-sub="XL2-220 · قيد الإعداد">
-  <div class="todo">
-    <span class="badge">قيد القياس</span>
-    <h3>ما زلنا نقيس قناة التحكّم</h3>
-    <p>البروجيكتر أندرويد ١١ على <b>192.168.8.13</b>، وأجهزة أندرويد الرخيصة
-       تختلف فيما تقبله. لا يُبنى زرٌّ قبل أن نعرف ما يستجيب له فعلاً.</p>
-    <ul>
-      <li>فحصه وهو شغّال — لمعرفة القناة</li>
-      <li>فحصه وهو مطفأ — لمعرفة هل يمكن إيقاظه</li>
-    </ul>
+<section class="screen" id="dev-proj" data-title="البروجيكتر" data-sub="XL2-220">
+
+  <div class="todo" id="projSetup">
+    <span class="badge" id="projBadge">جاري الفحص…</span>
+    <h3 id="projHead">أبحث عن البروجيكتر</h3>
+    <p id="projWhy">الاتصال عبر ADB — وهو ما يعطي كل زرّ وتشغيل التطبيقات
+       والإيقاظ من السكون.</p>
+    <div class="act-row" style="margin-bottom:0">
+      <button class="key sm" id="projFind">بحث عنه</button>
+      <button class="key sm" id="projHelp">كيف أفعّله؟</button>
+    </div>
+  </div>
+
+  <div id="projRemote" hidden>
+
+    <div class="sec">
+      <div class="sec-h"><span>الطاقة والصوت</span></div>
+      <div class="rockers">
+        <div class="rocker">
+          <button data-pk="VOLUME_UP">＋</button>
+          <span>الصوت</span>
+          <button data-pk="VOLUME_DOWN">－</button>
+        </div>
+        <div class="mid">
+          <button class="key" data-pk="VOLUME_MUTE">🔇</button>
+          <button class="key" id="projWake">تشغيل</button>
+        </div>
+        <div class="rocker">
+          <button data-pk="MEDIA_FAST_FORWARD">▶▶</button>
+          <span>التقديم</span>
+          <button data-pk="MEDIA_REWIND">◀◀</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="sec">
+      <div class="sec-h"><span>التنقل</span></div>
+      <div class="grid3">
+        <button class="key" data-pk="MENU">MENU</button>
+        <button class="key" data-pk="HOME">HOME</button>
+        <button class="key" data-pk="BACK">BACK</button>
+      </div>
+      <div class="dpad">
+        <button class="dpad-btn up"    data-pk="DPAD_UP"    aria-label="فوق"></button>
+        <button class="dpad-btn down"  data-pk="DPAD_DOWN"  aria-label="تحت"></button>
+        <button class="dpad-btn left"  data-pk="DPAD_LEFT"  aria-label="يسار"></button>
+        <button class="dpad-btn right" data-pk="DPAD_RIGHT" aria-label="يمين"></button>
+        <button class="dpad-ok"        data-pk="DPAD_CENTER">OK</button>
+      </div>
+    </div>
+
+    <div class="sec">
+      <div class="sec-h"><span>التطبيقات</span></div>
+      <div class="apps" id="projApps"></div>
+      <div class="empty" id="projAppsEmpty">جاري قراءة التطبيقات من الجهاز…</div>
+    </div>
+
+    <div class="sec">
+      <div class="sec-h"><span>التشغيل</span></div>
+      <div class="grid3 media">
+        <button class="key big" data-pk="MEDIA_PREVIOUS">◀◀</button>
+        <button class="key big" data-pk="MEDIA_PLAY_PAUSE">❚❚</button>
+        <button class="key big" data-pk="MEDIA_NEXT">▶▶</button>
+      </div>
+      <div class="grid3">
+        <button class="key sm" data-pk="MEDIA_STOP">إيقاف</button>
+        <button class="key sm" data-pk="SEARCH">بحث</button>
+        <button class="key sm" id="projSleep">إطفاء الشاشة</button>
+      </div>
+    </div>
+
   </div>
 </section>
 
@@ -1532,6 +1593,7 @@ function show(id){
     if (ip && store.get("webos_key_" + ip)) tv.connect(ip);
   }
   if (id === "dev-maint") paintInfo();
+  if (id === "dev-proj" && window.__projCheck) window.__projCheck();
 }
 
 
@@ -1948,6 +2010,121 @@ function wakeTv(btn){
 
   const cd = $("cmdCopyDiag");
   if (cd) cd.onclick = () => $("copyDiagBtn").click();
+})();
+
+
+/* ============================================================
+   البروجيكتر — أندرويد عبر ADB
+   الخادم هو من يتكلّم ADB؛ المتصفح لا يملك مقابس خام. فالصفحة تطلب
+   منه بأوامر بسيطة، وهو يقيّد ما يُمرَّر إلى صدفة الجهاز.
+   ============================================================ */
+(function setupProjector(){
+  const setup = $("projSetup"), remote = $("projRemote");
+  if (!setup) return;
+
+  const say = (badge, head, why) => {
+    $("projBadge").textContent = badge;
+    $("projHead").textContent = head;
+    $("projWhy").textContent = why;
+  };
+
+  function paint(r){
+    const live = r && r.ok;
+    remote.hidden = !live;
+    setup.hidden = live;
+    const pip = $("pipProj");
+    if (pip) pip.className = "pip" + (live ? " live" : "");
+    const tile = document.querySelector('[data-go="dev-proj"]');
+    if (tile) tile.classList.toggle("soon", !live);
+    screenSub("dev-proj", live ? "متصل · " + r.ip : "غير متصل");
+    if (live) loadApps();
+  }
+
+  function check(){
+    if (!onServer){
+      say("يحتاج الخادم", "افتح الريموت من عنوان اللابتوب",
+          "ADB يحتاج مقبساً خاماً لا يملكه المتصفح، فيتولّاه الخادم.");
+      return;
+    }
+    say("جاري الفحص…", "أتحقّق من البروجيكتر", "لحظة…");
+    fetch("/proj/health", { cache:"no-store" }).then(r => r.json()).then(r => {
+      if (r.ok) return paint(r);
+      say("غير متصل", "ما وصلت إليه بعد", r.why || "");
+      paint(r);
+    }).catch(() => { say("خطأ", "تعذّر الوصول للخادم", ""); });
+  }
+
+  $("projFind").onclick = () => {
+    const b = $("projFind"); b.disabled = true; b.textContent = "جاري البحث…";
+    say("جاري البحث…", "أمسح الشبكة", "أبحث عن جهاز يفتح منفذ ADB — يأخذ نحو نصف دقيقة.");
+    fetch("/proj/find", { cache:"no-store" }).then(r => r.json()).then(r => {
+      if (r.ok){ toast("وجدته على " + r.ip); check(); }
+      else { toast("ما لقيته في الشبكة", true); say("لم يُوجد", "ما وجدت جهازاً يقبل ADB",
+             "فعّل «تصحيح USB عبر الشبكة» من خيارات المطوّر في البروجيكتر."); }
+    }).catch(() => toast("تعذّر الوصول للخادم", true))
+      .finally(() => { b.disabled = false; b.textContent = "بحث عنه"; });
+  };
+
+  $("projHelp").onclick = () => alert(
+    "لتفعيل ADB في البروجيكتر:\n\n" +
+    "١) الإعدادات ← حول الجهاز\n" +
+    "٢) اضغط «رقم الإصدار» سبع مرات حتى تظهر «صرت مطوّراً»\n" +
+    "٣) ارجع ← خيارات المطوّر\n" +
+    "٤) فعّل «تصحيح USB» و«تصحيح USB عبر الشبكة» أو ADB over network\n\n" +
+    "ثم اضغط «بحث عنه». ستظهر على شاشة البروجيكتر رسالة تسأل عن السماح — وافق عليها، وعلّم «دائماً»."
+  );
+
+  const press = (name, el) => {
+    if (!name) return;
+    buzz(12);
+    if (el) { el.classList.add("pressed"); setTimeout(() => el.classList.remove("pressed"), 110); }
+    fetch("/proj/key?name=" + encodeURIComponent(name), { cache:"no-store" })
+      .then(r => r.json())
+      .then(r => { if (!r.ok) toast(r.why || "ما استجاب البروجيكتر", true); })
+      .catch(() => toast("تعذّر الوصول للخادم", true));
+  };
+
+  document.querySelectorAll("#dev-proj [data-pk]").forEach(el => {
+    el.addEventListener("click", () => press(el.dataset.pk, el));
+  });
+
+  $("projWake").onclick  = () => { buzz(20); fetch("/proj/wake",  {cache:"no-store"}).then(()=>toast("أُرسلت إشارة التشغيل")); };
+  $("projSleep").onclick = () => { buzz(20); fetch("/proj/sleep", {cache:"no-store"}).then(()=>toast("أُطفئت الشاشة")); };
+
+  let appsLoaded = false;
+  function loadApps(){
+    if (appsLoaded) return;
+    appsLoaded = true;
+    fetch("/proj/apps", { cache:"no-store" }).then(r => r.json()).then(r => {
+      const grid = $("projApps"), empty = $("projAppsEmpty");
+      grid.innerHTML = "";
+      if (!r.ok || !r.apps || !r.apps.length){
+        empty.hidden = false;
+        empty.textContent = "ما لقيت تطبيقاً معروفاً على الجهاز";
+        return;
+      }
+      empty.hidden = true;
+      r.apps.forEach(a => {
+        const btn = document.createElement("button");
+        btn.className = "app";
+        const g = document.createElement("div");
+        g.className = "glyph"; g.style.background = a.color; g.textContent = a.glyph;
+        const s2 = document.createElement("span"); s2.textContent = a.name;
+        btn.append(g, s2);
+        btn.onclick = () => {
+          buzz();
+          fetch("/proj/app?pkg=" + encodeURIComponent(a.pkg), { cache:"no-store" })
+            .then(r2 => r2.json())
+            .then(r2 => toast(r2.ok ? "فُتح " + a.name : (r2.why || "ما فُتح"), !r2.ok))
+            .catch(() => toast("تعذّر الوصول للخادم", true));
+        };
+        grid.appendChild(btn);
+      });
+    }).catch(() => { appsLoaded = false; });
+  }
+
+  // نفحصه أول ما تُفتح صفحته لا عند تحميل التطبيق: المسح يكلّف
+  window.__projCheck = check;
 })();
 
 function paintInfo(){

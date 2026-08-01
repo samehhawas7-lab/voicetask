@@ -132,14 +132,27 @@ Ok "dependencies ready"
 
 # ---------- ٥) الإعدادات ----------
 # بلا BOM: قارئ JSON في Node يرفض الحرف الخفيّ الذي يضيفه Set-Content
+# نقرأ الموجود قبل الكتابة: عنوان بطاقة التلفزيون لا يُعرف إلا والتلفزيون
+# شغّال، فمسحُه في كل تحديث يُبطل إيقاظه وهو مطفأ — وهو الغرض منه.
 $cfgPath = Join-Path $WebosDir "config.json"
-$cfgJson = @{ tvIp = $TvIp; tvPort = 3001; port = $Port } | ConvertTo-Json
-[IO.File]::WriteAllText($cfgPath, $cfgJson, (New-Object Text.UTF8Encoding($false)))
+$old = $null
+if (Test-Path $cfgPath) {
+  try { $old = Get-Content $cfgPath -Raw -ErrorAction Stop | ConvertFrom-Json } catch { }
+}
+$cfg = [ordered]@{
+  tvIp   = if ($env:TV_IP) { $TvIp } elseif ($old -and $old.tvIp) { $old.tvIp } else { $TvIp }
+  tvMac  = if ($old -and $old.tvMac) { $old.tvMac } else { "" }
+  projIp = if ($old -and $old.projIp) { $old.projIp } else { "192.168.8.13" }
+  tvPort = 3001
+  port   = $Port
+}
+[IO.File]::WriteAllText($cfgPath, ($cfg | ConvertTo-Json), (New-Object Text.UTF8Encoding($false)))
 
 # مسار node مثبَّت للمهمة: SYSTEM قد يقلع قبل أن يلتقط PATH الجهاز
 [IO.File]::WriteAllText((Join-Path $WinDir "node-path.cmd"),
   "set `"NODE_EXE=$nodeExe`"`r`n", (New-Object Text.ASCIIEncoding))
-Ok "TV $TvIp  ·  server port $Port"
+$macNote = if ($cfg.tvMac) { "  ·  MAC kept" } else { "" }
+Ok ("TV " + $cfg.tvIp + "  ·  server port " + $Port + $macNote)
 
 # ---------- ٦) منع النوم ----------
 # الجهاز النائم لا يخدم أحداً: يُقطع المعالج والشبكة. فنطفئ الشاشة
