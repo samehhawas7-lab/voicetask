@@ -429,6 +429,9 @@ function latestSha() {
 }
 
 let updating = false;
+// التنصيب الكامل دون دقيقتين، فستٌّ مهلةٌ سخيّة لا تسبق منصِّباً بطيئاً
+const LATCH_MS = Number(process.env.UPDATE_LATCH_MS) || 6 * 60 * 1000;
+let updateLatch = null;
 let surveyCache = { at: 0, data: null };
 let surveyRunning = false;
 let autoUpdate = CFG.autoUpdate !== false;      // مفعّل ما لم يُطفأ صراحةً
@@ -442,6 +445,18 @@ function startUpdate() {
   updating = true;
 
   const logFile = path.join(__dirname, "..", "windows", "update.log");
+
+  // المنصّب يقتل هذا الخادم في أثناء عمله، فالعلَم يموت بموت العملية.
+  // لكنّه إن سقط قبل أن يبلغ ذلك — تنزيلٌ فاشل، أو صلاحية ناقصة —
+  // بقي العلَم مرفوعاً أبداً، فيُقفل التحديثُ اليدويُّ والتلقائيُّ
+  // معاً، ولا سبيل إلى فكّه من التطبيق. فيُفَكّ بعد مهلة.
+  clearTimeout(updateLatch);
+  updateLatch = setTimeout(() => {
+    if (!updating) return;
+    updating = false;
+    log("update did not finish in " + (LATCH_MS / 60000) + " min - unlatched; see " + logFile);
+  }, LATCH_MS);
+  if (updateLatch.unref) updateLatch.unref();
   const cmd = process.env.UPDATE_CMD || "powershell.exe";
   const args = process.env.UPDATE_CMD ? [] : [
     "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command",
