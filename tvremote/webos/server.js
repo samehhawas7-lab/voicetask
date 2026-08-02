@@ -193,6 +193,80 @@ async function projectorApps() {
 }
 
 
+
+/**
+ * فحص جهاز: أي منافذ يفتحها، وأيّها ADB حقيقيّ.
+ *
+ * أندرويد ١١ فصل «تصحيح USB عبر الشبكة» القديم — منفذ ٥٥٥٥ ثابت — عن
+ * «تصحيح لاسلكي» الجديد الذي يفتح منفذاً عشوائياً بين 30000 و49999
+ * ويطلب اقتراناً برمز. فلا يكفي أن نسأل عن ٥٥٥٥ ونحكم.
+ *
+ * فنجرّب المنافذ المعروفة أولاً، فإن خلت مسحنا المدى العشوائي — وهو
+ * عشرون ألف منفذ على مضيف واحد، تُقطع في نحو نصف دقيقة بمهلة قصيرة.
+ */
+const PROBE_PORTS = [
+  [5555, "ADB على الشبكة"],
+  [5556, "ADB (منفذ بديل)"],
+  [5037, "خادم ADB"],
+  [6466, "ريموت أندرويد (أوامر)"],
+  [6467, "ريموت أندرويد (إقران)"],
+  [8009, "Cast"],
+  [8080, "واجهة ويب"],
+  [7000, "AirPlay"],
+];
+
+function portOpenOn(ip, port, timeout = 700) {
+  const net2 = require("net");
+  return new Promise((res) => {
+    const c = new net2.Socket();
+    let done = false;
+    const end = (v) => { if (!done) { done = true; c.destroy(); res(v); } };
+    c.setTimeout(timeout);
+    c.once("connect", () => end(true));
+    c.once("timeout", () => end(false));
+    c.once("error", () => end(false));
+    c.connect(port, ip);
+  });
+}
+
+async function sweep(ip, ports, workers, timeout) {
+  const open = [];
+  let idx = 0;
+  await Promise.all(Array.from({ length: workers }, async () => {
+    while (idx < ports.length) {
+      const p = ports[idx++];
+      if (await portOpenOn(ip, p, timeout)) open.push(p);
+    }
+  }));
+  return open.sort((a, b) => a - b);
+}
+
+async function probeDevice(ip, wide) {
+  const found = [];
+  for (const [port, label] of PROBE_PORTS) {
+    if (await portOpenOn(ip, port)) found.push({ port, label });
+  }
+
+  let wideHits = [];
+  if (wide && !found.some((f) => f.port === 5555)) {
+    const range = [];
+    for (let p = 30000; p < 50000; p++) range.push(p);
+    wideHits = await sweep(ip, range, 400, 350);
+    for (const port of wideHits) found.push({ port, label: "تصحيح لاسلكي (أندرويد ١١)" });
+  }
+
+  // المنفذ المفتوح لا يعني ADB: نصافح لنتأكّد
+  for (const f of found) {
+    if (f.port === 5555 || f.port === 5556 || wideHits.includes(f.port)) {
+      const r = await adb.probe(ip, f.port);
+      f.adb = r.ok;
+      if (r.ok) f.banner = r.banner;
+      else f.why = r.why;
+    }
+  }
+  return { ip, found, wide: !!wide };
+}
+
 // ---------- التحديث الذاتي ----------
 // كل ميزة كانت تُسلَّم بأمرٍ يُلصق في PowerShell على اللابتوب، وهي أكثر
 // خطوة تعثّر فيها صاحب البيت. فصار الخادم يحدّث نفسه بطلبٍ من التطبيق.
@@ -420,6 +494,15 @@ const server = http.createServer((req, res) => {
       return (projIp ? adb.probe(projIp, PROJ_PORT) : Promise.resolve({ ok: false, why: "لم يُحدَّد عنوانه بعد" }))
         .then((r) => json(200, Object.assign({ ip: projIp || null }, r)))
         .catch((e) => fail(e));
+    }
+    if (what === "scan") {
+      const ip = url.searchParams.get("ip") || projIp || CFG.projIp || "";
+      if (!/^\d{1,3}(\.\d{1,3}){3}$/.test(ip)) return json(400, { ok: false, why: "عنوان غير صالح" });
+      const wide = url.searchParams.get("wide") === "1";
+      log("probing " + ip + (wide ? " (wide sweep)" : ""));
+      return probeDevice(ip, wide)
+        .then((r) => json(200, Object.assign({ ok: true }, r)))
+        .catch(fail);
     }
     if (what === "find") {
       return findProjector().then((ip) => {

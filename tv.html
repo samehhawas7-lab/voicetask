@@ -534,7 +534,10 @@ input::placeholder{color:#5c6579}
     <div class="act-row" style="margin-bottom:0">
       <button class="key sm" id="projFind">بحث عنه</button>
       <button class="key sm" id="projHelp">كيف أفعّله؟</button>
+      <button class="key sm" id="projScan">افحص الجهاز</button>
+      <button class="key sm" id="projScanWide">فحص شامل</button>
     </div>
+    <div class="code" id="projReport" hidden style="margin-top:12px;white-space:pre-wrap"></div>
   </div>
 
   <div id="projRemote" hidden>
@@ -2135,13 +2138,55 @@ function wakeTv(btn){
       .finally(() => { b.disabled = false; b.textContent = "بحث عنه"; });
   };
 
+  function report(text){
+    const box = $("projReport");
+    box.hidden = false;
+    box.textContent = text;
+  }
+
+  function scan(wide){
+    const b = wide ? $("projScanWide") : $("projScan");
+    const label = b.textContent;
+    b.disabled = true;
+    b.textContent = wide ? "نصف دقيقة…" : "لحظة…";
+    report(wide ? "أمسح كل منافذ التصحيح اللاسلكي — نحو نصف دقيقة…"
+                : "أفحص المنافذ المعروفة…");
+    fetch("/proj/scan?ip=192.168.8.13" + (wide ? "&wide=1" : ""), { cache:"no-store" })
+      .then(r => r.json())
+      .then(r => {
+        if (!r.ok) return report("تعذّر الفحص: " + (r.why || ""));
+        if (!r.found.length){
+          report("العنوان " + r.ip + "\nلا منفذ مفتوح.\n\n" +
+                 (wide ? "فحصت المنافذ المعروفة والمدى اللاسلكي كلّه.\nإمّا أن الجهاز مطفأ، أو أن التصحيح غير مفعّل."
+                       : "جرّب «فحص شامل» — أندرويد ١١ يفتح منفذاً عشوائياً."));
+          return;
+        }
+        const lines = r.found.map(f => {
+          let t = "  " + f.port + "  " + f.label;
+          if (f.adb === true)  t += "\n     ✓ ADB يعمل — " + (f.banner || "");
+          if (f.adb === false) t += "\n     ✗ " + (f.why || "لم يصافح");
+          return t;
+        });
+        report("العنوان " + r.ip + "\nالمنافذ المفتوحة:\n" + lines.join("\n"));
+      })
+      .catch(() => report("تعذّر الوصول للخادم"))
+      .finally(() => { b.disabled = false; b.textContent = label; });
+  }
+
+  $("projScan").onclick = () => scan(false);
+  $("projScanWide").onclick = () => scan(true);
+
   $("projHelp").onclick = () => alert(
     "لتفعيل ADB في البروجيكتر:\n\n" +
     "١) الإعدادات ← حول الجهاز\n" +
     "٢) اضغط «رقم الإصدار» سبع مرات حتى تظهر «صرت مطوّراً»\n" +
     "٣) ارجع ← خيارات المطوّر\n" +
-    "٤) فعّل «تصحيح USB» و«تصحيح USB عبر الشبكة» أو ADB over network\n\n" +
-    "ثم اضغط «بحث عنه». ستظهر على شاشة البروجيكتر رسالة تسأل عن السماح — وافق عليها، وعلّم «دائماً»."
+    "٤) فعّل «تصحيح USB»\n" +
+    "٥) ابحث في نفس الصفحة عن أحد هذين:\n" +
+    "     • «تصحيح USB عبر الشبكة» أو ADB over network  ← الأفضل\n" +
+    "     • «تصحيح لاسلكي» أو Wireless debugging       ← فعّله وافتحه\n\n" +
+    "ثم اضغط «افحص الجهاز». وإن لم يجد شيئاً فاضغط «فحص شامل».\n\n" +
+    "وستظهر على شاشة البروجيكتر رسالة «السماح بتصحيح USB» — وافق وعلّم «دائماً»."
   );
 
   const press = (name, el) => {
