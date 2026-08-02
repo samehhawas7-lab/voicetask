@@ -25,6 +25,7 @@ const { wake, macOf } = require("./wol");
 const adb = require("./adb");
 const { TuyaCloud, REGIONS } = require("./tuya-cloud");
 const { TuyaDevice } = require("./tuya");
+const survey = require("./survey");
 const { spawn } = require("child_process");
 
 // حين يعمل الخادم خدمةً في الخلفية لا سبيل لتمرير متغيّرات البيئة إليه،
@@ -146,25 +147,11 @@ let projApps = null;          // ما وُجد منها فعلاً على الج
 
 /** يمسح الشبكة عن جهاز يفتح منفذ ADB */
 async function findProjector() {
-  const { subnets } = require("./discover");
-  const net2 = require("net");
-  const open = (ip) => new Promise((res) => {
-    const c = new net2.Socket(); let done = false;
-    const end = (v) => { if (!done) { done = true; c.destroy(); res(v); } };
-    c.setTimeout(700);
-    c.once("connect", () => end(true));
-    c.once("timeout", () => end(false));
-    c.once("error", () => end(false));
-    c.connect(PROJ_PORT, ip);
-  });
-  for (const base of subnets()) {
+  for (const base of survey.subnets()) {
     const ips = [];
     for (let i = 1; i <= 254; i++) ips.push(base + "." + i);
-    let idx = 0;
-    const hits = [];
-    await Promise.all(Array.from({ length: 64 }, async () => {
-      while (idx < ips.length) { const ip = ips[idx++]; if (await open(ip)) hits.push(ip); }
-    }));
+    const hits = await survey.pool(ips, 64, async (ip) =>
+      (await portOpenOn(ip, PROJ_PORT, 700)) ? ip : null);
     for (const ip of hits) {
       const r = await adb.probe(ip, PROJ_PORT);
       if (r.ok) return ip;
@@ -217,31 +204,8 @@ const PROBE_PORTS = [
   [7000, "AirPlay"],
 ];
 
-function portOpenOn(ip, port, timeout = 700) {
-  const net2 = require("net");
-  return new Promise((res) => {
-    const c = new net2.Socket();
-    let done = false;
-    const end = (v) => { if (!done) { done = true; c.destroy(); res(v); } };
-    c.setTimeout(timeout);
-    c.once("connect", () => end(true));
-    c.once("timeout", () => end(false));
-    c.once("error", () => end(false));
-    c.connect(port, ip);
-  });
-}
-
-async function sweep(ip, ports, workers, timeout) {
-  const open = [];
-  let idx = 0;
-  await Promise.all(Array.from({ length: workers }, async () => {
-    while (idx < ports.length) {
-      const p = ports[idx++];
-      if (await portOpenOn(ip, p, timeout)) open.push(p);
-    }
-  }));
-  return open.sort((a, b) => a - b);
-}
+// المسحُ نفسه تفرّق في ثلاثة ملفات، فجُمع في survey.js ويُستعمل منه
+const { portOpenOn, sweep } = survey;
 
 async function probeDevice(ip, wide) {
   const found = [];
@@ -395,6 +359,8 @@ function latestSha() {
 }
 
 let updating = false;
+let surveyCache = { at: 0, data: null };
+let surveyRunning = false;
 let autoUpdate = CFG.autoUpdate !== false;      // مفعّل ما لم يُطفأ صراحةً
 let lastCheck = { at: null, found: false };
 
@@ -535,6 +501,20 @@ const server = http.createServer((req, res) => {
       if (mac !== tvMac) { tvMac = mac; saveConfig(); log("TV reported its MAC: " + mac); }
       json(200, { ok: true, mac: tvMac });
     });
+  }
+
+  // جردُ ما في البيت. ثقيل (٢٥٤ مضيفاً) فتُحفظ نتيجته عشر دقائق
+  if (url.pathname === "/survey") {
+    const fresh = url.searchParams.get("fresh") === "1";
+    if (!fresh && surveyCache.at && Date.now() - surveyCache.at < 600000) {
+      return json(200, Object.assign({ cached: true }, surveyCache.data));
+    }
+    if (surveyRunning) return json(200, { ok: true, running: true, devices: [] });
+    surveyRunning = true;
+    return survey.surveyNetwork(log, { adbProbe: adb.probe })
+      .then((r) => { surveyCache = { at: Date.now(), data: r }; json(200, r); })
+      .catch((e) => json(500, { ok: false, why: e.message, devices: [] }))
+      .finally(() => { surveyRunning = false; });
   }
 
   if (url.pathname === "/version") {

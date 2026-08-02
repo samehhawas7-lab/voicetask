@@ -121,6 +121,7 @@ Remove-Item $tmpDir -Recurse -Force -ErrorAction SilentlyContinue
 $expect = @("tv.html", "tvremote\webos\server.js", "tvremote\windows\run.cmd",
             "tvremote\webos\tuya.js", "tvremote\webos\tuya-cloud.js",
             "tvremote\webos\adb.js", "tvremote\webos\wol.js",
+            "tvremote\webos\survey.js",
             "tvremote\tools\probe-device.js", "tvremote\tools\scan.js")
 $missing = @($expect | Where-Object { -not (Test-Path (Join-Path $Root $_)) })
 if ($missing.Count) { Die ("copy incomplete, missing: " + ($missing -join ", ")) }
