@@ -23,6 +23,8 @@ const { WebSocketServer, WebSocket } = require("ws");
 const { discover, verify } = require("./discover");
 const { wake, macOf } = require("./wol");
 const adb = require("./adb");
+const { TuyaCloud, REGIONS } = require("./tuya-cloud");
+const { TuyaDevice } = require("./tuya");
 const { spawn } = require("child_process");
 
 // حين يعمل الخادم خدمةً في الخلفية لا سبيل لتمرير متغيّرات البيئة إليه،
@@ -267,6 +269,92 @@ async function probeDevice(ip, wide) {
   return { ip, found, wide: !!wide };
 }
 
+
+// ---------- المكيفات عبر Tuya ----------
+// الأسرار في ملف منفصل عن الإعدادات: هي وحدها ما لا يجوز أن يُشارَك،
+// وفصلُها يجعل ذلك بيّناً لا يحتاج تذكيراً.
+const SECRETS = path.join(__dirname, "secrets.json");
+
+function loadSecrets() {
+  try {
+    const raw = fs.readFileSync(SECRETS, "utf8");
+    return JSON.parse(raw.replace(/^\uFEFF/, ""));
+  } catch { return { accessId: "", accessSecret: "", region: "eu", devices: [], rooms: {} }; }
+}
+function saveSecrets(v) {
+  try { fs.writeFileSync(SECRETS, JSON.stringify(v, null, 2), { mode: 0o600 }); }
+  catch (e) { log("could not save secrets: " + e.message); }
+}
+
+let acSecrets = loadSecrets();
+const acDevices = new Map();          // معرّف الجهاز ← جلسة محلية
+
+function acDevice(room) {
+  const id = acSecrets.rooms && acSecrets.rooms[room];
+  if (!id) return null;
+  const meta = (acSecrets.devices || []).find((d) => d.id === id);
+  if (!meta) return null;
+  if (!acDevices.has(id)) {
+    acDevices.set(id, new TuyaDevice({
+      id: meta.id, key: meta.localKey, ip: meta.ip, version: meta.version,
+    }));
+  }
+  return { dev: acDevices.get(id), meta };
+}
+
+/** ما يُعرض للصفحة: بلا مفاتيح — لا تُرسل إلى المتصفح بحال */
+function publicDevices() {
+  return (acSecrets.devices || []).map((d) => ({
+    id: d.id, name: d.name, category: d.category,
+    online: d.online, model: d.model,
+    infrared: d.category === "wnykq" || d.category === "infrared_ac",
+  }));
+}
+
+// حَجرٌ على ما يُرسَل إلى المكيف: القيم تُقيَّد بمدى ومجموعة، فلا
+// يُمرَّر إلى الجهاز ما جاء من الشبكة كما جاء
+const AC_MODES = ["cold", "hot", "wind", "wet", "auto"];
+const AC_FANS  = ["low", "mid", "high", "auto", "1", "2", "3", "4"];
+
+function sanitizeAc(body) {
+  const out = {};
+  if (typeof body.on === "boolean") out.on = body.on;
+  if (body.setTemp !== undefined) {
+    const t = Number(body.setTemp);
+    if (!Number.isFinite(t) || t < 16 || t > 30) throw new Error("الحرارة بين ١٦ و٣٠");
+    out.setTemp = Math.round(t);
+  }
+  if (body.mode !== undefined) {
+    if (!AC_MODES.includes(String(body.mode))) throw new Error("وضع غير معروف");
+    out.mode = String(body.mode);
+  }
+  if (body.fan !== undefined) {
+    if (!AC_FANS.includes(String(body.fan))) throw new Error("سرعة غير معروفة");
+    out.fan = String(body.fan);
+  }
+  if (typeof body.swing === "boolean") out.swing = body.swing;
+  if (!Object.keys(out).length) throw new Error("لا تغيير مطلوب");
+  return out;
+}
+
+/** يجلب الأجهزة من السحابة ويحفظ مفاتيحها — يُستدعى مرة عند الربط */
+async function acLink({ accessId, accessSecret, region }) {
+  const cloud = new TuyaCloud({ accessId, accessSecret, region });
+  const list = await cloud.devices();
+  if (!list.length) {
+    throw new Error("ما وجدت أجهزة — تأكّد أنك ربطت حساب Smart Life بالمشروع");
+  }
+  acSecrets = Object.assign({}, acSecrets, {
+    accessId, accessSecret, region: region || "eu",
+    devices: list,
+    linkedAt: new Date().toISOString(),
+  });
+  saveSecrets(acSecrets);
+  acDevices.clear();
+  log("tuya linked: " + list.length + " device(s)");
+  return publicDevices();
+}
+
 // ---------- التحديث الذاتي ----------
 // كل ميزة كانت تُسلَّم بأمرٍ يُلصق في PowerShell على اللابتوب، وهي أكثر
 // خطوة تعثّر فيها صاحب البيت. فصار الخادم يحدّث نفسه بطلبٍ من التطبيق.
@@ -416,6 +504,7 @@ const server = http.createServer((req, res) => {
   //   • ألّا تحمل Origin من مضيف آخر — وغيابه مقبول، إذ لا يرسله
   //     المتصفح في طلبات نفس الأصل، وهي حالتنا
   const CHANGING = ["/update", "/auto-update", "/power-on", "/find-tv", "/tv-mac",
+                    "/ac/link", "/ac/assign", "/ac/hall/set", "/ac/bed/set",
                     "/proj/find", "/proj/key", "/proj/app", "/proj/wake", "/proj/sleep"];
   if (CHANGING.includes(url.pathname)) {
     if (req.method !== "POST") {
@@ -541,6 +630,79 @@ const server = http.createServer((req, res) => {
     if (what === "sleep") {
       return projShell("input keyevent KEYCODE_SLEEP")
         .then(() => json(200, { ok: true })).catch(fail);
+    }
+    return json(404, { ok: false, why: "غير معروف" });
+  }
+
+  // ---------- المكيفات ----------
+  if (url.pathname.startsWith("/ac/")) {
+    const rest = url.pathname.slice(4);
+    const fail = (e) => json(503, { ok: false, why: e.message });
+    const readBody = () => new Promise((res) => {
+      let b = "";
+      req.on("data", (c) => { b += c; if (b.length > 4096) req.destroy(); });
+      req.on("end", () => { try { res(JSON.parse(b || "{}")); } catch { res({}); } });
+    });
+
+    if (rest === "devices") {
+      return json(200, {
+        ok: true,
+        linked: !!acSecrets.accessId,
+        region: acSecrets.region || "eu",
+        regions: Object.keys(REGIONS),
+        devices: publicDevices(),
+        rooms: acSecrets.rooms || {},
+      });
+    }
+    if (rest === "link") {
+      return readBody().then((b) => {
+        const id = String(b.accessId || "").trim();
+        const sec = String(b.accessSecret || "").trim();
+        const reg = String(b.region || "eu").trim();
+        if (!/^[a-z0-9]{16,40}$/i.test(id) || !/^[a-z0-9]{16,64}$/i.test(sec)) {
+          return json(400, { ok: false, why: "المفتاح أو السرّ غير مكتمل — انسخهما كاملين" });
+        }
+        if (!REGIONS[reg]) return json(400, { ok: false, why: "منطقة غير معروفة" });
+        return acLink({ accessId: id, accessSecret: sec, region: reg })
+          .then((devs) => json(200, { ok: true, devices: devs }))
+          .catch((e) => json(502, { ok: false, why: e.message }));
+      });
+    }
+    if (rest === "assign") {
+      return readBody().then((b) => {
+        const room = String(b.room || "");
+        const devId = String(b.id || "");
+        if (room !== "hall" && room !== "bed") return json(400, { ok: false, why: "غرفة غير معروفة" });
+        if (!(acSecrets.devices || []).some((d) => d.id === devId)) {
+          return json(400, { ok: false, why: "جهاز غير معروف" });
+        }
+        acSecrets.rooms = Object.assign({}, acSecrets.rooms, { [room]: devId });
+        saveSecrets(acSecrets);
+        acDevices.delete(devId);
+        log("ac room " + room + " -> " + devId);
+        json(200, { ok: true, rooms: acSecrets.rooms });
+      });
+    }
+
+    const m = rest.match(/^(hall|bed)\/(state|set)$/);
+    if (m) {
+      const entry = acDevice(m[1]);
+      if (!entry) return json(404, { ok: false, why: "لم يُربط مكيف بهذه الغرفة بعد" });
+      // الأشعة عمياء: لا تُخبر بحالتها، فلا نعرض حرارةً مكذوبة
+      const blind = entry.meta.category === "wnykq" || entry.meta.category === "infrared_ac";
+
+      if (m[2] === "state") {
+        return entry.dev.state()
+          .then((st) => json(200, Object.assign({ ok: true, blind, name: entry.meta.name }, st)))
+          .catch(fail);
+      }
+      return readBody().then((b) => {
+        let changes;
+        try { changes = sanitizeAc(b); } catch (e) { return json(400, { ok: false, why: e.message }); }
+        return entry.dev.apply(changes)
+          .then((st) => json(200, Object.assign({ ok: true, blind }, st)))
+          .catch(fail);
+      });
     }
     return json(404, { ok: false, why: "غير معروف" });
   }

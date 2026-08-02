@@ -119,6 +119,8 @@ Remove-Item $tmpDir -Recurse -Force -ErrorAction SilentlyContinue
 # نتحقّق أن النسخ وصل فعلاً بدل الاكتفاء برمز robocopy: الأدوات تُضاف
 # تباعاً، وصمتُ التنصيب عن نقصها يُوقع في حيرة طويلة
 $expect = @("tv.html", "tvremote\webos\server.js", "tvremote\windows\run.cmd",
+            "tvremote\webos\tuya.js", "tvremote\webos\tuya-cloud.js",
+            "tvremote\webos\adb.js", "tvremote\webos\wol.js",
             "tvremote\tools\probe-device.js", "tvremote\tools\scan.js")
 $missing = @($expect | Where-Object { -not (Test-Path (Join-Path $Root $_)) })
 if ($missing.Count) { Die ("copy incomplete, missing: " + ($missing -join ", ")) }
@@ -139,7 +141,8 @@ try {
 } finally {
   Set-Location $prevLoc
 }
-if (-not (Test-Path (Join-Path $WebosDir "node_modules\ws"))) {
+if (-not (Test-Path (Join-Path $WebosDir "node_modules\ws")) -or
+    -not (Test-Path (Join-Path $WebosDir "node_modules\tuyapi"))) {
   Die "npm install failed (exit $npmCode) - check internet and rerun"
 }
 Ok "dependencies ready"

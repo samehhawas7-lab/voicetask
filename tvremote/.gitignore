@@ -1,6 +1,7 @@
 node_modules/
 data/
 webos/config.json
+webos/secrets.json
 webos/adbkey.pem
 windows/server.log
 windows/update.log

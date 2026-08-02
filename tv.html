@@ -139,6 +139,25 @@ body{display:flex;flex-direction:column;height:100dvh;
 .info dt{color:var(--muted)}
 .info dd{margin:0;direction:ltr;text-align:left;font-family:ui-monospace,Menlo,monospace;
   overflow-wrap:anywhere}
+.ac-dial{display:grid;grid-template-columns:64px 1fr 64px;gap:14px;align-items:center;direction:ltr;
+  background:var(--surface-2);border:1px solid var(--line);border-radius:22px;
+  padding:22px 16px;margin-bottom:20px}
+.ac-dial button{height:64px;border-radius:50%;border:1px solid var(--line);
+  background:var(--surface-3);color:var(--text);font-size:28px;font-family:inherit;cursor:pointer;
+  transition:transform .08s,background .15s}
+.ac-dial button:active{transform:scale(.92);background:var(--accent-dim)}
+.ac-mid{text-align:center;direction:rtl}
+.ac-mid b{display:block;font-size:46px;font-weight:800;line-height:1;letter-spacing:-1px}
+.ac-mid b::after{content:"\B0";font-size:26px;font-weight:600;color:var(--muted)}
+.ac-mid small{display:block;font-size:11.5px;color:var(--muted);margin-top:8px}
+.ac-remote.off .ac-mid b{color:var(--muted);opacity:.45}
+.key.on{background:var(--accent-dim);border-color:var(--accent)}
+.ac-power{background:var(--danger);border-color:transparent;color:#fff}
+.ac-power.on{background:var(--ok);border-color:transparent}
+.ac-msg{font-size:12px;color:var(--muted);line-height:1.9;min-height:1em}
+.ac-msg.bad{color:var(--danger)}
+.field select{width:100%;background:var(--surface);border:1px solid var(--line);
+  color:var(--text);border-radius:12px;height:46px;padding:0 12px;font-family:inherit;font-size:14px}
 .act-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
 .toggle{display:flex;align-items:center;justify-content:space-between;gap:14px;
   margin-top:14px;padding-top:14px;border-top:1px solid var(--line);cursor:pointer}
@@ -331,11 +350,11 @@ input::placeholder{color:#5c6579}
       <svg><use href="#i-proj"></use></svg><b>البروجيكتر</b><small>XL2-220</small>
     </button>
     <button class="tile soon" data-go="dev-ac-hall">
-      <i class="pip"></i>
+      <i class="pip" id="pipAcHall"></i>
       <svg><use href="#i-ac"></use></svg><b>مكيف الصالة</b><small>ماندو بلس</small>
     </button>
     <button class="tile soon" data-go="dev-ac-bed">
-      <i class="pip"></i>
+      <i class="pip" id="pipAcBed"></i>
       <svg><use href="#i-ac"></use></svg><b>مكيف غرفة النوم</b><small>ماندو بلس</small>
     </button>
     <button class="tile soon" data-go="dev-washer">
@@ -602,24 +621,155 @@ input::placeholder{color:#5c6579}
 </section>
 
 <!-- ===== المكيفات ===== -->
-<section class="screen" id="dev-ac-hall" data-title="مكيف الصالة" data-sub="ماندو بلس · قيد الإعداد">
-  <div class="todo">
-    <span class="badge">ينقص مفتاح الربط</span>
+<section class="screen" id="dev-ac-hall" data-title="مكيف الصالة" data-sub="ماندو بلس">
+
+  <div class="todo ac-setup" data-room="hall" hidden>
+    <span class="badge">يلزم الربط مرة واحدة</span>
     <h3>المكيف يعمل بتطبيق Smart Life</h3>
-    <p>وهو من منظومة Tuya. للتحكم به من هنا نحتاج مفتاحه المحليّ، ويُستخرج
-       مرة واحدة ثم يعمل إلى الأبد بلا إنترنت.</p>
-    <ul>
-      <li>صورة شاشة المكيف من تطبيق Smart Life</li>
-      <li>معرفة نوعه: واي فاي داخله، أم جهاز أشعة أمامه</li>
-    </ul>
+    <p>وهو من منظومة Tuya. وأجهزتها <b>لا تُفصح عن مفتاحها إلا من
+       سحابتها</b> — فيُجلب مرة واحدة، ثم يتكلّم الخادم مع المكيف مباشرةً
+       في الشبكة ولا نحتاج الإنترنت بعدها أبداً.</p>
+    <ol style="font-size:12.5px;color:var(--muted);line-height:2.2;padding-inline-start:20px;margin:0 0 14px">
+      <li>افتح <b>iot.tuya.com</b> وأنشئ حساباً مجانياً</li>
+      <li>Cloud ← <b>Create Cloud Project</b> — اختر منطقة قريبة</li>
+      <li>Devices ← <b>Link App Account</b> ← امسح رمز QR من Smart Life
+          («أنا» ← الإعدادات ← مسح الرمز)</li>
+      <li>Overview ← انسخ <b>Access ID</b> و<b>Access Secret</b></li>
+    </ol>
+    <div class="field"><label>Access ID</label>
+      <input class="ac-id" type="text" autocomplete="off" spellcheck="false" dir="ltr"></div>
+    <div class="field"><label>Access Secret</label>
+      <input class="ac-secret" type="password" autocomplete="off" spellcheck="false" dir="ltr"></div>
+    <div class="field"><label>المنطقة</label>
+      <select class="ac-region">
+        <option value="eu">أوروبا الوسطى</option>
+        <option value="us">أمريكا</option>
+        <option value="in">الهند</option>
+        <option value="cn">الصين</option>
+      </select></div>
+    <button class="key ac-link" style="width:100%">اربط الحساب</button>
+    <p class="ac-msg" style="margin:12px 0 0"></p>
+    <p style="margin-top:14px;font-size:11.5px">
+      المفتاحان يُحفظان على لابتوبك وحده ولا يُرسلان إلى أحد.</p>
+  </div>
+
+  <div class="todo ac-choose" data-room="hall" hidden>
+    <span class="badge">اختر الجهاز</span>
+    <h3>أيّها مكيف الصالة؟</h3>
+    <div class="ac-list" style="display:grid;gap:10px;margin-top:12px"></div>
+  </div>
+
+  <div class="ac-remote" data-room="hall" hidden>
+    <div class="ac-dial">
+      <button class="ac-minus" aria-label="أبرد">−</button>
+      <div class="ac-mid">
+        <b class="ac-temp">--</b>
+        <small class="ac-room">—</small>
+      </div>
+      <button class="ac-plus" aria-label="أدفأ">+</button>
+    </div>
+
+    <div class="sec">
+      <div class="sec-h"><span>الوضع</span></div>
+      <div class="grid3">
+        <button class="key sm ac-mode" data-v="cold">تبريد</button>
+        <button class="key sm ac-mode" data-v="hot">تدفئة</button>
+        <button class="key sm ac-mode" data-v="wind">مروحة</button>
+      </div>
+      <div class="grid3">
+        <button class="key sm ac-mode" data-v="wet">تجفيف</button>
+        <button class="key sm ac-mode" data-v="auto">تلقائي</button>
+        <button class="key sm ac-swing">أرجحة</button>
+      </div>
+    </div>
+
+    <div class="sec">
+      <div class="sec-h"><span>المروحة</span></div>
+      <div class="grid3">
+        <button class="key sm ac-fan" data-v="low">هادئة</button>
+        <button class="key sm ac-fan" data-v="mid">متوسطة</button>
+        <button class="key sm ac-fan" data-v="high">قوية</button>
+      </div>
+    </div>
+
+    <button class="key ac-power" style="width:100%;height:64px;font-size:17px">تشغيل / إطفاء</button>
+    <p class="ac-msg" style="margin:12px 0 0;text-align:center"></p>
   </div>
 </section>
 
-<section class="screen" id="dev-ac-bed" data-title="مكيف غرفة النوم" data-sub="ماندو بلس · قيد الإعداد">
-  <div class="todo">
-    <span class="badge">ينقص مفتاح الربط</span>
-    <h3>كمكيف الصالة</h3>
-    <p>نفس المنظومة ونفس المطلوب. يُضبطان معاً في خطوة واحدة.</p>
+<section class="screen" id="dev-ac-bed" data-title="مكيف غرفة النوم" data-sub="ماندو بلس">
+
+  <div class="todo ac-setup" data-room="bed" hidden>
+    <span class="badge">يلزم الربط مرة واحدة</span>
+    <h3>المكيف يعمل بتطبيق Smart Life</h3>
+    <p>وهو من منظومة Tuya. وأجهزتها <b>لا تُفصح عن مفتاحها إلا من
+       سحابتها</b> — فيُجلب مرة واحدة، ثم يتكلّم الخادم مع المكيف مباشرةً
+       في الشبكة ولا نحتاج الإنترنت بعدها أبداً.</p>
+    <ol style="font-size:12.5px;color:var(--muted);line-height:2.2;padding-inline-start:20px;margin:0 0 14px">
+      <li>افتح <b>iot.tuya.com</b> وأنشئ حساباً مجانياً</li>
+      <li>Cloud ← <b>Create Cloud Project</b> — اختر منطقة قريبة</li>
+      <li>Devices ← <b>Link App Account</b> ← امسح رمز QR من Smart Life
+          («أنا» ← الإعدادات ← مسح الرمز)</li>
+      <li>Overview ← انسخ <b>Access ID</b> و<b>Access Secret</b></li>
+    </ol>
+    <div class="field"><label>Access ID</label>
+      <input class="ac-id" type="text" autocomplete="off" spellcheck="false" dir="ltr"></div>
+    <div class="field"><label>Access Secret</label>
+      <input class="ac-secret" type="password" autocomplete="off" spellcheck="false" dir="ltr"></div>
+    <div class="field"><label>المنطقة</label>
+      <select class="ac-region">
+        <option value="eu">أوروبا الوسطى</option>
+        <option value="us">أمريكا</option>
+        <option value="in">الهند</option>
+        <option value="cn">الصين</option>
+      </select></div>
+    <button class="key ac-link" style="width:100%">اربط الحساب</button>
+    <p class="ac-msg" style="margin:12px 0 0"></p>
+    <p style="margin-top:14px;font-size:11.5px">
+      المفتاحان يُحفظان على لابتوبك وحده ولا يُرسلان إلى أحد.</p>
+  </div>
+
+  <div class="todo ac-choose" data-room="bed" hidden>
+    <span class="badge">اختر الجهاز</span>
+    <h3>أيّها مكيف غرفة النوم؟</h3>
+    <div class="ac-list" style="display:grid;gap:10px;margin-top:12px"></div>
+  </div>
+
+  <div class="ac-remote" data-room="bed" hidden>
+    <div class="ac-dial">
+      <button class="ac-minus" aria-label="أبرد">−</button>
+      <div class="ac-mid">
+        <b class="ac-temp">--</b>
+        <small class="ac-room">—</small>
+      </div>
+      <button class="ac-plus" aria-label="أدفأ">+</button>
+    </div>
+
+    <div class="sec">
+      <div class="sec-h"><span>الوضع</span></div>
+      <div class="grid3">
+        <button class="key sm ac-mode" data-v="cold">تبريد</button>
+        <button class="key sm ac-mode" data-v="hot">تدفئة</button>
+        <button class="key sm ac-mode" data-v="wind">مروحة</button>
+      </div>
+      <div class="grid3">
+        <button class="key sm ac-mode" data-v="wet">تجفيف</button>
+        <button class="key sm ac-mode" data-v="auto">تلقائي</button>
+        <button class="key sm ac-swing">أرجحة</button>
+      </div>
+    </div>
+
+    <div class="sec">
+      <div class="sec-h"><span>المروحة</span></div>
+      <div class="grid3">
+        <button class="key sm ac-fan" data-v="low">هادئة</button>
+        <button class="key sm ac-fan" data-v="mid">متوسطة</button>
+        <button class="key sm ac-fan" data-v="high">قوية</button>
+      </div>
+    </div>
+
+    <button class="key ac-power" style="width:100%;height:64px;font-size:17px">تشغيل / إطفاء</button>
+    <p class="ac-msg" style="margin:12px 0 0;text-align:center"></p>
   </div>
 </section>
 
@@ -1677,6 +1827,8 @@ function show(id){
   }
   if (id === "dev-maint"){ paintInfo(); if (window.__checkVersion) window.__checkVersion(); }
   if (id === "dev-proj" && window.__projCheck) window.__projCheck();
+  if (id === "dev-ac-hall" && window.__acCheck) window.__acCheck("hall");
+  if (id === "dev-ac-bed"  && window.__acCheck) window.__acCheck("bed");
 }
 
 
@@ -2259,8 +2411,13 @@ function wakeTv(btn){
    متوقَّع لا خطأ. نستطلع /health حتى يردّ، ثم نعيد تحميل الصفحة
    لتُحمَّل الواجهة الجديدة معه.
    ============================================================ */
-function post(path){
-  return fetch(path, { method:"POST", cache:"no-store" }).then(r => r.json());
+function post(path, body){
+  const opt = { method: "POST", cache: "no-store" };
+  if (body !== undefined){
+    opt.headers = { "Content-Type": "application/json" };
+    opt.body = JSON.stringify(body);
+  }
+  return fetch(path, opt).then(r => r.json());
 }
 
 (function setupUpdate(){
@@ -2360,6 +2517,184 @@ function post(path){
               .toLocaleTimeString("ar", { hour:"2-digit", minute:"2-digit" }) : "");
     }).catch(() => {});
   };
+})();
+
+
+/* ============================================================
+   المكيفات — Tuya محلياً
+   الخادم يمسك المفاتيح ويتكلّم مع المكيف؛ الصفحة تطلب وتعرض.
+   والحالة تُقرأ من الجهاز بعد كل أمر لا تُفترض — فالمكيف قد يرفض
+   ما لا يقبله وضعه الحالي، ولا يصحّ أن نُظهر ما لم يقع.
+   ============================================================ */
+const AC_MODE_NAMES = { cold:"تبريد", hot:"تدفئة", wind:"مروحة", wet:"تجفيف", auto:"تلقائي" };
+
+(function setupAC(){
+  const rooms = ["hall", "bed"];
+  const el = (room, sel) => document.querySelector('[data-room="' + room + '"]' + sel) ||
+                            document.querySelector('.ac-remote[data-room="' + room + '"] ' + sel);
+  const part = (room, cls) => document.querySelector(cls + '[data-room="' + room + '"]');
+  const within = (room, sel) => part(room, ".ac-remote").querySelector(sel);
+
+  const say = (room, text, bad) => {
+    part(room, ".ac-remote").querySelectorAll(".ac-msg").forEach(n => {
+      n.textContent = text || ""; n.classList.toggle("bad", !!bad);
+    });
+  };
+
+  function paint(room, st){
+    const box = part(room, ".ac-remote");
+    box.hidden = false;
+    part(room, ".ac-setup").hidden = true;
+    part(room, ".ac-choose").hidden = true;
+
+    box.classList.toggle("off", st.on === false);
+    within(room, ".ac-temp").textContent = st.setTemp != null ? st.setTemp : "--";
+    within(room, ".ac-room").textContent = st.blind
+      ? "بالأشعة — لا يُخبر بحالته"
+      : (st.curTemp != null ? "حرارة الغرفة " + st.curTemp + "°" : "—");
+
+    box.querySelectorAll(".ac-mode").forEach(b =>
+      b.classList.toggle("on", st.mode === b.dataset.v));
+    box.querySelectorAll(".ac-fan").forEach(b =>
+      b.classList.toggle("on", st.fan === b.dataset.v));
+    within(room, ".ac-swing").classList.toggle("on", !!st.swing);
+    within(room, ".ac-power").classList.toggle("on", st.on === true);
+
+    const pip = document.getElementById(room === "hall" ? "pipAcHall" : "pipAcBed");
+    if (pip) pip.className = "pip live";
+    const tile = document.querySelector('[data-go="dev-ac-' + room + '"]');
+    if (tile) tile.classList.remove("soon");
+    screenSub("dev-ac-" + room,
+      st.blind ? "بالأشعة" :
+      st.on === false ? "مطفأ" :
+      (AC_MODE_NAMES[st.mode] || "متصل") + (st.curTemp != null ? " · الغرفة " + st.curTemp + "°" : ""));
+  }
+
+  const state = {};        // آخر حالة معروفة لكل غرفة
+
+  function refresh(room){
+    return fetch("/ac/" + room + "/state", { cache:"no-store" })
+      .then(r => r.json())
+      .then(st => {
+        if (!st.ok) throw new Error(st.why || "");
+        state[room] = st;
+        paint(room, st);
+        say(room, "");
+        return st;
+      });
+  }
+
+  function send(room, changes){
+    say(room, "جاري…");
+    return post("/ac/" + room + "/set", changes)
+      .then(st => {
+        if (!st.ok) return say(room, st.why || "ما استجاب المكيف", true);
+        state[room] = Object.assign({}, state[room], st);
+        paint(room, state[room]);
+        say(room, "");
+      })
+      .catch(() => say(room, "تعذّر الوصول للخادم", true));
+  }
+
+  function showChoose(room, devices){
+    const box = part(room, ".ac-choose");
+    part(room, ".ac-setup").hidden = true;
+    part(room, ".ac-remote").hidden = true;
+    box.hidden = false;
+    const list = box.querySelector(".ac-list");
+    list.innerHTML = "";
+    devices.forEach(d => {
+      const btn = document.createElement("button");
+      btn.className = "key sm";
+      btn.style.height = "auto";
+      btn.style.padding = "12px";
+      btn.style.flexDirection = "column";
+      btn.innerHTML = "<b>" + d.name + "</b>";
+      const note = document.createElement("small");
+      note.style.color = "var(--muted)";
+      note.style.fontSize = "11px";
+      note.textContent = d.infrared ? "باعث أشعة — بلا قراءة حالة"
+                       : d.category === "kt" ? "مكيف بواي فاي"
+                       : "نوعه: " + (d.category || "غير معروف");
+      btn.appendChild(note);
+      btn.onclick = () => {
+        buzz();
+        post("/ac/assign", { room, id: d.id })
+          .then(() => refresh(room))
+          .catch(() => toast("تعذّر الحفظ", true));
+      };
+      list.appendChild(btn);
+    });
+  }
+
+  function linkForm(room, devices){
+    const box = part(room, ".ac-setup");
+    part(room, ".ac-remote").hidden = true;
+    part(room, ".ac-choose").hidden = true;
+    box.hidden = false;
+    const msg = box.querySelector(".ac-msg");
+    box.querySelector(".ac-link").onclick = () => {
+      const id = box.querySelector(".ac-id").value.trim();
+      const sec = box.querySelector(".ac-secret").value.trim();
+      const reg = box.querySelector(".ac-region").value;
+      if (!id || !sec) { msg.textContent = "املأ الحقلين"; msg.classList.add("bad"); return; }
+      const b = box.querySelector(".ac-link");
+      b.disabled = true; b.textContent = "جاري الربط…";
+      msg.classList.remove("bad");
+      msg.textContent = "أسأل Tuya عن أجهزتك…";
+      post("/ac/link", { accessId: id, accessSecret: sec, region: reg })
+        .then(r => {
+          if (!r.ok){ msg.textContent = r.why || "فشل الربط"; msg.classList.add("bad"); return; }
+          box.querySelector(".ac-secret").value = "";
+          toast("وجدت " + r.devices.length + " جهازاً");
+          rooms.forEach(rm => check(rm));
+        })
+        .catch(() => { msg.textContent = "تعذّر الوصول للخادم"; msg.classList.add("bad"); })
+        .finally(() => { b.disabled = false; b.textContent = "اربط الحساب"; });
+    };
+  }
+
+  function check(room){
+    if (!onServer){
+      const box = part(room, ".ac-setup");
+      box.hidden = false;
+      box.querySelector(".ac-msg").textContent = "افتح الريموت من عنوان اللابتوب أولاً";
+      return;
+    }
+    fetch("/ac/devices", { cache:"no-store" }).then(r => r.json()).then(d => {
+      if (!d.linked) return linkForm(room, []);
+      if (!d.rooms || !d.rooms[room]) return showChoose(room, d.devices);
+      refresh(room).catch(e => {
+        part(room, ".ac-remote").hidden = false;
+        say(room, e.message || "ما وصلت للمكيف — تأكّد أنه موصول بالواي فاي", true);
+      });
+    }).catch(() => {});
+  }
+
+  rooms.forEach(room => {
+    const box = part(room, ".ac-remote");
+    if (!box) return;
+    const step = (d) => {
+      const cur = (state[room] && state[room].setTemp) || 24;
+      const next = Math.min(30, Math.max(16, cur + d));
+      if (next === cur) return;
+      buzz(12);
+      within(room, ".ac-temp").textContent = next;   // استجابة فورية، ثم تصحّحها القراءة
+      send(room, { setTemp: next });
+    };
+    within(room, ".ac-plus").onclick  = () => step(1);
+    within(room, ".ac-minus").onclick = () => step(-1);
+    box.querySelectorAll(".ac-mode").forEach(b =>
+      b.onclick = () => { buzz(12); send(room, { mode: b.dataset.v }); });
+    box.querySelectorAll(".ac-fan").forEach(b =>
+      b.onclick = () => { buzz(12); send(room, { fan: b.dataset.v }); });
+    within(room, ".ac-swing").onclick = () =>
+      { buzz(12); send(room, { swing: !(state[room] && state[room].swing) }); };
+    within(room, ".ac-power").onclick = () =>
+      { buzz(20); send(room, { on: !(state[room] && state[room].on) }); };
+  });
+
+  window.__acCheck = check;
 })();
 
 function paintInfo(){
