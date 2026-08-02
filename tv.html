@@ -140,6 +140,17 @@ body{display:flex;flex-direction:column;height:100dvh;
 .info dd{margin:0;direction:ltr;text-align:left;font-family:ui-monospace,Menlo,monospace;
   overflow-wrap:anywhere}
 .act-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
+.toggle{display:flex;align-items:center;justify-content:space-between;gap:14px;
+  margin-top:14px;padding-top:14px;border-top:1px solid var(--line);cursor:pointer}
+.toggle b{display:block;font-size:13px;font-weight:650}
+.toggle small{display:block;font-size:11.5px;color:var(--muted);line-height:1.7;margin-top:3px}
+.toggle input{appearance:none;-webkit-appearance:none;width:46px;height:27px;flex:none;
+  border-radius:14px;background:var(--surface-3);border:1px solid var(--line);
+  position:relative;cursor:pointer;transition:background .18s}
+.toggle input::after{content:"";position:absolute;top:2px;inset-inline-start:2px;
+  width:21px;height:21px;border-radius:50%;background:var(--muted);transition:.18s}
+.toggle input:checked{background:var(--accent-dim);border-color:var(--accent)}
+.toggle input:checked::after{inset-inline-start:21px;background:var(--accent)}
 .chip{display:inline-block;background:var(--warn);color:#231a08;border-radius:8px;
   padding:2px 8px;font-size:10.5px;font-weight:700;vertical-align:middle;margin-inline-start:6px}
 .steps{margin-top:12px;font-size:12.5px;line-height:2.1;color:var(--muted)}
@@ -658,6 +669,13 @@ input::placeholder{color:#5c6579}
     <h3>تحديث الخادم <span class="chip" id="updChip" hidden>يوجد تحديث</span></h3>
     <p id="updNote">يجلب آخر نسخة ويعيد تشغيل الخادم وحده — بلا لمس اللابتوب.</p>
     <button class="key" id="updBtn" style="width:100%">تحديث الآن</button>
+    <label class="toggle" id="autoRow">
+      <span>
+        <b>تحديث تلقائي</b>
+        <small id="autoNote">يتفقّد كل نصف ساعة ويحدّث حين لا يكون أحد يستعمل الريموت</small>
+      </span>
+      <input type="checkbox" id="autoChk">
+    </label>
     <div class="steps" id="updSteps" hidden></div>
     <details style="margin-top:12px">
       <summary style="font-size:12px;color:var(--muted);cursor:pointer">
@@ -2252,6 +2270,16 @@ function post(path){
     setTimeout(tick, 4000);
   }
 
+  const chk = $("autoChk");
+  if (chk) chk.onchange = () => {
+    fetch("/auto-update", {
+      method:"POST", headers:{ "Content-Type":"application/json" },
+      body: JSON.stringify({ on: chk.checked }),
+    }).then(r => r.json())
+      .then(r => toast(r.autoUpdate ? "التحديث التلقائي مفعّل" : "أُطفئ التحديث التلقائي"))
+      .catch(() => { chk.checked = !chk.checked; toast("تعذّر الحفظ", true); });
+  };
+
   window.__checkVersion = () => {
     if (!onServer){ note.textContent = "التحديث يحتاج الخادم."; btn.disabled = true; return; }
     fetch("/version", { cache:"no-store" }).then(r => r.json()).then(v => {
@@ -2266,6 +2294,13 @@ function post(path){
       note.textContent = v.updateAvailable
         ? "يوجد إصدار أحدث. الضغط يجلبه ويعيد تشغيل الخادم وحده."
         : "أنت على آخر نسخة. الضغط يعيد التثبيت على أي حال.";
+      if (chk) chk.checked = v.autoUpdate !== false;
+      const an = $("autoNote");
+      if (an) an.textContent = v.autoUpdate === false
+        ? "مطفأ — لن يتحدّث إلا بضغطك"
+        : "يتفقّد كل نصف ساعة ويحدّث حين لا يكون أحد يستعمل الريموت"
+          + (v.lastCheck ? " · آخر تفقّد " + new Date(v.lastCheck)
+              .toLocaleTimeString("ar", { hour:"2-digit", minute:"2-digit" }) : "");
     }).catch(() => {});
   };
 })();

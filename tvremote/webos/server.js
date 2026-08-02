@@ -55,7 +55,7 @@ const PROJ_PORT = Number(process.env.PROJ_PORT || CFG.projPort || 5555);
 function saveConfig() {
   try {
     fs.writeFileSync(path.join(__dirname, "config.json"),
-      JSON.stringify(Object.assign({}, CFG, { tvIp, tvMac, projIp, tvPort: TV_PORT, port: PORT }), null, 2));
+      JSON.stringify(Object.assign({}, CFG, { tvIp, tvMac, projIp, autoUpdate, tvPort: TV_PORT, port: PORT }), null, 2));
   } catch { /* القرص للقراءة فقط أحياناً — لا يمنع العمل */ }
 }
 
@@ -233,6 +233,8 @@ function latestSha() {
 }
 
 let updating = false;
+let autoUpdate = CFG.autoUpdate !== false;      // مفعّل ما لم يُطفأ صراحةً
+let lastCheck = { at: null, found: false };
 
 function startUpdate() {
   if (process.platform !== "win32" && !process.env.UPDATE_CMD) {
@@ -266,6 +268,44 @@ function startUpdate() {
   }
 }
 
+
+/**
+ * التحديث الذاتي الدوريّ.
+ *
+ * صاحب البيت كان ينسخ أمراً من محادثة إلى واتساب إلى الويب إلى اللابتوب
+ * في كل دفعة. فصار الخادم يتفقّد المستودع ويحدّث نفسه.
+ *
+ * ويؤجَّل ما دام أحدٌ موصولاً، فالتحديث يقطع الريموت نحو دقيقة ولا
+ * يُقطع على أحدٍ وهو يستعمله. لكن التأجيل لا يكون أبداً: التطبيق يفتح
+ * مقبساً ما دامت صفحة التلفزيون مفتوحة والتلفزيون شغّال، فلو تُرك
+ * الشرط مطلقاً لَما تحدّث الخادم قطّ. فبعد ثماني تأجيلات — أربع ساعات
+ * — يمضي على أي حال؛ والتطبيق يعيد الوصل خلال ثانيتين.
+ *
+ * والمنصّب يحتفظ بنسخة ويرجع إليها إن لم يقلع الجديد، فلا يبقى البيت
+ * بلا ريموت بسبب دفعة معطوبة.
+ */
+const MAX_DEFERRALS = 8;
+let deferrals = 0;
+
+async function autoCheck() {
+  if (!autoUpdate || updating) return;
+  const latest = await latestSha();
+  const inst = installedVersion();
+  lastCheck = { at: new Date().toISOString(), found: !!(latest && inst.sha && latest !== inst.sha) };
+  if (!lastCheck.found) { deferrals = 0; return; }
+
+  const busy = wss.clients.size;
+  if (busy > 0 && ++deferrals <= MAX_DEFERRALS) {
+    log("update available but " + busy + " client(s) connected - deferred (" +
+        deferrals + "/" + MAX_DEFERRALS + ")");
+    return;
+  }
+  log("update available (" + latest.slice(0, 7) + ") - starting" +
+      (busy ? " despite " + busy + " client(s) after " + deferrals + " deferrals" : ""));
+  deferrals = 0;
+  startUpdate();
+}
+
 // ---------- تقديم الواجهة ----------
 // نحقن راية تخبر الصفحة أنها تعمل خلف خادم، فتوجّه اتصالها إليه
 function servePage(res) {
@@ -295,7 +335,7 @@ const server = http.createServer((req, res) => {
   //   • أن تكون POST — فالصور والوسوم لا تُصدر إلا GET
   //   • ألّا تحمل Origin من مضيف آخر — وغيابه مقبول، إذ لا يرسله
   //     المتصفح في طلبات نفس الأصل، وهي حالتنا
-  const CHANGING = ["/update", "/power-on", "/find-tv", "/tv-mac",
+  const CHANGING = ["/update", "/auto-update", "/power-on", "/find-tv", "/tv-mac",
                     "/proj/find", "/proj/key", "/proj/app", "/proj/wake", "/proj/sleep"];
   if (CHANGING.includes(url.pathname)) {
     if (req.method !== "POST") {
@@ -337,7 +377,22 @@ const server = http.createServer((req, res) => {
       latest: latest || null,
       updateAvailable: !!(latest && inst.sha && latest !== inst.sha),
       updating,
+      autoUpdate,
+      lastCheck: lastCheck.at,
     }));
+  }
+  if (url.pathname === "/auto-update") {
+    let body = "";
+    req.on("data", (c) => { body += c; if (body.length > 256) req.destroy(); });
+    return req.on("end", () => {
+      try {
+        const want = JSON.parse(body || "{}").on;
+        if (typeof want === "boolean" && want !== autoUpdate) {
+          autoUpdate = want; saveConfig(); log("auto-update " + (want ? "on" : "off"));
+        }
+      } catch {}
+      json(200, { ok: true, autoUpdate });
+    });
   }
   if (url.pathname === "/update") {
     const r = startUpdate();
@@ -554,8 +609,14 @@ server.listen(PORT, "0.0.0.0", () => {
 
   // نتحقّق من العنوان المحفوظ فور الإقلاع، فيكون جاهزاً قبل أول ضغطة زر
   if (!process.env.TV_URL) ensureTv();
+
+  // أول تفقّد بعد دقيقتين — لا فور الإقلاع، كيلا يتحدّث بعد تحديثٍ توّاً
+  if (!process.env.NO_AUTO_UPDATE) {
+    setTimeout(autoCheck, 120000);
+    setInterval(autoCheck, 1800000).unref();     // كل نصف ساعة
+  }
 });
 
 module.exports = server;
 // سطحٌ للاختبار وحده: يسمح بفحص قراءة النسخة ومقارنتها بلا شبكة
-module.exports.__test = { latestSha, installedVersion, startUpdate };
+module.exports.__test = { latestSha, installedVersion, startUpdate, autoCheck, wss };

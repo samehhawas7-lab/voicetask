@@ -30,6 +30,7 @@ $Root     = "C:\kmc-remote"
 $TvIp     = if ($env:TV_IP) { $env:TV_IP } else { "192.168.8.77" }
 $Port     = if ($env:PORT)  { [int]$env:PORT } else { 8099 }
 $ZipUrl   = "https://github.com/samehhawas7-lab/voicetask/archive/refs/heads/main.zip"
+$InstallerUrl = "https://raw.githubusercontent.com/samehhawas7-lab/voicetask/main/tvremote/windows/install.ps1"
 $TaskName = "KMC TV Remote"
 
 function Say  ($m) { Write-Host $m }
@@ -38,6 +39,7 @@ function Warn ($m) { Write-Host "  [WARN] $m"   -ForegroundColor Yellow }
 function Die  ($m) { throw $m }
 
 $healthy = $false
+$rolledBack = $false
 $ips = @()
 $WinDir = Join-Path $Root "tvremote\windows"
 
@@ -96,6 +98,18 @@ $src = Join-Path $tmpDir "voicetask-main"
 if (-not (Test-Path $src)) { Die "unexpected archive layout" }
 
 New-Item -ItemType Directory -Path $Root -Force | Out-Null
+
+# نسخة احتياطية قبل الاستبدال: التحديث صار يقع تلقائياً بلا أحدٍ يراقبه،
+# فدفعةٌ معطوبة تترك البيت بلا ريموت. نستثني node_modules لأنه ثقيل
+# ولا يُستبدل استبدالاً هادماً.
+$Backup = $Root + ".bak"
+$hadPrev = Test-Path (Join-Path $Root "tvremote\webos\server.js")
+if ($hadPrev) {
+  if (Test-Path $Backup) { Remove-Item $Backup -Recurse -Force -ErrorAction SilentlyContinue }
+  & robocopy $Root $Backup /E /XD node_modules .git /NFL /NDL /NJH /NJS /NP /R:0 /W:0 | Out-Null
+  Ok "backup kept at $Backup"
+}
+
 # robocopy يُرجع رموزاً دون 8 عند النجاح (1 = نُسخت ملفات)، فلا نعدّها أخطاء
 & robocopy $src $Root /E /NFL /NDL /NJH /NJS /NP /R:1 /W:1 | Out-Null
 if ($LASTEXITCODE -ge 8) { Die "copy to $Root failed (robocopy $LASTEXITCODE)" }
@@ -143,6 +157,7 @@ $cfg = [ordered]@{
   tvIp   = if ($env:TV_IP) { $TvIp } elseif ($old -and $old.tvIp) { $old.tvIp } else { $TvIp }
   tvMac  = if ($old -and $old.tvMac) { $old.tvMac } else { "" }
   projIp = if ($old -and $old.projIp) { $old.projIp } else { "192.168.8.13" }
+  autoUpdate = if ($old -and ($null -ne $old.autoUpdate)) { [bool]$old.autoUpdate } else { $true }
   tvPort = 3001
   port   = $Port
 }
@@ -233,6 +248,30 @@ Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger `
     -Description "KMC TV Remote home server" -ErrorAction Stop | Out-Null
 Ok "registered to start with Windows"
 
+# ---------- ٨٫٥) اختصار على سطح المكتب ----------
+# زرُّ التحديث داخل التطبيق لا يفيد حين يتعذّر الوصول إلى الخادم أصلاً.
+# فيبقى مخرجٌ لا يحتاج نسخاً ولا لصقاً ولا فتح PowerShell: نقرتان.
+try {
+  $desktop = [Environment]::GetFolderPath("CommonDesktopDirectory")
+  if (-not $desktop) { $desktop = [Environment]::GetFolderPath("Desktop") }
+  $lnk = Join-Path $desktop "تحديث ريموت البيت.lnk"
+  $ws = New-Object -ComObject WScript.Shell
+  $sc = $ws.CreateShortcut($lnk)
+  $sc.TargetPath = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
+  $sc.Arguments  = "-NoProfile -ExecutionPolicy Bypass -Command `"irm '$InstallerUrl' | iex; Read-Host 'اضغط Enter للإغلاق'`""
+  $sc.IconLocation = "$env:SystemRoot\System32\shell32.dll,238"
+  $sc.Description = "يجلب آخر نسخة من ريموت البيت ويعيد تشغيل الخادم"
+  $sc.Save()
+
+  # خاصيّة «تشغيل كمسؤول» لا تُضبط من WScript.Shell: بتٌّ في رأس الملف
+  $bytes = [IO.File]::ReadAllBytes($lnk)
+  $bytes[0x15] = $bytes[0x15] -bor 0x20
+  [IO.File]::WriteAllBytes($lnk, $bytes)
+  Ok "desktop shortcut created"
+} catch {
+  Warn "could not create the desktop shortcut - not critical"
+}
+
 # ---------- ٩) التشغيل والتحقّق ----------
 Say ""
 Say "  starting server..."
@@ -257,6 +296,28 @@ if ($healthy) {
   Say ""
   Say "   open on your iPhone:"
   foreach ($ip in $ips) { Write-Host "      http://$ip`:$Port" -ForegroundColor Cyan }
+} elseif ($hadPrev -and (Test-Path $Backup)) {
+  # لا نترك البيت بلا ريموت: نرجع إلى النسخة التي كانت تعمل ونعيد تشغيلها
+  Write-Host "   NEW VERSION DID NOT START - ROLLING BACK" -ForegroundColor Yellow
+  Stop-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
+  Get-CimInstance Win32_Process -Filter "Name='node.exe' OR Name='cmd.exe'" -ErrorAction SilentlyContinue |
+    Where-Object { $_.CommandLine -and $_.CommandLine -like "*kmc-remote*" } |
+    ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+  Start-Sleep -Seconds 2
+  & robocopy $Backup $Root /E /XD node_modules .git /NFL /NDL /NJH /NJS /NP /R:0 /W:0 | Out-Null
+  Start-ScheduledTask -TaskName $TaskName
+  Start-Sleep -Seconds 8
+  $back = $false
+  try { $back = [bool](Invoke-RestMethod -Uri "http://127.0.0.1:$Port/health" -TimeoutSec 5 -ErrorAction Stop).ok } catch { }
+  if ($back) {
+    Write-Host "   ROLLED BACK - the previous version is running again" -ForegroundColor Green
+    $healthy = $true
+    $rolledBack = $true
+  } else {
+    Write-Host "   ROLLBACK FAILED - see the log" -ForegroundColor Red
+  }
+  Say ""
+  Say "   log: $WinDir\server.log"
 } else {
   Write-Host "   SERVER DID NOT RESPOND YET" -ForegroundColor Yellow
   Say ""
