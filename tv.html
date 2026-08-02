@@ -935,7 +935,10 @@ input::placeholder{color:#5c6579}
     <button class="key sm" id="cmdFind">بحث عن التلفزيون</button>
     <button class="key sm" id="cmdRepair">إقران جديد</button>
     <button class="key sm" id="cmdReload">تحديث الصفحة</button>
+    <button class="key sm" id="cmdRestart">إعادة تشغيل الخادم</button>
+    <button class="key sm" id="cmdLog">سجلّ آخر تحديث</button>
   </div>
+  <div id="updLog" class="code" style="max-height:260px;overflow:auto;white-space:pre-wrap" hidden></div>
 
   <div class="card">
     <h3>تحديث الخادم <span class="chip" id="updChip" hidden>يوجد تحديث</span></h3>
@@ -2361,6 +2364,40 @@ function wakeTv(btn){
 
   const cl = $("cmdReload");
   if (cl) cl.onclick = () => location.reload();
+
+  // إعادة تشغيل الخادم: run.cmd حلقةٌ تعيده بعد خمس ثوانٍ إن خرج.
+  // وبها يُفَكّ ما علِق في ذاكرته من غير القيام إلى اللابتوب.
+  const crs = $("cmdRestart");
+  if (crs) crs.onclick = () => {
+    if (!onServer) return toast("يحتاج الخادم", true);
+    if (!confirm("إعادة تشغيل الخادم؟\n\nينقطع الريموت نحو عشر ثوانٍ ثم يعود وحده.\n"
+               + "تنفع حين يعلَق شيء — كأن يُرفض التحديث بلا سبب.")) return;
+    crs.disabled = true; const t = crs.textContent; crs.textContent = "يُعاد…";
+    post("/restart")
+      .then(() => toast("يعود بعد ثوانٍ"))
+      .catch(() => toast("يعود بعد ثوانٍ"))   // موتُه قبل ردّه متوقَّع
+      .finally(() => {
+        // ننتظر عودته ثم نُعيد الصفحة
+        const back = () => fetch("/health", { cache:"no-store" })
+          .then(() => location.reload())
+          .catch(() => setTimeout(back, 2000));
+        setTimeout(back, 6000);
+        setTimeout(() => { crs.disabled = false; crs.textContent = t; }, 20000);
+      });
+  };
+
+  const cg = $("cmdLog");
+  if (cg) cg.onclick = () => {
+    const box = $("updLog");
+    if (!box) return;
+    if (!box.hidden) { box.hidden = true; return; }
+    box.hidden = false;
+    box.textContent = "يُجلب…";
+    fetch("/update-log", { cache:"no-store" })
+      .then(r => r.text())
+      .then(t => { box.textContent = t.trim() || "السجلّ فارغ"; box.scrollTop = box.scrollHeight; })
+      .catch(() => { box.textContent = "تعذّر جلب السجلّ"; });
+  };
 
   // زر نسخ لكل كتلة أمر — النسخ من الشاشة على الجوال متعب
   document.querySelectorAll("[data-copy-for]").forEach(btn => {

@@ -561,7 +561,7 @@ const server = http.createServer((req, res) => {
                     "/ac/link", "/ac/assign", "/ac/hall/set", "/ac/bed/set",
                     "/proj/find", "/proj/key", "/proj/app", "/proj/wake", "/proj/sleep",
                     "/router/link", "/router/find", "/router/block", "/router/wifi",
-                    "/router/reboot"];
+                    "/router/reboot", "/restart"];
   if (CHANGING.includes(url.pathname)) {
     if (req.method !== "POST") {
       return json(405, { ok: false, why: "هذه النقطة تُطلب بـ POST" });
@@ -623,6 +623,29 @@ const server = http.createServer((req, res) => {
       autoUpdate,
       lastCheck: lastCheck.at,
     }));
+  }
+
+  // سجلّ آخر تحديث — يُقرأ من الجوّال بدل القيام إلى اللابتوب لقراءته.
+  // ولا CORS عليه، فلا تقرأه صفحةٌ من أصل آخر ولو طلبته.
+  if (url.pathname === "/update-log") {
+    const f = path.join(__dirname, "..", "windows", "update.log");
+    let text = "";
+    try {
+      const buf = fs.readFileSync(f);
+      text = buf.slice(Math.max(0, buf.length - 12000)).toString("utf8");
+    } catch (e) { text = "ما وجدت سجلّاً — لم يجرِ تحديث بعد أو حُذف"; }
+    res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" });
+    return res.end(text);
+  }
+
+  // إعادة تشغيل الخادم. run.cmd حلقةٌ تُعيده بعد خمس ثوانٍ إن خرج،
+  // فالخروج إعادةُ تشغيل. وبها يُفَكّ ما علِق في الذاكرة — كقفل
+  // التحديث — من غير أن يُقام إلى اللابتوب، ومن خارج البيت أصلاً.
+  if (url.pathname === "/restart") {
+    log("restart requested - exiting; run.cmd will bring the server back");
+    json(200, { ok: true, back: "خمس ثوانٍ تقريباً" });
+    // نُمهل الردَّ أن يخرج قبل أن نموت
+    return setTimeout(() => process.exit(0), 400);
   }
   if (url.pathname === "/auto-update") {
     let body = "";
