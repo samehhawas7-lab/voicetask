@@ -106,8 +106,12 @@ $Backup = $Root + ".bak"
 $hadPrev = Test-Path (Join-Path $Root "tvremote\webos\server.js")
 if ($hadPrev) {
   if (Test-Path $Backup) { Remove-Item $Backup -Recurse -Force -ErrorAction SilentlyContinue }
-  & robocopy $Root $Backup /E /XD node_modules .git /NFL /NDL /NJH /NJS /NP /R:0 /W:0 | Out-Null
-  Ok "backup kept at $Backup"
+  # الأسرار تُستثنى: التحديث لا يمسّها أصلاً (لا /MIR ولا /PURGE، وهي
+  # ليست في أرشيف GitHub)، فنسخُها يصنع نسخة ثانية بصلاحيات موروثة —
+  # وضِعفُ مواضع السرّ ضِعفُ مواضع ضياعه
+  & robocopy $Root $Backup /E /XD node_modules .git /XF secrets.json adbkey.pem `
+      /NFL /NDL /NJH /NJS /NP /R:0 /W:0 | Out-Null
+  Ok "backup kept at $Backup (secrets not copied)"
 }
 
 # robocopy يُرجع رموزاً دون 8 عند النجاح (1 = نُسخت ملفات)، فلا نعدّها أخطاء
@@ -122,6 +126,7 @@ $expect = @("tv.html", "tvremote\webos\server.js", "tvremote\windows\run.cmd",
             "tvremote\webos\tuya.js", "tvremote\webos\tuya-cloud.js",
             "tvremote\webos\adb.js", "tvremote\webos\wol.js",
             "tvremote\webos\survey.js", "tvremote\webos\router.js",
+            "tvremote\webos\secure.js",
             "tvremote\windows\tailscale.ps1",
             "tvremote\tools\probe-device.js", "tvremote\tools\scan.js")
 $missing = @($expect | Where-Object { -not (Test-Path (Join-Path $Root $_)) })
@@ -167,6 +172,23 @@ $cfg = [ordered]@{
   port   = $Port
 }
 [IO.File]::WriteAllText($cfgPath, ($cfg | ConvertTo-Json), (New-Object Text.UTF8Encoding($false)))
+
+# ---------- صلاحيات ملفات الأسرار ----------
+# 0600 التي يكتب بها node صلاحية يونكس، وويندوز يتجاهلها فيرث الملف
+# صلاحيات مجلّده. فيُقطع التوريث صراحةً: الخادم يعمل بحساب SYSTEM
+# وصاحب الجهاز مسؤول، فهما وحدهما. والغياب لا يُعدّ خطأ — قد لا يكون
+# رُبط شيء بعد.
+#
+# وبالمعرّفات لا بالأسماء: «SYSTEM» و«Administrators» تُترجَم في ويندوز
+# المعرّب فلا يجدها icacls. أمّا S-1-5-18 و S-1-5-32-544 فواحدة في كل لغة.
+foreach ($leaf in @("secrets.json", "adbkey.pem")) {
+  $f = Join-Path $WebosDir $leaf
+  if (Test-Path $f) {
+    & icacls $f /inheritance:r /grant:r "*S-1-5-18:(F)" "*S-1-5-32-544:(F)" 2>&1 | Out-Null
+    if ($LASTEXITCODE -eq 0) { Ok "$leaf locked to SYSTEM + Administrators" }
+    else { Warn "could not tighten $leaf" }
+  }
+}
 
 # مسار node مثبَّت للمهمة: SYSTEM قد يقلع قبل أن يلتقط PATH الجهاز
 [IO.File]::WriteAllText((Join-Path $WinDir "node-path.cmd"),

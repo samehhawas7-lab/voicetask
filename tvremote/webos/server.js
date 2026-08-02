@@ -27,6 +27,7 @@ const { TuyaCloud, REGIONS } = require("./tuya-cloud");
 const { TuyaDevice } = require("./tuya");
 const survey = require("./survey");
 const { HuaweiRouter, probe: routerProbe, find: routerFind } = require("./router");
+const { harden } = require("./secure");
 const { spawn } = require("child_process");
 
 // حين يعمل الخادم خدمةً في الخلفية لا سبيل لتمرير متغيّرات البيئة إليه،
@@ -247,8 +248,12 @@ function loadSecrets() {
   } catch { return { accessId: "", accessSecret: "", region: "eu", devices: [], rooms: {} }; }
 }
 function saveSecrets(v) {
-  try { fs.writeFileSync(SECRETS, JSON.stringify(v, null, 2), { mode: 0o600 }); }
-  catch (e) { log("could not save secrets: " + e.message); }
+  try {
+    // الوراثة تقع عند الإنشاء وحده: الكتابة فوق ملفٍ قائم تُبقي صلاحياته
+    const fresh = !fs.existsSync(SECRETS);
+    fs.writeFileSync(SECRETS, JSON.stringify(v, null, 2), { mode: 0o600 });
+    if (fresh) harden(SECRETS, log);
+  } catch (e) { log("could not save secrets: " + e.message); }
 }
 
 let acSecrets = loadSecrets();

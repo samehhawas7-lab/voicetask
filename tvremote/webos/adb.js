@@ -23,6 +23,7 @@ const net = require("net");
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
+const { harden } = require("./secure");
 
 const CMD = {
   CNXN: 0x4e584e43, AUTH: 0x48545541, OPEN: 0x4e45504f,
@@ -38,7 +39,10 @@ function loadKey() {
   } catch {
     const { privateKey } = crypto.generateKeyPairSync("rsa", { modulusLength: 2048 });
     const pem = privateKey.export({ type: "pkcs1", format: "pem" });
-    try { fs.writeFileSync(KEY_FILE, pem, { mode: 0o600 }); } catch {}
+    try {
+      fs.writeFileSync(KEY_FILE, pem, { mode: 0o600 });
+      harden(KEY_FILE);   // 0600 لا حكم لها على ويندوز — انظر secure.js
+    } catch {}
     return crypto.createPrivateKey(pem);
   }
 }
