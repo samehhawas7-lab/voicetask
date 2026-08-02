@@ -572,6 +572,15 @@ wss.on("connection", async (client, req) => {
     return client.close(1011, "ما وجدت التلفزيون في الشبكة");
   }
 
+  // فحصٌ سريع قبل فتح القناة. مهلة مصافحة WebSocket ثماني ثوانٍ،
+  // والصفحة تستسلم عند خمس — فكان المستخدم يرى «ما فيه رد» الغامضة
+  // بدل السبب. وهذا الفحص لا يكلّف شيئاً والتلفزيون شغّال: يردّ في
+  // أجزاء من الثانية. ولا يبطئ إلا حين يكون مطفأً، وهو حين نريده.
+  if (tvIp && !process.env.TV_URL && !(await portOpenOn(tvIp, TV_PORT, 1500))) {
+    log("TV at " + tvIp + " is not answering - likely off");
+    return client.close(1011, "التلفزيون مطفأ أو خارج الشبكة");
+  }
+
   const queue = [];
   let ready = false;
   let upstream = null;

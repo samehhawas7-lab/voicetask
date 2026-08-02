@@ -1030,11 +1030,15 @@ class WebOSRemote {
       let ws;
       try { ws = new RelaySocket(url); } catch (e) { return reject(new Error("رابط غير صالح")); }
 
-      // مهلة قصيرة: التلفزيون المطفي ما يرد أبداً، وما نبي المستخدم ينتظر طويل
+      // خلف الخادم نُمهله قليلاً: هو يفحص التلفزيون ويغلق القناة بسببٍ
+      // مفهوم — «التلفزيون مطفأ» — وكانت المهلة القصيرة تسبقه، فيرى
+      // المستخدم «ما فيه رد» الغامضة بدل الجواب.
+      // ونقرأ الراية مباشرةً لا من onServer: هذه الشفرة أسبق منه في الملف.
+      const behindServer = typeof window.__TV_PROXY__ !== "undefined";
       const timer = setTimeout(() => {
         try { ws.close(); } catch {}
-        reject(new Error("ما فيه رد خلال ٥ ثوانٍ"));
-      }, 5000);
+        reject(new Error("ما فيه رد من التلفزيون"));
+      }, behindServer ? 9000 : 5000);
 
       let settled = false;
       const done = (fn, arg) => { if (settled) return; settled = true; clearTimeout(timer); fn(arg); };
@@ -1100,8 +1104,13 @@ class WebOSRemote {
             this._scheduleReconnect();
           }
         }
-        done(reject, new Error(code === 1008
-          ? "التلفزيون يرفض التحكم من المتصفحات"
+        // 1011 مع سببٍ نصّيّ يأتي من خادمنا لا من التلفزيون، وهو تشخيصٌ
+        // مفهوم بذاته — فيُعرض كما هو لا مغلّفاً بجملة تُشوّشه
+        const rsn = ev && ev.reason ? String(ev.reason) : "";
+        const mine = code === 1011 && /[\u0600-\u06FF]/.test(rsn);
+        done(reject, new Error(
+          code === 1008 ? "التلفزيون يرفض التحكم من المتصفحات"
+          : mine       ? rsn
           : "التلفزيون أغلق الاتصال (" + why + ")"));
       };
     });
