@@ -233,6 +233,13 @@ async function surveyNetwork(log = () => {}, deps = {}) {
   // ١) SSDP أولاً: يعمل في أثناء ما نمسح المنافذ
   const ssdpPromise = ssdpProbe();
 
+  // ١ب) والراوتر إن كان مربوطاً: يعرف كل من على شبكته باسمه وبطاقته —
+  // حتى النائم الذي لا يفتح منفذاً ولا يعلن عن نفسه. وهو أوثق مصدرٍ
+  // فيها، فيُقدَّم اسمه على التخمين
+  const routerPromise = deps.routerHosts
+    ? deps.routerHosts().catch(() => [])
+    : Promise.resolve([]);
+
   // ٢) مسح المنافذ المميِّزة على كل عنوان
   const targets = [];
   for (const b of bases) for (let i = 1; i <= 254; i++) targets.push(b + "." + i);
@@ -247,16 +254,24 @@ async function surveyNetwork(log = () => {}, deps = {}) {
   });
 
   const ssdp = await ssdpPromise;
-  log("survey: " + hits.length + " host(s) with open ports, " + ssdp.size + " announced over SSDP");
+  const rHosts = await routerPromise;
+  const byIp = new Map(rHosts.map((h) => [h.ip, h]));
+  log("survey: " + hits.length + " host(s) with open ports, " + ssdp.size +
+      " announced over SSDP, " + rHosts.length + " known to the router");
 
-  // ٣) نضمّ من أعلن عن نفسه ولم يفتح منفذاً نعرفه
+  // ٣) نضمّ من أعلن عن نفسه ولم يفتح منفذاً نعرفه، ومن يعرفه الراوتر
   for (const ip of ssdp.keys()) {
     if (!hits.some((h) => h.ip === ip)) hits.push({ ip, open: [] });
+  }
+  for (const h of rHosts) {
+    if (h.ip && !hits.some((x) => x.ip === h.ip)) hits.push({ ip: h.ip, open: [] });
   }
 
   // ٤) نصف كل جهاز
   const devices = await pool(hits, 12, async (h) => {
-    const mac = await macOf(h.ip);
+    const known = byIp.get(h.ip);
+    // بطاقة الراوتر أوثق من جدول ARP: هو من وزّع العنوان
+    const mac = (known && known.mac) || await macOf(h.ip);
     const info = ssdp.get(h.ip);
     let desc = null;
     if (info && info.location) desc = await fetchDescription(info.location);
@@ -286,7 +301,8 @@ async function surveyNetwork(log = () => {}, deps = {}) {
       ip: h.ip,
       mac: mac || "",
       vendor: vendorOf(mac) || (desc && desc.maker) || "",
-      name: (desc && desc.name) || "",
+      // الاسم الذي سجّله الجهاز عند الراوتر أصدق من وصفٍ عامّ
+      name: (desc && desc.name) || (known && known.name) || "",
       model: (desc && desc.model) || "",
       server: (info && info.server) || "",
       ports: h.open,

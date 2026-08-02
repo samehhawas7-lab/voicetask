@@ -26,6 +26,7 @@ const adb = require("./adb");
 const { TuyaCloud, REGIONS } = require("./tuya-cloud");
 const { TuyaDevice } = require("./tuya");
 const survey = require("./survey");
+const { HuaweiRouter, probe: routerProbe, find: routerFind } = require("./router");
 const { spawn } = require("child_process");
 
 // حين يعمل الخادم خدمةً في الخلفية لا سبيل لتمرير متغيّرات البيئة إليه،
@@ -322,6 +323,70 @@ async function acLink({ accessId, accessSecret, region }) {
 // ---------- التحديث الذاتي ----------
 // كل ميزة كانت تُسلَّم بأمرٍ يُلصق في PowerShell على اللابتوب، وهي أكثر
 // خطوة تعثّر فيها صاحب البيت. فصار الخادم يحدّث نفسه بطلبٍ من التطبيق.
+// ---------- الراوتر ----------
+// كلمته تُحفظ مع أسرار Tuya في الملف نفسه بصلاحية 0600، ولا تُرسل
+// إلى المتصفح بحال.
+let routerSession = null;
+
+function routerCfg() { return acSecrets.router || null; }
+
+function routerOf() {
+  const c = routerCfg();
+  if (!c || !c.host || !c.password) return null;
+  if (!routerSession || routerSession.host !== c.host) {
+    routerSession = new HuaweiRouter({ host: c.host, username: c.username, password: c.password });
+  }
+  return routerSession;
+}
+
+/** بطاقات هذا اللابتوب — لا يُحجب الجهاز الذي يشغّل الريموت */
+function ownMacs() {
+  const nets = require("os").networkInterfaces();
+  const out = new Set();
+  for (const list of Object.values(nets)) {
+    for (const i of list || []) {
+      if (i.mac && i.mac !== "00:00:00:00:00:00") out.add(i.mac.toLowerCase());
+    }
+  }
+  return out;
+}
+
+/** عنوان الطالب — نُسقط بادئة IPv6 المُغلَّفة كي يُقارَن بجدول الراوتر */
+function clientIp(req) {
+  const a = (req.socket && req.socket.remoteAddress) || "";
+  return a.replace(/^::ffff:/, "");
+}
+
+/**
+ * الحَرَس: من يملك حجب جهازٍ يملك حجب نفسه. والواجهة تُتجاوَز،
+ * فيقع المنع هنا — لا هناك. (القاعدة الرابعة عشرة)
+ */
+async function guardBlock(req, macs) {
+  const mine = ownMacs();
+  const hosts = await routerOf().hosts();
+  const ip = clientIp(req);
+  const asking = hosts.find((h) => h.ip === ip);
+  for (const raw of macs) {
+    const m = String(raw).toLowerCase();
+    if (mine.has(m)) throw new Error("هذه بطاقة اللابتوب نفسه — حجبُها يقطع الريموت");
+    if (asking && asking.mac === m) throw new Error("هذا هو جهازك الذي تطلب منه الآن");
+  }
+}
+
+/** إطفاء الواي‑فاي يقتل الخادم إن كان عليه — ولا زرّ يعيده بعدها */
+async function guardWifiOff(index) {
+  const mine = ownMacs();
+  const hosts = await routerOf().hosts();
+  const nets = (await routerOf().wlan());
+  const target = nets.find((s) => s.index === String(index));
+  const here = hosts.find((h) => mine.has(h.mac));
+  if (!here) return;                       // اللابتوب ليس على الواي‑فاي — فلا خطر
+  if (!target) return;
+  if (!target.guest) {
+    throw new Error("اللابتوب متصل بهذه الشبكة — إطفاؤها يقطع الخادم ولا سبيل لإعادته إلا يدوياً");
+  }
+}
+
 const REPO = "samehhawas7-lab/voicetask";
 const INSTALLER = "https://raw.githubusercontent.com/" + REPO + "/main/tvremote/windows/install.ps1";
 const VERSION_FILE = path.join(__dirname, "..", "windows", "version.json");
@@ -474,7 +539,9 @@ const server = http.createServer((req, res) => {
   //     المتصفح في طلبات نفس الأصل، وهي حالتنا
   const CHANGING = ["/update", "/auto-update", "/power-on", "/find-tv", "/tv-mac",
                     "/ac/link", "/ac/assign", "/ac/hall/set", "/ac/bed/set",
-                    "/proj/find", "/proj/key", "/proj/app", "/proj/wake", "/proj/sleep"];
+                    "/proj/find", "/proj/key", "/proj/app", "/proj/wake", "/proj/sleep",
+                    "/router/link", "/router/find", "/router/block", "/router/wifi",
+                    "/router/reboot"];
   if (CHANGING.includes(url.pathname)) {
     if (req.method !== "POST") {
       return json(405, { ok: false, why: "هذه النقطة تُطلب بـ POST" });
@@ -514,7 +581,11 @@ const server = http.createServer((req, res) => {
     }
     if (surveyRunning) return json(200, { ok: true, running: true, devices: [] });
     surveyRunning = true;
-    return survey.surveyNetwork(log, { adbProbe: adb.probe })
+    return survey.surveyNetwork(log, {
+      adbProbe: adb.probe,
+      // الراوتر مصدرٌ رابع إن كان مربوطاً — وإلا مضى المسح بلا حاجةٍ إليه
+      routerHosts: routerOf() ? () => routerOf().hosts() : null,
+    })
       .then((r) => { surveyCache = { at: Date.now(), data: r }; json(200, r); })
       .catch((e) => json(500, { ok: false, why: e.message, devices: [] }))
       .finally(() => { surveyRunning = false; });
@@ -619,6 +690,108 @@ const server = http.createServer((req, res) => {
   }
 
   // ---------- المكيفات ----------
+  // ---------- الراوتر ----------
+  if (url.pathname.startsWith("/router/")) {
+    const rest = url.pathname.slice(8);
+    const fail = (e) => json(503, { ok: false, why: e.message });
+    const readBody = () => new Promise((res) => {
+      let b = "";
+      req.on("data", (c) => { b += c; if (b.length > 4096) req.destroy(); });
+      req.on("end", () => { try { res(JSON.parse(b || "{}")); } catch { res({}); } });
+    });
+    const r = routerOf();
+    const needLink = () => json(400, { ok: false, linked: false, why: "لم يُربط الراوتر بعد" });
+
+    // ربطٌ يُتحقّق منه بدخولٍ فعليّ قبل أن يُحفظ (القاعدة الرابعة)
+    if (rest === "link") {
+      return readBody().then(async (b) => {
+        const pass = String(b.password || "");
+        const user = String(b.username || "admin").trim() || "admin";
+        if (!pass) return json(400, { ok: false, why: "اكتب كلمة الدخول" });
+        let host = String(b.host || "").trim();
+        if (!host) {
+          const f = await routerFind(survey.subnets());
+          if (!f.ok) return json(404, { ok: false, why: f.why });
+          host = f.host;
+        } else {
+          const p = await routerProbe(host);
+          if (!p.ok) return json(404, { ok: false, why: p.why });
+        }
+        const test = new HuaweiRouter({ host, username: user, password: pass });
+        try { await test.login(); }
+        catch (e) { return json(401, { ok: false, why: e.message }); }
+        acSecrets = Object.assign({}, acSecrets, {
+          router: { host, username: user, password: pass, linkedAt: new Date().toISOString() },
+        });
+        saveSecrets(acSecrets);
+        routerSession = test;
+        log("router linked at " + host);
+        // لا تُعاد الكلمة ولا صداها
+        return json(200, { ok: true, linked: true, host });
+      }).catch(fail);
+    }
+
+    if (rest === "find") {
+      return routerFind(survey.subnets())
+        .then((f) => json(f.ok ? 200 : 404, f)).catch(fail);
+    }
+
+    if (!r) return needLink();
+
+    if (rest === "state") {
+      return Promise.all([
+        r.information().catch(() => ({})), r.status().catch(() => ({})),
+        r.signal().catch(() => ({})), r.traffic().catch(() => ({})),
+        r.wlan().catch(() => []),
+      ]).then(([info, st, sig, tr, wifi]) =>
+        json(200, { ok: true, linked: true, host: routerCfg().host,
+                    info, status: st, signal: sig, traffic: tr, wifi }))
+       .catch(fail);
+    }
+
+    if (rest === "hosts") {
+      return r.hosts().then(async (hosts) => {
+        const mine = ownMacs();
+        const ip = clientIp(req);
+        // ما لا يجوز حجبه يُوسَم هنا أيضاً، فلا تعرض الواجهة زرّاً لا يعمل
+        return json(200, { ok: true, hosts: hosts.map((h) => Object.assign({}, h, {
+          self: h.ip === ip,
+          server: mine.has(h.mac),
+          blockable: !(h.ip === ip || mine.has(h.mac)),
+        })) });
+      }).catch(fail);
+    }
+
+    if (rest === "block") {
+      return readBody().then(async (b) => {
+        const macs = Array.isArray(b.macs) ? b.macs : [];
+        await guardBlock(req, macs);
+        await r.setBlocked(macs);
+        log("router block list set (" + macs.length + ")");
+        return json(200, { ok: true, macs });
+      }).catch((e) => json(400, { ok: false, why: e.message }));
+    }
+
+    if (rest === "wifi") {
+      return readBody().then(async (b) => {
+        const index = String(b.index === undefined ? 0 : b.index);
+        const on = b.on === true;
+        if (!on) await guardWifiOff(index);
+        await r.setWifi(index, on);
+        return json(200, { ok: true, index, on });
+      }).catch((e) => json(400, { ok: false, why: e.message }));
+    }
+
+    if (rest === "reboot") {
+      return r.reboot().then(() => {
+        log("router reboot requested");
+        return json(200, { ok: true });
+      }).catch(fail);
+    }
+
+    return json(404, { ok: false, why: "نقطة غير معروفة" });
+  }
+
   if (url.pathname.startsWith("/ac/")) {
     const rest = url.pathname.slice(4);
     const fail = (e) => json(503, { ok: false, why: e.message });
