@@ -324,11 +324,15 @@ class WebOSRemote {
       let ws;
       try { ws = new RelaySocket(url); } catch (e) { return reject(new Error("رابط غير صالح")); }
 
-      // مهلة قصيرة: التلفزيون المطفي ما يرد أبداً، وما نبي المستخدم ينتظر طويل
+      // خلف الخادم نُمهله قليلاً: هو يفحص التلفزيون ويغلق القناة بسببٍ
+      // مفهوم — «التلفزيون مطفأ» — وكانت المهلة القصيرة تسبقه، فيرى
+      // المستخدم «ما فيه رد» الغامضة بدل الجواب.
+      // ونقرأ الراية مباشرةً لا من onServer: هذه الشفرة أسبق منه في الملف.
+      const behindServer = typeof window.__TV_PROXY__ !== "undefined";
       const timer = setTimeout(() => {
         try { ws.close(); } catch {}
-        reject(new Error("ما فيه رد خلال ٥ ثوانٍ"));
-      }, 5000);
+        reject(new Error("ما فيه رد من التلفزيون"));
+      }, behindServer ? 9000 : 5000);
 
       let settled = false;
       const done = (fn, arg) => { if (settled) return; settled = true; clearTimeout(timer); fn(arg); };
@@ -394,8 +398,13 @@ class WebOSRemote {
             this._scheduleReconnect();
           }
         }
-        done(reject, new Error(code === 1008
-          ? "التلفزيون يرفض التحكم من المتصفحات"
+        // 1011 مع سببٍ نصّيّ يأتي من خادمنا لا من التلفزيون، وهو تشخيصٌ
+        // مفهوم بذاته — فيُعرض كما هو لا مغلّفاً بجملة تُشوّشه
+        const rsn = ev && ev.reason ? String(ev.reason) : "";
+        const mine = code === 1011 && /[\u0600-\u06FF]/.test(rsn);
+        done(reject, new Error(
+          code === 1008 ? "التلفزيون يرفض التحكم من المتصفحات"
+          : mine       ? rsn
           : "التلفزيون أغلق الاتصال (" + why + ")"));
       };
     });
@@ -1661,9 +1670,26 @@ function paintInfo(){
 
   if (!onServer) return set("infoMac", "—");
   fetch("/health", { cache: "no-store" }).then(r => r.json())
-    .then(h => { set("infoTv", h.tv || tv.ip || "—"); set("infoMac", h.mac || "غير معروف بعد"); })
+    .then(h => {
+      set("infoTv", h.tv || tv.ip || "—");
+      set("infoMac", h.mac || "غير معروف بعد");
+      watchBuild(h);
+    })
     .catch(() => set("infoMac", "—"));
 }
+// التحديث التلقائي يبدّل الصفحة على الخادم بلا علم أحد، وتطبيق الشاشة
+// الرئيسية في آيفون يحتفظ بنسختها القديمة. فنقارن ختم البناء ونعيد
+// التحميل مرة واحدة — بحارسٍ في تخزين الجلسة كيلا ندور في حلقة.
+function watchBuild(h){
+  if (!h || !h.build || !window.__BUILD__) return;
+  if (h.build === window.__BUILD__) { sessionStorage.removeItem("reloaded_for"); return; }
+  if (sessionStorage.getItem("reloaded_for") === h.build) return;
+  sessionStorage.setItem("reloaded_for", h.build);
+  diag("الخادم صار على نسخة أحدث — إعادة تحميل الصفحة");
+  toast("وصل تحديث — تُعاد الصفحة");
+  setTimeout(() => location.reload(), 900);
+}
+
 setInterval(() => { if (!document.hidden) paintInfo(); }, 5000);
 paintInfo();
 if (window.__checkVersion) window.__checkVersion();

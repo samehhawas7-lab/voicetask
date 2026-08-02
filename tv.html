@@ -2376,9 +2376,26 @@ function paintInfo(){
 
   if (!onServer) return set("infoMac", "—");
   fetch("/health", { cache: "no-store" }).then(r => r.json())
-    .then(h => { set("infoTv", h.tv || tv.ip || "—"); set("infoMac", h.mac || "غير معروف بعد"); })
+    .then(h => {
+      set("infoTv", h.tv || tv.ip || "—");
+      set("infoMac", h.mac || "غير معروف بعد");
+      watchBuild(h);
+    })
     .catch(() => set("infoMac", "—"));
 }
+// التحديث التلقائي يبدّل الصفحة على الخادم بلا علم أحد، وتطبيق الشاشة
+// الرئيسية في آيفون يحتفظ بنسختها القديمة. فنقارن ختم البناء ونعيد
+// التحميل مرة واحدة — بحارسٍ في تخزين الجلسة كيلا ندور في حلقة.
+function watchBuild(h){
+  if (!h || !h.build || !window.__BUILD__) return;
+  if (h.build === window.__BUILD__) { sessionStorage.removeItem("reloaded_for"); return; }
+  if (sessionStorage.getItem("reloaded_for") === h.build) return;
+  sessionStorage.setItem("reloaded_for", h.build);
+  diag("الخادم صار على نسخة أحدث — إعادة تحميل الصفحة");
+  toast("وصل تحديث — تُعاد الصفحة");
+  setTimeout(() => location.reload(), 900);
+}
+
 setInterval(() => { if (!document.hidden) paintInfo(); }, 5000);
 paintInfo();
 if (window.__checkVersion) window.__checkVersion();

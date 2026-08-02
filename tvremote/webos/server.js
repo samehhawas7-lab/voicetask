@@ -390,7 +390,13 @@ function servePage(res) {
     res.writeHead(500, { "Content-Type": "text/plain; charset=utf-8" });
     return res.end("ما لقيت ملف tv.html بجذر المستودع");
   }
-  const flag = `<script>window.__TV_PROXY__=${JSON.stringify(tvIp || "auto")};</script>\n`;
+  // ختمُ بناءٍ يُحقن مع الصفحة. التحديث صار يقع تلقائياً بلا علم أحد،
+  // وتطبيقُ الشاشة الرئيسية في آيفون قد يبقى على نسخته القديمة. فتقارن
+  // الصفحةُ ختمَها بما عند الخادم وتُعيد تحميل نفسها إن تخلّفت.
+  let stamp = "";
+  try { stamp = String(fs.statSync(PAGE).mtimeMs | 0); } catch {}
+  const flag = `<script>window.__TV_PROXY__=${JSON.stringify(tvIp || "auto")};` +
+               `window.__BUILD__=${JSON.stringify(stamp)};</script>\n`;
   html = html.replace("<script>", flag + "<script>");
   res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" });
   res.end(html);
@@ -474,7 +480,9 @@ const server = http.createServer((req, res) => {
   }
 
   if (url.pathname === "/health") {
-    return json(200, { ok: true, tv: tvIp || null, mac: tvMac || null, seeking: !!seeking });
+    let stamp = "";
+    try { stamp = String(fs.statSync(PAGE).mtimeMs | 0); } catch {}
+    return json(200, { ok: true, tv: tvIp || null, mac: tvMac || null, seeking: !!seeking, build: stamp });
   }
   // زر يدوي لإعادة البحث حين يُنقل التلفزيون أو يتبدّل عنوانه
   if (url.pathname === "/find-tv") {
