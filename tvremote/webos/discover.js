@@ -12,22 +12,12 @@
 
 const net = require("net");
 const https = require("https");
-const os = require("os");
+
+// شبكات البيت وحدها — نسخة واحدة في survey.js تستثني شبكة Tailscale
+// الخاصة، ولا نكرّرها هنا فتفترقا يوماً
+const { subnets } = require("./survey");
 
 const TV_PORT = 3001;
-
-function subnets() {
-  const out = [];
-  for (const list of Object.values(os.networkInterfaces())) {
-    for (const i of list || []) {
-      const fam = typeof i.family === "string" ? i.family : `IPv${i.family}`;
-      if (fam !== "IPv4" || i.internal) continue;
-      const p = i.address.split(".").slice(0, 3).join(".");
-      if (!out.includes(p)) out.push(p);
-    }
-  }
-  return out;
-}
 
 function portOpen(ip, port, timeout = 900) {
   return new Promise((res) => {

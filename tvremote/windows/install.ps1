@@ -121,7 +121,7 @@ Remove-Item $tmpDir -Recurse -Force -ErrorAction SilentlyContinue
 $expect = @("tv.html", "tvremote\webos\server.js", "tvremote\windows\run.cmd",
             "tvremote\webos\tuya.js", "tvremote\webos\tuya-cloud.js",
             "tvremote\webos\adb.js", "tvremote\webos\wol.js",
-            "tvremote\webos\survey.js",
+            "tvremote\webos\survey.js", "tvremote\windows\tailscale.ps1",
             "tvremote\tools\probe-device.js", "tvremote\tools\scan.js")
 $missing = @($expect | Where-Object { -not (Test-Path (Join-Path $Root $_)) })
 if ($missing.Count) { Die ("copy incomplete, missing: " + ($missing -join ", ")) }
@@ -338,6 +338,24 @@ if ($healthy) {
   Say "   full log: $WinDir\server.log"
 }
 Say "=============================================="
+
+# ---------- ٩هـ) الوصول من خارج البيت — باختياره ----------
+# لا يُنصَّب شيء على جهازه بلا إذن صريح، ولو كان نافعاً. والسؤال
+# يُتخطّى صامتاً في التحديثات التلقائية، إذ لا أحد أمام الشاشة حينها.
+if ($healthy -and -not $env:KMC_NO_PROMPT) {
+  Say ""
+  Say "  Access the remote from outside the home?"
+  Say "  (installs Tailscale - a private network between your"
+  Say "   phone and this laptop; nothing is exposed to the internet)"
+  $ans = Read-Host "  type y for yes, anything else to skip"
+  if ($ans -match "^\s*[yY]") {
+    $tsScript = Join-Path $WinDir "tailscale.ps1"
+    if (Test-Path $tsScript) { & $tsScript }
+    else { Warn "tailscale.ps1 not found - re-run the installer" }
+  } else {
+    Say "  skipped - you can run tvremote\windows\tailscale.ps1 later"
+  }
+}
 
 } catch {
   Write-Host ""

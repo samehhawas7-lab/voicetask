@@ -854,6 +854,7 @@ input::placeholder{color:#5c6579}
     <h3>الحالة</h3>
     <dl class="info">
       <dt>الخادم</dt>      <dd id="infoServer">—</dd>
+      <dt>من خارج البيت</dt><dd id="infoAway">—</dd>
       <dt>التلفزيون</dt>   <dd id="infoTv">—</dd>
       <dt>بطاقة الشبكة</dt><dd id="infoMac">—</dd>
       <dt>القناة</dt>      <dd id="infoLink">—</dd>
@@ -2875,6 +2876,16 @@ function paintInfo(){
     .then(h => {
       set("infoTv", h.tv || tv.ip || "—");
       set("infoMac", h.mac || "غير معروف بعد");
+      // العنوان الذي يصل من أي مكان — يُعرض كما هو ولا يُدّعى إن غاب
+      const away = $("infoAway");
+      if (away){
+        away.textContent = h.away
+          ? "http://" + h.away + ":" + (location.port || 8099)
+          : "غير مفعّل";
+        away.style.color = h.away ? "var(--ok)" : "var(--muted)";
+        away.style.direction = "ltr";
+        away.style.textAlign = "right";
+      }
       watchBuild(h);
     })
     .catch(() => set("infoMac", "—"));

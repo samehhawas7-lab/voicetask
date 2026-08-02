@@ -386,6 +386,9 @@ function startUpdate() {
       stdio: "ignore",
       windowsHide: true,
       shell: !!process.env.UPDATE_CMD,
+      // لا سؤال حين لا أحد أمام الشاشة: المنصّب يقتل هذا الخادم قبل
+      // أن يُتمّ، فلو وقف عند سؤالٍ لا مجيب له لَبقي البيت بلا خادم
+      env: Object.assign({}, process.env, { KMC_NO_PROMPT: "1" }),
     });
     child.unref();
     log("update started -> " + logFile);
@@ -551,7 +554,8 @@ const server = http.createServer((req, res) => {
   if (url.pathname === "/health") {
     let stamp = "";
     try { stamp = String(fs.statSync(PAGE).mtimeMs | 0); } catch {}
-    return json(200, { ok: true, tv: tvIp || null, mac: tvMac || null, seeking: !!seeking, build: stamp });
+    return json(200, { ok: true, tv: tvIp || null, mac: tvMac || null, seeking: !!seeking,
+                       build: stamp, away: tailnetAddress() });
   }
   // زر يدوي لإعادة البحث حين يُنقل التلفزيون أو يتبدّل عنوانه
   if (url.pathname === "/find-tv") {
@@ -821,6 +825,16 @@ function localAddresses() {
   return out;
 }
 
+// عنوان الشبكة الخاصة (Tailscale) يقع في 100.64.0.0/10، وهو المدى الذي
+// حجزته RFC 6598 لشبكات المشغّلين فلا يتعارض مع شبكة البيت. وبه وحده
+// يصل الجوّال إلى الخادم وهو خارج البيت — فيُميَّز عن عناوين الواي‑فاي
+function tailnetAddress() {
+  return localAddresses().find((a) => {
+    const p = a.split(".").map(Number);
+    return p[0] === 100 && p[1] >= 64 && p[1] <= 127;
+  }) || null;
+}
+
 // المنفذ محجوز أحياناً بنسخة قديمة من الخادم لم تُقتل. كان الفشل صامتاً
 // فتُعيد حلقة run.cmd المحاولة أبداً بلا بيان — فنقولها صريحة في السجل.
 // ws يعيد بثّ أخطاء الخادم على نفسه، فيلزم الإنصات للاثنين وإلا بقي
@@ -843,8 +857,12 @@ server.listen(PORT, "0.0.0.0", () => {
   console.log("  KMC TV Remote - server running");
   console.log("");
   console.log("  open on your phone:");
-  for (const a of addrs) console.log(`     http://${a}:${PORT}`);
+  const away = tailnetAddress();
+  for (const a of addrs) {
+    console.log(`     http://${a}:${PORT}` + (a === away ? "   <- works from anywhere" : ""));
+  }
   if (!addrs.length) console.log("     (no address found - check the Wi-Fi connection)");
+  if (!away) console.log("     (outside access not set up - run windows\\tailscale.ps1)");
   console.log("");
   console.log("  TV: " + (tvIp ? tvIp + ":" + TV_PORT : "searching..."));
   console.log("──────────────────────────────────────────");

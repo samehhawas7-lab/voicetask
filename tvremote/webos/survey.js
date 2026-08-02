@@ -22,12 +22,19 @@ const { macOf } = require("./wol");
 
 // ---------- أدوات مشتركة ----------
 
+/** أجهزة البيت وحدها: 100.64.0.0/10 شبكة Tailscale الخاصة، لا يسكنها
+ *  تلفزيون ولا مكيف — ومسحُها ضياعُ وقتٍ وطرقٌ على أجهزة ليست من بيته */
+function isTailnet(addr) {
+  const p = addr.split(".").map(Number);
+  return p[0] === 100 && p[1] >= 64 && p[1] <= 127;
+}
+
 function subnets() {
   const out = [];
   for (const list of Object.values(os.networkInterfaces())) {
     for (const i of list || []) {
       const fam = typeof i.family === "string" ? i.family : `IPv${i.family}`;
-      if (fam !== "IPv4" || i.internal) continue;
+      if (fam !== "IPv4" || i.internal || isTailnet(i.address)) continue;
       const p = i.address.split(".").slice(0, 3).join(".");
       if (!out.includes(p)) out.push(p);
     }
