@@ -105,7 +105,7 @@ async function powerOn() {
     return { ok: false, why: "تعذّر إرسال حزمة الإيقاظ: " + e.message };
   }
   // ننتظر نصف دقيقة: webOS يأخذ نحو عشر ثوانٍ ليفتح منفذه بعد الإقلاع
-  for (let i = 0; i < 14; i++) {
+  for (let i = 0; i < 30; i++) {
     if (await verify(tvIp)) { log("OK  TV is awake"); return { ok: true, tv: tvIp, mac: tvMac }; }
     await new Promise((r) => setTimeout(r, 2000));
   }

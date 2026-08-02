@@ -139,6 +139,13 @@ body{display:flex;flex-direction:column;height:100dvh;
 .info dt{color:var(--muted)}
 .info dd{margin:0;direction:ltr;text-align:left;font-family:ui-monospace,Menlo,monospace;
   overflow-wrap:anywhere}
+.offbar{background:linear-gradient(180deg,var(--surface-2),var(--surface));
+  border:1px solid var(--line);border-radius:20px;padding:22px 18px;margin-bottom:16px;
+  text-align:center}
+.offbar b{display:block;font-size:17px;font-weight:750;margin-bottom:8px}
+.offbar p{margin:0 0 16px;font-size:12.5px;color:var(--muted);line-height:1.9}
+.offbar .key{width:100%;height:58px;font-size:16px;background:var(--ok);
+  border-color:transparent;color:#08210f}
 .ac-dial{display:grid;grid-template-columns:64px 1fr 64px;gap:14px;align-items:center;direction:ltr;
   background:var(--surface-2);border:1px solid var(--line);border-radius:22px;
   padding:22px 16px;margin-bottom:20px}
@@ -374,6 +381,13 @@ input::placeholder{color:#5c6579}
 
 <!-- ===== التلفاز ===== -->
 <section class="screen" id="dev-tv" data-title="التلفاز" data-sub="غير متصل">
+
+  <div class="offbar" id="tvOff" hidden>
+    <b>التلفزيون مطفأ</b>
+    <p>«إطفاء الشاشة» ينتهي بإطفاء كامل بعد مدة — وعندها لا يفتحه إلا
+       الإيقاظ الشبكي.</p>
+    <button class="key" id="tvOffWake">تشغيل التلفزيون</button>
+  </div>
 
   <div class="setup" id="setupPanel">
     <div class="panel">
@@ -1563,6 +1577,15 @@ tv.onStatus = (status, detail) => {
   if (!ready && currentScreen === "dev-tv"){
     $("modelName").textContent = detail || STATUS_TEXT[status] || status;
   }
+  // حين يكون السبب أن التلفزيون مطفأ، يُقدَّم زرُّ تشغيله على كل شيء:
+  // كان صاحب البيت يقف أمام رسالةٍ ولا يرى ما يفعل
+  const offBar = $("tvOff");
+  if (offBar){
+    const isOff = !ready && onServer && /مطفأ|خارج الشبكة/.test(String(detail || ""));
+    offBar.hidden = !isOff;
+    const sp = $("setupPanel");
+    if (sp && isOff) sp.hidden = true;
+  }
   if (status === "error") showTroubleshoot(detail);
 };
 
@@ -2209,6 +2232,9 @@ function wakeTv(btn){
     wake.hidden = !onServer;
     wake.onclick = () => wakeTv(wake);
   }
+
+  const offWake = $("tvOffWake");
+  if (offWake) offWake.onclick = () => wakeTv(offWake);
 
   const cw = $("cmdWake");
   if (cw) cw.onclick = () => wakeTv(cw);

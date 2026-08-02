@@ -103,7 +103,7 @@ function pinNeighbour(ip, mac) {
  * @param {{ip?:string, bursts?:number}} opts
  */
 function wake(mac, opts = {}) {
-  const { ip = "", bursts = 5 } = opts;
+  const { ip = "", bursts = 12 } = opts;
   let pkt;
   try { pkt = magicPacket(mac); } catch (e) { return Promise.reject(e); }
 
@@ -131,8 +131,11 @@ function wake(mac, opts = {}) {
               sock.send(pkt, 0, pkt.length, port, host, (err) => { if (!err) sent++; });
             }
           }
+          // نمدّ الدفعات إلى نحو نصف دقيقة: بطاقةُ بعض التلفزيونات
+          // تستيقظ كل بضع ثوانٍ لتصغي ثم تنام، فقد تفوتها خمس دفعات
+          // متقاربة كلها. والحزمة رخيصة، والانتظار أرخص من الفشل.
           if (++round >= bursts) return setTimeout(finish, 600);
-          setTimeout(fire, round === 1 ? 700 : 1500);
+          setTimeout(fire, round <= 3 ? 700 : 3000);
         };
         fire();
       });
