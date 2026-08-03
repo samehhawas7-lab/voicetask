@@ -106,40 +106,50 @@ async function powerOn() {
       return { ok: false, why: "ما أعرف عنوان بطاقة التلفزيون بعد — شغّله مرة واحدة يدوياً وأنا أحفظه" };
     }
   }
-  let info;
-  try {
-    info = await wake(tvMacs, { ip: tvIp });
-    log("wake: " + info.sent + " packets to " + info.targets.join(", ") +
-        " for " + info.macs.join(", ") + (info.pinned ? " (neighbour pinned)" : ""));
-  } catch (e) {
-    return { ok: false, why: "تعذّر إرسال حزمة الإيقاظ: " + e.message };
-  }
-  // ننتظر: webOS يأخذ نحو عشر ثوانٍ ليفتح منفذه بعد الإقلاع.
-  // ونبحث عنه في الشبكة كل حين — فقد يعود بعنوانٍ غير الذي كان،
-  // فنحسبه نائماً وهو مستيقظ على عنوانٍ آخر
-  for (let i = 0; i < 30; i++) {
-    if (tvIp && await verify(tvIp)) {
-      log("OK  TV is awake at " + tvIp);
-      return { ok: true, tv: tvIp, mac: tvMac, macs: info.macs };
+  // جولةٌ واحدة قد تُخطئ الموعد: بطاقةُ التلفزيون النائم تصغي متقطّعةً،
+  // وإن كان قد أُطفئ لتوّه فهو ما يزال يهبط إلى السبات فيُهمل ما يصله.
+  // رأينا في السجلّ ليلةً واحدة: جولتان نجحتا وثالثةٌ لم تنجح. فتُعاد
+  // الجولة مرّةً قبل أن نُعلن الفشل — وهي أقلُّ كلفةً من إعلانٍ كاذب.
+  let info = null, total = 0;
+  for (let round = 0; round < 2; round++) {
+    try {
+      info = await wake(tvMacs, { ip: tvIp, bursts: round ? 8 : 12 });
+      total += info.sent;
+      log("wake" + (round ? " (again)" : "") + ": " + info.sent + " packets to " +
+          info.targets.join(", ") + " for " + info.macs.join(", ") +
+          (info.pinned ? " (neighbour pinned)" : ""));
+    } catch (e) {
+      if (round) break;
+      return { ok: false, why: "تعذّر إرسال حزمة الإيقاظ: " + e.message };
     }
-    if (i === 9 || i === 19) {
-      const found = await discover(log, tvIp).catch(() => null);
-      if (found) {
-        if (found !== tvIp) { log("TV came back at " + found); tvIp = found; saveConfig(); }
-        return { ok: true, tv: found, mac: tvMac, macs: info.macs };
+    // ننتظر: webOS يأخذ نحو عشر ثوانٍ ليفتح منفذه بعد الإقلاع.
+    // ونبحث عنه في الشبكة كل حين — فقد يعود بعنوانٍ غير الذي كان،
+    // فنحسبه نائماً وهو مستيقظ على عنوانٍ آخر
+    const waits = round ? 20 : 30;
+    for (let i = 0; i < waits; i++) {
+      if (tvIp && await verify(tvIp)) {
+        log("OK  TV is awake at " + tvIp);
+        return { ok: true, tv: tvIp, mac: tvMac, macs: info.macs, sent: total };
       }
+      if (i === 9 || i === 19) {
+        const found = await discover(log, tvIp).catch(() => null);
+        if (found) {
+          if (found !== tvIp) { log("TV came back at " + found); tvIp = found; saveConfig(); }
+          return { ok: true, tv: found, mac: tvMac, macs: info.macs, sent: total };
+        }
+      }
+      await new Promise((r) => setTimeout(r, 2000));
     }
-    await new Promise((r) => setTimeout(r, 2000));
   }
   return {
     ok: false,
     mac: tvMac,
-    macs: info.macs,
-    sent: info.sent,
-    targets: info.targets,
-    pinned: info.pinned,
-    why: "أُرسلت " + info.sent + " حزمة إلى " + info.targets.length + " وجهة، ولـ" +
-         info.macs.length + " بطاقة، والتلفزيون ما استجاب. " +
+    macs: info ? info.macs : tvMacs,
+    sent: total,
+    targets: info ? info.targets : [],
+    pinned: info ? info.pinned : false,
+    why: "أُرسلت " + total + " حزمة في جولتين، ولـ" +
+         (info ? info.macs.length : tvMacs.length) + " بطاقة، والتلفزيون ما استجاب. " +
          "وقد بحثتُ عنه في الشبكة فما وجدته.",
   };
 }

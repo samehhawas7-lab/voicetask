@@ -2497,14 +2497,18 @@ function wakeTv(btn){
     .then(() => new Promise((resolve) => {
       const began = Date.now();
       const tick = () => {
-        if (Date.now() - began > 210000){
+        // جولتان في الخادم: دفعاتٌ وانتظار، ثم دفعاتٌ وانتظار. وقستُ
+        // الحدّ الأعلى فكان ٢٢٣ ثانية على شبكةٍ لا تلفزيون فيها — فلا
+        // يُقطع الانتظار قبل ذلك وإلا أعلنّا فشلاً لم يقع.
+        if (Date.now() - began > 330000){
           diag("طال الانتظار — راجع «سجلّ الخادم»");
           stop("طال الانتظار بلا استجابة", true);
           return resolve(false);
         }
         fetch("/power-on/status", { cache:"no-store" }).then(r => r.json()).then(s => {
           if (!s.done){
-            if (btn) btn.textContent = "جاري الإيقاظ… " + (s.seconds || 0) + "ث";
+            const sec = s.seconds || 0;
+            if (btn) btn.textContent = (sec > 130 ? "جولة ثانية… " : "جاري الإيقاظ… ") + sec + "ث";
             return setTimeout(tick, 3000);
           }
           if (s.woke){
