@@ -2660,7 +2660,9 @@ function paintInfo(){
   fetch("/health", { cache: "no-store" }).then(r => r.json())
     .then(h => {
       set("infoTv", h.tv || tv.ip || "—");
-      set("infoMac", h.mac || "غير معروف بعد");
+      // البطاقتان معاً: عليهما يقوم الإيقاظ، وعرضُ واحدةٍ يُخفي نصف الحقيقة
+      set("infoMac", (h.macs && h.macs.length ? h.macs.join(" · ")
+                                              : h.mac) || "غير معروف بعد");
       // العنوان الذي يصل من أي مكان — يُعرض كما هو ولا يُدّعى إن غاب
       const away = $("infoAway");
       if (away){

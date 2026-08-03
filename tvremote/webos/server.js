@@ -490,10 +490,16 @@ function startUpdate() {
   const cmd = process.env.UPDATE_CMD || "powershell.exe";
   const args = process.env.UPDATE_CMD ? [] : [
     "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command",
-    // TLS يُضبط صراحةً: بوويرشيل ٥ يبدأ أحياناً ببروتوكول قديم ترفضه
-    // GitHub، فيسقط `irm` صامتاً قبل أن يكتب السجلّ سطراً
+    // `Start-Transcript` لا `*>>`: المنصّب يكتب بـ Write-Host، وهذا
+    // لا يلتقطه التوجيه حين يُطلق الأمر بلا نافذة — فكان السجلّ يبقى
+    // ترويسةً وحدها ولا نعرف أين وقف.
+    // و TLS يُضبط صراحةً: بوويرشيل ٥ يبدأ أحياناً ببروتوكول قديم
+    // ترفضه GitHub فيسقط الجلب صامتاً.
+    "$ErrorActionPreference='Continue'; " +
+    "try { Start-Transcript -Path '" + logFile + "' -Append -Force | Out-Null } catch {}; " +
     "[Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12; " +
-    "& { irm '" + INSTALLER + "' | iex } *>> '" + logFile + "'",
+    "try { irm '" + INSTALLER + "' | iex } catch { Write-Output ('INSTALLER FAILED: ' + $_.Exception.Message) }; " +
+    "try { Stop-Transcript | Out-Null } catch {}",
   ];
 
   try {
@@ -905,7 +911,7 @@ const server = http.createServer((req, res) => {
   if (url.pathname === "/health") {
     let stamp = "";
     try { stamp = String(fs.statSync(PAGE).mtimeMs | 0); } catch {}
-    return json(200, { ok: true, tv: tvIp || null, mac: tvMac || null, seeking: !!seeking,
+    return json(200, { ok: true, tv: tvIp || null, mac: tvMac || null, macs: tvMacs, seeking: !!seeking,
                        build: stamp, away: tailnetAddress() });
   }
   // زر يدوي لإعادة البحث حين يُنقل التلفزيون أو يتبدّل عنوانه
