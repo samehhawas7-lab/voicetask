@@ -1359,22 +1359,45 @@ function wakeTv(btn){
   const label = btn ? btn.textContent : "";
   if (btn){ btn.disabled = true; btn.textContent = "جاري الإيقاظ…"; }
   diag("أطلب من الخادم إيقاظ التلفزيون");
-  toast("أُرسلت إشارة التشغيل — يأخذ نحو عشر ثوانٍ");
+  toast("أُرسلت الحزم — قد يأخذ دقيقتين، وأتابعه لك");
 
+  const stop = (msg, bad) => {
+    if (btn){ btn.disabled = false; btn.textContent = label; }
+    if (msg) toast(msg, bad);
+  };
+
+  // الخادم يردّ فوراً ثم يعمل في الخلفية: دفعاتُ الإيقاظ نحو نصف
+  // دقيقة، ثم انتظارُ عودة التلفزيون دقيقتين. ولو انتظرنا الردّ
+  // لتخلّى سفاري عن الطلب بعد دقيقة وأعلنّا فشلاً لم يقع.
   return post("/power-on")
-    .then(r => {
-      if (r.ok){
-        diag("استيقظ التلفزيون على " + r.tv);
-        toast("اشتغل التلفزيون");
-        if (tv.status === "disconnected") tv.connect(r.tv || $("ipInput").value.trim());
-        return true;
-      }
-      diag("فشل الإيقاظ: " + r.why);
-      toast(r.why || "ما استجاب التلفزيون", true);
-      return false;
-    })
-    .catch(e => { diag("خطأ في الإيقاظ: " + e.message); toast("تعذّر الوصول للخادم", true); return false; })
-    .finally(() => { if (btn){ btn.disabled = false; btn.textContent = label; } });
+    .then(() => new Promise((resolve) => {
+      const began = Date.now();
+      const tick = () => {
+        if (Date.now() - began > 210000){
+          diag("طال الانتظار — راجع «سجلّ الخادم»");
+          stop("طال الانتظار بلا استجابة", true);
+          return resolve(false);
+        }
+        fetch("/power-on/status", { cache:"no-store" }).then(r => r.json()).then(s => {
+          if (!s.done){
+            if (btn) btn.textContent = "جاري الإيقاظ… " + (s.seconds || 0) + "ث";
+            return setTimeout(tick, 3000);
+          }
+          if (s.woke){
+            diag("استيقظ التلفزيون على " + s.tv + " بعد " + s.seconds + "ث");
+            stop("اشتغل التلفزيون");
+            if (tv.status === "disconnected") tv.connect(s.tv || $("ipInput").value.trim());
+            return resolve(true);
+          }
+          diag("فشل الإيقاظ بعد " + s.seconds + "ث: " + s.why +
+               (s.sent ? " (أُرسلت " + s.sent + " حزمة" + (s.pinned ? "، والجار مثبَّت" : "") + ")" : ""));
+          stop(s.why || "ما استجاب التلفزيون", true);
+          resolve(false);
+        }).catch(() => setTimeout(tick, 3000));   // انقطاعٌ عابر لا يُنهي المتابعة
+      };
+      setTimeout(tick, 2000);
+    }))
+    .catch(e => { diag("خطأ في الإيقاظ: " + e.message); stop("تعذّر الوصول للخادم", true); return false; });
 }
 
 (function setupCommandsPage(){

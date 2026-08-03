@@ -433,6 +433,7 @@ let updating = false;
 // التنصيب الكامل دون دقيقتين، فستٌّ مهلةٌ سخيّة لا تسبق منصِّباً بطيئاً
 const LATCH_MS = Number(process.env.UPDATE_LATCH_MS) || 6 * 60 * 1000;
 let updateLatch = null;
+let waking = null;          // حال آخر إيقاظ، يُسأل عنه بدل أن يُنتظر
 let islamFetching = false;
 let surveyCache = { at: 0, data: null };
 let surveyRunning = false;
@@ -862,9 +863,31 @@ const server = http.createServer((req, res) => {
     return ensureTv().then((ip) => json(200, { ok: !!ip, tv: ip || null, mac: tvMac || null }));
   }
   // إيقاظه وهو مطفأ — ما لا يقدر عليه المتصفح وحده
+  // الإيقاظ يستغرق نحو ثلاث دقائق: ثلاثون ثانية دفعاتٍ، ثم انتظارُ
+  // عودة التلفزيون. وسفاري يتخلّى عن الطلب بعد دقيقة — فكان الزرّ
+  // يُعلن الفشل دائماً ولو أفاق التلفزيون بعده.
+  // فيُردّ فوراً، ويُتابَع الأثر بسؤالٍ متكرّر (القاعدة الخامسة:
+  // النجاح يُقاس بالأثر — لكن لا يُقاس والطالب معلَّق).
   if (url.pathname === "/power-on") {
-    return powerOn().then((r) => json(r.ok ? 200 : 503, r))
-                    .catch((e) => json(500, { ok: false, why: e.message }));
+    if (waking && !waking.done) {
+      return json(200, { ok: true, started: true, already: true, since: waking.at });
+    }
+    waking = { at: Date.now(), done: false, ok: false, why: "" };
+    const mine = waking;
+    powerOn()
+      .then((r) => Object.assign(mine, r, { done: true }))
+      .catch((e) => Object.assign(mine, { done: true, ok: false, why: e.message }));
+    return json(200, { ok: true, started: true, since: mine.at });
+  }
+
+  if (url.pathname === "/power-on/status") {
+    if (!waking) return json(200, { ok: true, idle: true });
+    return json(200, {
+      ok: true, done: waking.done, woke: !!waking.ok,
+      why: waking.why || "", tv: waking.tv || null,
+      sent: waking.sent || 0, pinned: !!waking.pinned,
+      seconds: Math.round((Date.now() - waking.at) / 1000),
+    });
   }
   // ---------- البروجيكتر ----------
   if (url.pathname.startsWith("/proj/")) {
