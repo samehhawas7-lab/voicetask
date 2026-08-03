@@ -28,6 +28,7 @@ const { TuyaDevice } = require("./tuya");
 const survey = require("./survey");
 const { HuaweiRouter, probe: routerProbe, find: routerFind } = require("./router");
 const { harden } = require("./secure");
+const islam = require("./islam");
 const { spawn } = require("child_process");
 
 // حين يعمل الخادم خدمةً في الخلفية لا سبيل لتمرير متغيّرات البيئة إليه،
@@ -432,6 +433,7 @@ let updating = false;
 // التنصيب الكامل دون دقيقتين، فستٌّ مهلةٌ سخيّة لا تسبق منصِّباً بطيئاً
 const LATCH_MS = Number(process.env.UPDATE_LATCH_MS) || 6 * 60 * 1000;
 let updateLatch = null;
+let islamFetching = false;
 let surveyCache = { at: 0, data: null };
 let surveyRunning = false;
 let autoUpdate = CFG.autoUpdate !== false;      // مفعّل ما لم يُطفأ صراحةً
@@ -561,7 +563,8 @@ const server = http.createServer((req, res) => {
                     "/ac/link", "/ac/assign", "/ac/hall/set", "/ac/bed/set",
                     "/proj/find", "/proj/key", "/proj/app", "/proj/wake", "/proj/sleep",
                     "/router/link", "/router/find", "/router/block", "/router/wifi",
-                    "/router/reboot", "/restart", "/static-ip", "/ssh/enable"];
+                    "/router/reboot", "/restart", "/static-ip", "/ssh/enable",
+                    "/islam/fetch", "/islam/place"];
   if (CHANGING.includes(url.pathname)) {
     if (req.method !== "POST") {
       return json(405, { ok: false, why: "هذه النقطة تُطلب بـ POST" });
@@ -684,6 +687,79 @@ const server = http.createServer((req, res) => {
     } catch { text = "لم يُجهَّز بابُ الطوارئ بعد"; }
     res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" });
     return res.end(text);
+  }
+
+  // ---------- القسم الإسلاميّ ----------
+  if (url.pathname.startsWith("/islam/")) {
+    const rest = url.pathname.slice(7);
+
+    // الموضع: الرياض سلفاً، ويُعدَّل من الصفحة إن انتقل
+    const lat = Number(url.searchParams.get("lat")) || Number(CFG.lat) || 24.7136;
+    const lon = Number(url.searchParams.get("lon")) || Number(CFG.lon) || 46.6753;
+    const tz  = url.searchParams.has("tz") ? Number(url.searchParams.get("tz"))
+              : (CFG.tz != null ? Number(CFG.tz) : 3);
+
+    if (rest === "status") {
+      const files = {};
+      for (const [k, s] of Object.entries(islam.SOURCES)) {
+        files[k] = { file: s.file, label: s.label, credit: s.credit, have: islam.have(s.file) };
+      }
+      return json(200, { ok: true, files, ready: Object.values(files).every((f) => f.have) });
+    }
+
+    if (rest === "fetch") {
+      if (islamFetching) return json(200, { ok: true, running: true });
+      islamFetching = true;
+      return islam.ensureData(log)
+        .then((r) => json(200, Object.assign({ ok: r.ready }, r)))
+        .catch((e) => json(500, { ok: false, why: e.message }))
+        .finally(() => { islamFetching = false; });
+    }
+
+    // النصوص: تُقدَّم من القرص، ولا تُقدَّم إلا بعد أن اجتازت القياس
+    // — فوجودُ الملف يعني أنه تُحقِّق منه قبل أن يُكتب
+    if (rest.startsWith("data/")) {
+      const want = rest.slice(5);
+      const src = Object.values(islam.SOURCES).find((s) => s.file === want);
+      if (!src) return json(404, { ok: false, why: "غير معروف" });
+      const p = path.join(islam.DATA, src.file);
+      if (!fs.existsSync(p)) {
+        return json(404, { ok: false, why: "لم يُنزَّل بعد", need: true });
+      }
+      const type = src.binary ? "font/woff2" : "application/json; charset=utf-8";
+      res.writeHead(200, { "Content-Type": type, "Cache-Control": "public, max-age=604800" });
+      return fs.createReadStream(p).pipe(res);
+    }
+
+    if (rest === "times") {
+      const d = url.searchParams.get("date")
+        ? new Date(url.searchParams.get("date") + "T12:00:00Z") : new Date();
+      const opts = { method: url.searchParams.get("method") || "ummAlQura",
+                     hanafi: url.searchParams.get("hanafi") === "1" };
+      const t = islam.prayerTimes(d, lat, lon, tz, opts);
+      const out = {};
+      for (const k of ["fajr", "sunrise", "dhuhr", "asr", "maghrib", "isha"]) out[k] = islam.hhmm(t[k]);
+      return json(200, { ok: true, times: out, raw: t, method: t.method, lat, lon, tz });
+    }
+
+    if (rest === "qibla") {
+      return json(200, { ok: true, bearing: Number(islam.qibla(lat, lon).toFixed(2)),
+                         km: islam.distanceToKaaba(lat, lon), lat, lon });
+    }
+
+    if (rest === "place") {
+      return readJson(req, 512).then((b) => {
+        const la = Number(b.lat), lo = Number(b.lon), z = Number(b.tz);
+        if (!(la >= -90 && la <= 90) || !(lo >= -180 && lo <= 180) || !(z >= -12 && z <= 14)) {
+          return json(400, { ok: false, why: "إحداثيات خارج المدى" });
+        }
+        CFG.lat = la; CFG.lon = lo; CFG.tz = z;
+        saveConfig();
+        return json(200, { ok: true, lat: la, lon: lo, tz: z });
+      }).catch((e) => json(400, { ok: false, why: e.message }));
+    }
+
+    return json(404, { ok: false, why: "نقطة غير معروفة" });
   }
 
   // هل يمكن تشغيله وهو مطفأ؟ قياسٌ لا تخمين — القاعدة الأولى.

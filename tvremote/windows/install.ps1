@@ -127,6 +127,7 @@ $expect = @("tv.html", "tvremote\webos\server.js", "tvremote\windows\run.cmd",
             "tvremote\webos\adb.js", "tvremote\webos\wol.js",
             "tvremote\webos\survey.js", "tvremote\webos\router.js",
             "tvremote\webos\secure.js",
+            "tvremote\webos\islam.js",
             "tvremote\windows\tailscale.ps1", "tvremote\windows\ssh.ps1",
             "tvremote\windows\set-static-ip.ps1",
             "tvremote\tools\probe-device.js", "tvremote\tools\scan.js")
@@ -169,6 +170,11 @@ $cfg = [ordered]@{
   tvMac  = if ($old -and $old.tvMac) { $old.tvMac } else { "" }
   projIp = if ($old -and $old.projIp) { $old.projIp } else { "192.168.8.13" }
   autoUpdate = if ($old -and ($null -ne $old.autoUpdate)) { [bool]$old.autoUpdate } else { $true }
+  # الموضع لمواقيت الصلاة والقبلة — يُحفظ كما تُحفظ بطاقة التلفزيون،
+  # وإلا عاد إلى الرياض في كل تحديث ولو انتقل صاحبه
+  lat = if ($old -and ($null -ne $old.lat)) { [double]$old.lat } else { 24.7136 }
+  lon = if ($old -and ($null -ne $old.lon)) { [double]$old.lon } else { 46.6753 }
+  tz  = if ($old -and ($null -ne $old.tz))  { [double]$old.tz }  else { 3 }
   tvPort = 3001
   port   = $Port
 }

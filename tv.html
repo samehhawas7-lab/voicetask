@@ -238,6 +238,47 @@ input[type=text]{background:var(--surface-2);border:1px solid var(--line);border
 input[type=text]:focus{border-color:var(--accent)}
 input::placeholder{color:#5c6579}
 .hint{font-size:11.5px;color:var(--muted);margin:8px 0 0;line-height:1.7}
+/* ---------- القسم الإسلاميّ ---------- */
+@font-face{font-family:"Uthmani";src:url("/islam/data/uthmanic.woff2") format("woff2");
+  font-display:swap}
+.qbar{display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap}
+.qbar select{flex:1;min-width:130px;background:var(--surface-2);color:var(--text);
+  border:1px solid var(--line);border-radius:12px;height:40px;padding:0 10px;
+  font-family:inherit;font-size:13px}
+.qhead{text-align:center;background:var(--surface-2);border:1px solid var(--accent-dim);
+  border-radius:16px;padding:12px;margin-bottom:14px}
+.qhead b{display:block;font-size:17px;font-weight:700}
+.qhead small{color:var(--muted);font-size:11.5px}
+.qbody{display:grid;gap:2px}
+.ayah{padding:11px 13px;border-radius:12px;cursor:pointer;transition:background .12s}
+.ayah:active{background:var(--surface-2)}
+.ayah.open{background:var(--surface-2)}
+.ayah .txt{font-family:"Uthmani","SF Arabic","Noto Naskh Arabic",serif;
+  font-size:var(--qsize,21px);line-height:2.5;text-align:justify;text-align-last:right}
+/* رقم الآية بخطّ الواجهة لا بخطّ المصحف: الخطّ العثمانيّ لا أرقام
+   فيه، فكانت تُرسم مسوخاً صغيرة داخل الدائرة */
+.ayah .num{display:inline-block;min-width:27px;height:27px;line-height:25px;
+  border:1px solid var(--accent-dim);border-radius:50%;text-align:center;
+  font-size:12px;color:var(--accent);margin:0 6px;vertical-align:middle;
+  font-family:"SF Arabic","Noto Kufi Arabic",-apple-system,sans-serif}
+/* الهامش: يُفصل بحدٍّ جانبيّ وخطٍّ أصغر، فيُقرأ حاشيةً لا متناً */
+.marg{margin:9px 4px 2px;padding:9px 12px;border-inline-start:2px solid var(--accent-dim);
+  background:var(--surface);border-radius:0 10px 10px 0;font-size:13px;line-height:2.05;
+  color:var(--muted)}
+.marg b{color:var(--accent);font-size:11px;display:block;margin-bottom:4px;font-weight:600}
+.zekr{background:var(--surface-2);border:1px solid var(--line);border-radius:16px;padding:14px 15px}
+.zekr .t{font-family:"Uthmani","SF Arabic",serif;font-size:17px;line-height:2.3;white-space:pre-wrap}
+.zekr .v{font-size:12px;color:var(--muted);line-height:1.9;margin-top:9px}
+.zekr .r{font-size:11px;color:var(--accent);margin-top:5px}
+.zekr .c{float:inline-start;background:var(--accent-dim);border:1px solid var(--accent);
+  color:var(--text);border-radius:50%;width:42px;height:42px;font-size:15px;font-weight:700;
+  font-family:inherit;cursor:pointer;margin-inline-end:11px}
+.zekr .c.done{background:var(--ok);border-color:var(--ok);color:#08210f}
+.qibdial{position:relative;width:190px;height:190px;margin:0 auto;border-radius:50%;
+  border:2px solid var(--line);background:var(--surface);display:grid;place-items:center}
+.qibdial span{font-size:30px;color:var(--accent-dim)}
+.qibneedle{position:absolute;inset:0;border-radius:50%;
+  background:conic-gradient(from calc(var(--qib,0deg) - 3deg), var(--accent) 0 6deg, transparent 6deg)}
 .addrtip{background:var(--surface-2);border:1px solid var(--warn);border-radius:16px;
   padding:14px 15px;margin:0 0 14px}
 .addrtip b{display:block;font-size:14px;font-weight:700;margin-bottom:6px;color:var(--warn)}
@@ -346,6 +387,7 @@ input::placeholder{color:#5c6579}
   <symbol id="i-wash" viewBox="0 0 24 24"><rect x="4" y="2" width="16" height="20" rx="2.5"/><circle cx="12" cy="14" r="4.5"/><path d="M8 6h.01M11 6h.01"/></symbol>
   <symbol id="i-dish" viewBox="0 0 24 24"><rect x="3" y="2" width="18" height="20" rx="2.5"/><path d="M3 8h18"/><circle cx="12" cy="15" r="3.5"/><path d="M6.5 5h5"/></symbol>
   <symbol id="i-scan" viewBox="0 0 24 24"><circle cx="12" cy="12" r="2"/><circle cx="12" cy="12" r="6.5"/><circle cx="12" cy="12" r="10.5"/><path d="M12 12l7-6"/></symbol>
+  <symbol id="i-islam" viewBox="0 0 24 24"><path d="M17.5 5.5a7.5 7.5 0 100 13 8.5 8.5 0 110-13z"/><path d="M19.6 8.2l.8 1.9 2 .2-1.5 1.3.45 2-1.75-1.1-1.75 1.1.45-2-1.5-1.3 2-.2z"/></symbol>
   <symbol id="i-router" viewBox="0 0 24 24"><rect x="2" y="13" width="20" height="8" rx="2"/><path d="M6 17h.01M9.5 17h.01"/><path d="M12 10V7"/><path d="M8.5 6.5a5 5 0 017 0"/><path d="M6 4a8.5 8.5 0 0112 0"/></symbol>
   <symbol id="i-tool" viewBox="0 0 24 24"><path d="M14.5 4.5a4.5 4.5 0 00-6 5.9L4 15v4h4l4.6-4.5a4.5 4.5 0 005.9-6l-2.8 2.8-2.6-.6-.6-2.6z"/></symbol>
 </defs></svg>
@@ -405,6 +447,9 @@ input::placeholder{color:#5c6579}
     <button class="tile soon" data-go="dev-dish">
       <i class="pip"></i>
       <svg><use href="#i-dish"></use></svg><b>غسالة الأطباق</b><small>سامسونج</small>
+    </button>
+    <button class="tile" data-go="dev-islam" style="grid-column:1/-1">
+      <svg><use href="#i-islam"></use></svg><b>إسلامي</b><small>المصحف · الأذكار · المواقيت · القبلة</small>
     </button>
     <button class="tile" data-go="dev-router">
       <i class="pip" id="pipRouter"></i>
@@ -855,6 +900,80 @@ input::placeholder{color:#5c6579}
     <ul>
       <li>هل الغسالة مضافة في تطبيق SmartThings؟</li>
     </ul>
+  </div>
+</section>
+
+<!-- ===== إسلامي ===== -->
+<section class="screen" id="dev-islam" data-title="إسلامي" data-sub="المصحف والأذكار والمواقيت">
+  <div class="card" id="islamNeed" hidden>
+    <h3>تنزيل النصوص</h3>
+    <p>المصحف والتفسيران والأذكار — نحو خمسة ميغابايت، تُنزَّل مرّة على
+       اللابتوب ثم يعمل القسم بلا إنترنت أبداً.</p>
+    <p style="color:var(--warn)">ولا يُحفظ نصٌّ حتى تُعدّ آياته وتُطابَق
+       الجدول المعتمد — فما لم يجتز القياس لا يُعرض منه حرف.</p>
+    <button class="key sm" id="islamGet" style="width:100%">نزّلها الآن</button>
+    <div id="islamGetMsg" class="hint"></div>
+  </div>
+
+  <div class="tiles" id="islamTiles" hidden style="margin-top:0">
+    <button class="tile" data-go="islam-quran" style="grid-column:1/-1">
+      <svg><use href="#i-islam"></use></svg><b>المصحف</b><small>بالتفسير في الهامش</small>
+    </button>
+    <button class="tile" data-go="islam-azkar"><b>الأذكار</b><small>بالمراجع</small></button>
+    <button class="tile" data-go="islam-times"><b>المواقيت</b><small>أمّ القرى</small></button>
+    <button class="tile" data-go="islam-qibla" style="grid-column:1/-1"><b>القبلة</b><small>الاتجاه والمسافة</small></button>
+  </div>
+
+  <div class="card" id="islamCredit" hidden>
+    <h3>المصادر</h3>
+    <dl class="info" id="islamCreditList"></dl>
+  </div>
+</section>
+
+<!-- المصحف -->
+<section class="screen" id="islam-quran" data-title="المصحف" data-sub="—" data-back="dev-islam">
+  <div class="qbar">
+    <select id="qSura"></select>
+    <button class="key sm" id="qTafsirWhich">الميسَّر</button>
+    <button class="key sm" id="qSmaller">ﻉ−</button>
+    <button class="key sm" id="qBigger">ﻉ+</button>
+  </div>
+  <div class="qhead" id="qHead" hidden></div>
+  <div id="qBody" class="qbody"></div>
+</section>
+
+<!-- الأذكار -->
+<section class="screen" id="islam-azkar" data-title="الأذكار" data-sub="—" data-back="dev-islam">
+  <div class="qbar"><select id="zCat"></select></div>
+  <div id="zBody" style="display:grid;gap:12px"></div>
+</section>
+
+<!-- المواقيت -->
+<section class="screen" id="islam-times" data-title="مواقيت الصلاة" data-sub="—" data-back="dev-islam">
+  <div class="card" id="tNext" style="text-align:center">
+    <h3 id="tNextName">—</h3>
+    <div id="tNextIn" style="font-size:26px;font-weight:700;color:var(--accent)">—</div>
+  </div>
+  <div class="card"><dl class="info" id="tList"></dl></div>
+  <div class="card">
+    <h3>الموضع</h3>
+    <p id="tPlace" class="hint" style="margin:0 0 10px"></p>
+    <div class="act-row" style="margin-bottom:0">
+      <button class="key sm" id="tHanafi">العصر: الجمهور</button>
+    </div>
+  </div>
+</section>
+
+<!-- القبلة -->
+<section class="screen" id="islam-qibla" data-title="القبلة" data-sub="—" data-back="dev-islam">
+  <div class="card" style="text-align:center">
+    <div id="qibDial" class="qibdial"><div class="qibneedle" id="qibNeedle"></div><span>ﻙ</span></div>
+    <div id="qibDeg" style="font-size:30px;font-weight:750;margin-top:14px">—</div>
+    <div id="qibWord" class="hint" style="font-size:13px"></div>
+  </div>
+  <div class="card">
+    <h3>كيف تستعمله</h3>
+    <p id="qibHow">—</p>
   </div>
 </section>
 
@@ -1992,6 +2111,11 @@ function show(id){
   if (id === "dev-ac-bed"  && window.__acCheck) window.__acCheck("bed");
   if (id === "dev-survey" && window.__survey) window.__survey();
   if (id === "dev-router" && window.__router) window.__router();
+  if (id === "dev-islam"   && window.__islamHub)    window.__islamHub();
+  if (id === "islam-quran" && window.__islamQuran)  window.__islamQuran();
+  if (id === "islam-azkar" && window.__islamAzkar)  window.__islamAzkar();
+  if (id === "islam-times" && window.__islamTimes)  window.__islamTimes();
+  if (id === "islam-qibla" && window.__islamQibla)  window.__islamQibla();
 }
 
 
@@ -2005,9 +2129,14 @@ function setupRouter(){
   document.querySelectorAll("[data-go]").forEach(el => {
     el.onclick = () => { buzz(); show(el.dataset.go); };
   });
-  $("backBtn").onclick = () => { buzz(); show("home"); };
-  // زرّ الرجوع في الجوال يعود للشاشة الرئيسية لا يخرج من التطبيق
-  addEventListener("popstate", () => { if (currentScreen !== "home") show("home"); });
+  // الشاشة قد تكون متفرّعة عن أخرى، فترجع إليها لا إلى الرئيسية
+  const backOf = () => {
+    const el = document.getElementById(currentScreen);
+    return (el && el.dataset.back) || "home";
+  };
+  $("backBtn").onclick = () => { buzz(); show(backOf()); };
+  // زرّ الرجوع في الجوال يعود خطوة لا يخرج من التطبيق
+  addEventListener("popstate", () => { if (currentScreen !== "home") show(backOf()); });
   show("home");
 }
 
@@ -2541,6 +2670,315 @@ function wakeTv(btn){
       box.hidden = true;
     };
   }).catch(() => {});
+})();
+
+/* ============================================================
+   القسم الإسلاميّ
+   النصوص كلّها من مصادر موثَّقة، والخادم لا يحفظ منها شيئاً حتى
+   يجتاز القياس — فما وصل إلى هنا فقد عُدَّت آياته وطوبقت بالجدول.
+   ============================================================ */
+(function setupIslam(){
+  if (!$("dev-islam")) return;
+  const D = { quran:null, tafsir:{}, suras:null, azkar:null };
+  let which = store.get("tafsir_which") || "muyassar";
+  let qsize = Number(store.get("quran_size")) || 21;
+
+  const NAMES = { muyassar:"الميسَّر", jalalayn:"الجلالين" };
+
+  // الأرقام الهندية كما في المصحف، والعربية تُجمع بالعدد لا بإضافته
+  const AD = (n) => String(n).replace(/\d/g, d => "٠١٢٣٤٥٦٧٨٩"[d]);
+  const ayahWord = (n) => n === 1 ? "آية واحدة" : n === 2 ? "آيتان"
+                        : n <= 10 ? AD(n) + " آيات" : AD(n) + " آية";
+  // أسماء السور تأتي مشكولةً بحركة إعرابٍ أخيرة لا معنى لها في فهرس.
+  // ولا يُجرَّد الاسم كلّه: «الْاِخْلَاصِ» مجرّدةً تصير «الاخلاص»
+  // فتضيع همزتها — فلا يُحذف إلا ما على آخر حرف.
+  const bare = (s) => String(s).replace(/ـ/g, "").replace(/[ً-ْٰ]+$/, "").trim();
+
+  const getJson = (f) => fetch("/islam/data/" + f, { cache:"force-cache" }).then(r => {
+    if (!r.ok) throw new Error("لم يُنزَّل بعد");
+    return r.json();
+  });
+
+  async function status(){
+    const s = await fetch("/islam/status", { cache:"no-store" }).then(r => r.json());
+    $("islamNeed").hidden = s.ready;
+    $("islamTiles").hidden = !s.ready;
+    $("islamCredit").hidden = !s.ready;
+    if (s.ready){
+      const dl = $("islamCreditList");
+      dl.innerHTML = "";
+      for (const f of Object.values(s.files)){
+        if (!f.credit) continue;
+        const dt = document.createElement("dt"), dd = document.createElement("dd");
+        dt.textContent = f.label; dd.textContent = f.credit;
+        dl.append(dt, dd);
+      }
+    }
+    return s.ready;
+  }
+
+  $("islamGet").onclick = () => {
+    const b = $("islamGet"), m = $("islamGetMsg");
+    b.disabled = true; b.textContent = "يُنزَّل ويُقاس…";
+    m.textContent = "قد يستغرق دقيقة على شبكة بطيئة";
+    post("/islam/fetch").then(async r => {
+      if (r.running) { m.textContent = "التنزيل جارٍ — انتظر قليلاً"; return; }
+      if (!r.ok){
+        m.style.color = "var(--danger)";
+        m.textContent = "رُدّ: " + (r.failed || []).map(f => f.label + " — " + f.why).join("، ");
+      } else { m.textContent = "تمّ"; await status(); }
+    }).catch(() => { m.textContent = "تعذّر الوصول للخادم"; })
+      .finally(() => { b.disabled = false; b.textContent = "نزّلها الآن"; });
+  };
+
+  // ---------- المصحف ----------
+  async function loadQuran(){
+    if (!D.quran) D.quran = (await getJson("quran.json")).quran;
+    if (!D.suras) D.suras = await getJson("suras.json");
+    if (!D.tafsir[which]) {
+      D.tafsir[which] = (await getJson(which === "muyassar"
+        ? "tafsir-muyassar.json" : "tafsir-jalalayn.json")).quran;
+    }
+  }
+
+  function fillSuras(){
+    const sel = $("qSura");
+    if (sel.options.length) return;
+    D.suras.forEach(s => {
+      const o = document.createElement("option");
+      o.value = s.n;
+      o.textContent = AD(s.n) + " · " + bare(s.name) + " · " + AD(s.ayahs);
+      sel.appendChild(o);
+    });
+  }
+
+  function paintSura(n){
+    const s = D.suras[n - 1];
+    const head = $("qHead");
+    head.hidden = false;
+    head.innerHTML = "";
+    const b = document.createElement("b");
+    b.textContent = "سورة " + bare(s.name);
+    const sm = document.createElement("small");
+    sm.textContent = s.place + " · " + ayahWord(s.ayahs) + " · الجزء " + AD(s.juz) + " · صفحة " + AD(s.page);
+    head.append(b, sm);
+    // البسملة عنوانٌ لا آية — إلا الفاتحة فهي آيةٌ منها، والتوبة بلا بسملة
+    if (n !== 1 && n !== 9){
+      const bs = document.createElement("div");
+      bs.className = "txt";
+      bs.style.cssText = "font-family:Uthmani,serif;font-size:19px;margin-top:9px;color:var(--accent)";
+      bs.textContent = "بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ";
+      head.appendChild(bs);
+    }
+
+    const body = $("qBody");
+    body.innerHTML = "";
+    body.style.setProperty("--qsize", qsize + "px");
+    const ayat = D.quran.filter(a => a.chapter === n);
+    const tf = D.tafsir[which];
+    ayat.forEach(a => {
+      const div = document.createElement("div");
+      div.className = "ayah";
+      const t = document.createElement("div");
+      t.className = "txt";
+      t.textContent = a.text + " ";
+      const num = document.createElement("span");
+      num.className = "num";
+      num.textContent = AD(a.verse);
+      t.appendChild(num);
+      div.appendChild(t);
+
+      div.onclick = () => {
+        const open = div.querySelector(".marg");
+        if (open){ open.remove(); div.classList.remove("open"); return; }
+        const note = tf.find(x => x.chapter === n && x.verse === a.verse);
+        const m = document.createElement("div");
+        m.className = "marg";
+        const lab = document.createElement("b");
+        lab.textContent = NAMES[which];
+        const p = document.createElement("span");
+        p.textContent = note ? note.text : "—";
+        m.append(lab, p);
+        div.appendChild(m);
+        div.classList.add("open");
+      };
+      body.appendChild(div);
+    });
+    store.set("quran_sura", String(n));
+    screenSub("islam-quran", bare(s.name) + " · " + NAMES[which]);
+  }
+
+  window.__islamQuran = async () => {
+    const body = $("qBody");
+    body.textContent = "يُفتح…";
+    try {
+      await loadQuran();
+      fillSuras();
+      const n = Number(store.get("quran_sura")) || 1;
+      $("qSura").value = String(n);
+      paintSura(n);
+    } catch (e) { body.textContent = "النصوص لم تُنزَّل بعد — ارجع ونزّلها"; }
+  };
+
+  $("qSura").onchange = () => paintSura(Number($("qSura").value));
+  $("qTafsirWhich").onclick = async () => {
+    which = which === "muyassar" ? "jalalayn" : "muyassar";
+    store.set("tafsir_which", which);
+    $("qTafsirWhich").textContent = NAMES[which];
+    await loadQuran();
+    paintSura(Number($("qSura").value));
+  };
+  const resize = (d) => {
+    qsize = Math.max(16, Math.min(34, qsize + d));
+    store.set("quran_size", String(qsize));
+    $("qBody").style.setProperty("--qsize", qsize + "px");
+  };
+  $("qBigger").onclick = () => resize(2);
+  $("qSmaller").onclick = () => resize(-2);
+
+  // ---------- الأذكار ----------
+  window.__islamAzkar = async () => {
+    const body = $("zBody");
+    body.textContent = "يُفتح…";
+    try {
+      if (!D.azkar) D.azkar = await getJson("azkar.json");
+      const sel = $("zCat");
+      if (!sel.options.length){
+        [...new Set(D.azkar.map(z => z.cat))].forEach(c => {
+          const o = document.createElement("option");
+          o.value = c; o.textContent = c;
+          sel.appendChild(o);
+        });
+        sel.onchange = () => paintAzkar(sel.value);
+      }
+      paintAzkar(store.get("azkar_cat") || sel.options[0].value);
+      sel.value = store.get("azkar_cat") || sel.options[0].value;
+    } catch { body.textContent = "الأذكار لم تُنزَّل بعد"; }
+  };
+
+  function paintAzkar(cat){
+    store.set("azkar_cat", cat);
+    const body = $("zBody");
+    body.innerHTML = "";
+    const list = D.azkar.filter(z => z.cat === cat);
+    screenSub("islam-azkar", cat + " · " + AD(list.length));
+    list.forEach(z => {
+      const card = document.createElement("div");
+      card.className = "zekr";
+      if (z.count > 1){
+        const c = document.createElement("button");
+        c.className = "c";
+        let left = z.count;
+        c.textContent = left;
+        c.onclick = () => {
+          buzz(15);
+          if (left <= 0){ left = z.count; c.textContent = left; c.classList.remove("done"); return; }
+          left--; c.textContent = left || "✓";
+          if (!left) c.classList.add("done");
+        };
+        card.appendChild(c);
+      }
+      const t = document.createElement("div");
+      t.className = "t"; t.textContent = z.text;
+      card.appendChild(t);
+      if (z.virtue){
+        const v = document.createElement("div");
+        v.className = "v"; v.textContent = z.virtue;
+        card.appendChild(v);
+      }
+      if (z.ref){
+        const r = document.createElement("div");
+        r.className = "r"; r.textContent = "المرجع: " + z.ref;
+        card.appendChild(r);
+      }
+      body.appendChild(card);
+    });
+  }
+
+  // ---------- المواقيت ----------
+  const AR = { fajr:"الفجر", sunrise:"الشروق", dhuhr:"الظهر",
+               asr:"العصر", maghrib:"المغرب", isha:"العشاء" };
+  let hanafi = store.get("asr_hanafi") === "1";
+
+  window.__islamTimes = () => {
+    $("tHanafi").textContent = "العصر: " + (hanafi ? "الحنفيّ" : "الجمهور");
+    fetch("/islam/times?hanafi=" + (hanafi ? "1" : "0"), { cache:"no-store" })
+      .then(r => r.json()).then(r => {
+        if (!r.ok) return;
+        const dl = $("tList");
+        dl.innerHTML = "";
+        for (const k of ["fajr","sunrise","dhuhr","asr","maghrib","isha"]){
+          const dt = document.createElement("dt"), dd = document.createElement("dd");
+          dt.textContent = AR[k];
+          dd.textContent = r.times[k] || "—";
+          dd.style.direction = "ltr"; dd.style.textAlign = "right";
+          if (k === "sunrise") { dt.style.opacity = ".6"; dd.style.opacity = ".6"; }
+          dl.append(dt, dd);
+        }
+        $("tPlace").textContent = "على طريقة " + r.method + " · " +
+          r.lat.toFixed(4) + "، " + r.lon.toFixed(4);
+        screenSub("islam-times", r.method);
+        nextPrayer(r.times);
+      }).catch(() => {});
+  };
+
+  function nextPrayer(times){
+    const now = new Date();
+    const mins = now.getHours() * 60 + now.getMinutes();
+    const order = ["fajr","dhuhr","asr","maghrib","isha"];
+    let next = null;
+    for (const k of order){
+      if (!times[k]) continue;
+      const [h, m] = times[k].split(":").map(Number);
+      if (h * 60 + m > mins){ next = { k, at: h * 60 + m }; break; }
+    }
+    if (!next && times.fajr){
+      const [h, m] = times.fajr.split(":").map(Number);
+      next = { k: "fajr", at: h * 60 + m + 1440 };
+    }
+    if (!next) return;
+    const left = next.at - mins;
+    $("tNextName").textContent = AR[next.k];
+    $("tNextIn").textContent = left >= 60
+      ? "بعد " + Math.floor(left / 60) + "س " + (left % 60) + "د"
+      : "بعد " + left + " دقيقة";
+  }
+
+  $("tHanafi").onclick = () => {
+    hanafi = !hanafi;
+    store.set("asr_hanafi", hanafi ? "1" : "0");
+    window.__islamTimes();
+  };
+
+  // ---------- القبلة ----------
+  // سفاري يمنع مستشعر الاتجاه على العناوين غير المشفّرة، فلا نُدير
+  // قرصاً ونوهم بأنه يتتبّع. يُعرض الاتجاه رقماً، فإن توفّر المستشعر
+  // يوماً دار من نفسه بلا تعديل (القاعدة الثانية عشرة)
+  const DIRS = [["شمالاً",0],["شمالاً شرقيّاً",45],["شرقاً",90],["جنوباً شرقيّاً",135],
+                ["جنوباً",180],["جنوباً غربيّاً",225],["غرباً",270],["شمالاً غربيّاً",315]];
+  window.__islamQibla = () => {
+    fetch("/islam/qibla", { cache:"no-store" }).then(r => r.json()).then(r => {
+      if (!r.ok) return;
+      $("qibDeg").textContent = r.bearing.toFixed(1) + "°";
+      const near = DIRS.reduce((a, b) =>
+        Math.abs(((r.bearing - b[1] + 540) % 360) - 180) > Math.abs(((r.bearing - a[1] + 540) % 360) - 180) ? a : b);
+      $("qibWord").textContent = near[0] + " تقريباً · الكعبة على بُعد " + r.km + " كم";
+      $("qibDial").style.setProperty("--qib", r.bearing + "deg");
+      screenSub("islam-qibla", r.bearing.toFixed(1) + "°");
+
+      const secure = window.isSecureContext &&
+        typeof DeviceOrientationEvent !== "undefined";
+      $("qibHow").textContent = secure
+        ? "وجّه أعلى الجهاز نحو الشمال، ثم استدر حتى ينطبق المؤشّر على الخطّ."
+        : "ضع بوصلةً (تطبيق البوصلة في جوّالك) واستدر حتى تقرأ "
+          + r.bearing.toFixed(0) + "° — تلك جهة القبلة.\n\n"
+          + "والقرص هنا لا يدور: سفاري يمنع مستشعر الاتجاه على العناوين "
+          + "غير المشفّرة، ولن أُدير قرصاً يوهم بأنه يتتبّع وهو لا يفعل.";
+      $("qibHow").style.whiteSpace = "pre-wrap";
+    }).catch(() => {});
+  };
+
+  window.__islamHub = status;
 })();
 
 function setupWakeCheck(what, btnId, msgId){
