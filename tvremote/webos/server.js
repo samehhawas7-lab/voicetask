@@ -52,6 +52,9 @@ const PAGE = path.join(__dirname, "..", "..", "tv.html");
 // نُلزم صاحب البيت بضبط راوتره، يعثر الخادم على التلفزيون بنفسه.
 let tvIp = process.env.TV_IP || CFG.tvIp || "";
 let tvMac = CFG.tvMac || "";        // يلزم لإيقاظه وهو مطفأ
+// بطاقتاه معاً — السلكية واللاسلكية — فلا نعرف أيّهما يتصل بها
+let tvMacs = Array.isArray(CFG.tvMacs) && CFG.tvMacs.length
+  ? CFG.tvMacs.slice() : (tvMac ? [tvMac] : []);
 let seeking = null;                 // وعد المسح الجاري، كيلا نمسح مرّتين معاً
 
 // البروجيكتر: جهاز أندرويد يُتحكَّم به عبر ADB لا عبر SSAP
@@ -61,7 +64,7 @@ const PROJ_PORT = Number(process.env.PROJ_PORT || CFG.projPort || 5555);
 function saveConfig() {
   try {
     fs.writeFileSync(path.join(__dirname, "config.json"),
-      JSON.stringify(Object.assign({}, CFG, { tvIp, tvMac, projIp, autoUpdate, tvPort: TV_PORT, port: PORT }), null, 2));
+      JSON.stringify(Object.assign({}, CFG, { tvIp, tvMac, tvMacs, projIp, autoUpdate, tvPort: TV_PORT, port: PORT }), null, 2));
   } catch { /* القرص للقراءة فقط أحياناً — لا يمنع العمل */ }
 }
 
@@ -70,8 +73,9 @@ function saveConfig() {
 async function rememberMac() {
   if (!tvIp) return;
   const mac = await macOf(tvIp);
-  if (mac && mac !== tvMac) {
-    tvMac = mac;
+  if (mac && !tvMacs.includes(mac)) {
+    tvMacs.push(mac);
+    tvMac = tvMacs[0];
     log("TV MAC address: " + mac);
     saveConfig();
   }
@@ -96,32 +100,47 @@ function ensureTv() {
  * منفذه — فننتظر بدل أن نُبلّغ بالنجاح قبل أوانه.
  */
 async function powerOn() {
-  if (!tvMac) {
+  if (!tvMacs.length) {
     await ensureTv();               // قد يكون شغّالاً فنلتقط بطاقته الآن
-    if (!tvMac) return { ok: false, why: "ما أعرف عنوان بطاقة التلفزيون بعد — شغّله مرة واحدة يدوياً وأنا أحفظه" };
+    if (!tvMacs.length) {
+      return { ok: false, why: "ما أعرف عنوان بطاقة التلفزيون بعد — شغّله مرة واحدة يدوياً وأنا أحفظه" };
+    }
   }
   let info;
   try {
-    info = await wake(tvMac, { ip: tvIp });
+    info = await wake(tvMacs, { ip: tvIp });
     log("wake: " + info.sent + " packets to " + info.targets.join(", ") +
-        (info.pinned ? " (neighbour pinned)" : ""));
+        " for " + info.macs.join(", ") + (info.pinned ? " (neighbour pinned)" : ""));
   } catch (e) {
     return { ok: false, why: "تعذّر إرسال حزمة الإيقاظ: " + e.message };
   }
-  // ننتظر نصف دقيقة: webOS يأخذ نحو عشر ثوانٍ ليفتح منفذه بعد الإقلاع
+  // ننتظر: webOS يأخذ نحو عشر ثوانٍ ليفتح منفذه بعد الإقلاع.
+  // ونبحث عنه في الشبكة كل حين — فقد يعود بعنوانٍ غير الذي كان،
+  // فنحسبه نائماً وهو مستيقظ على عنوانٍ آخر
   for (let i = 0; i < 30; i++) {
-    if (await verify(tvIp)) { log("OK  TV is awake"); return { ok: true, tv: tvIp, mac: tvMac }; }
+    if (tvIp && await verify(tvIp)) {
+      log("OK  TV is awake at " + tvIp);
+      return { ok: true, tv: tvIp, mac: tvMac, macs: info.macs };
+    }
+    if (i === 9 || i === 19) {
+      const found = await discover(log, tvIp).catch(() => null);
+      if (found) {
+        if (found !== tvIp) { log("TV came back at " + found); tvIp = found; saveConfig(); }
+        return { ok: true, tv: found, mac: tvMac, macs: info.macs };
+      }
+    }
     await new Promise((r) => setTimeout(r, 2000));
   }
   return {
     ok: false,
     mac: tvMac,
+    macs: info.macs,
     sent: info.sent,
     targets: info.targets,
     pinned: info.pinned,
-    why: "أُرسلت " + info.sent + " حزمة إلى " + info.targets.length +
-         " وجهة، والتلفزيون ما استجاب. الغالب أن «تشغيل التلفزيون عبر Wi-Fi» " +
-         "غير مفعّل، أو أن بطاقة شبكته تنام معه — راجع الخطوات في التطبيق.",
+    why: "أُرسلت " + info.sent + " حزمة إلى " + info.targets.length + " وجهة، ولـ" +
+         info.macs.length + " بطاقة، والتلفزيون ما استجاب. " +
+         "وقد بحثتُ عنه في الشبكة فما وجدته.",
   };
 }
 
@@ -587,13 +606,26 @@ const server = http.createServer((req, res) => {
     let body = "";
     req.on("data", (c) => { body += c; if (body.length > 512) req.destroy(); });
     return req.on("end", () => {
-      let mac = "";
-      try { mac = String(JSON.parse(body || "{}").mac || "").toLowerCase(); } catch {}
-      if (!/^([0-9a-f]{2}:){5}[0-9a-f]{2}$/.test(mac) || /^(00:){5}00$/.test(mac)) {
-        return json(400, { ok: false, why: "عنوان بطاقة غير صالح" });
+      // التلفزيون له بطاقتان، ولا نعرف أيّهما التي يتصل بها الآن.
+      // فنحفظهما معاً ونوقظهما معاً — أرخص من أن نخطئ فنصمت
+      let list = [];
+      try {
+        const b = JSON.parse(body || "{}");
+        list = Array.isArray(b.macs) ? b.macs : (b.mac ? [b.mac] : []);
+      } catch {}
+      const good = list.map((m) => String(m || "").toLowerCase())
+        .filter((m) => /^([0-9a-f]{2}:){5}[0-9a-f]{2}$/.test(m) && !/^(00:){5}00$/.test(m))
+        .filter((m, i, a) => a.indexOf(m) === i);
+      if (!good.length) return json(400, { ok: false, why: "عنوان بطاقة غير صالح" });
+
+      const before = tvMacs.join(",");
+      for (const m of good) if (!tvMacs.includes(m)) tvMacs.push(m);
+      tvMac = tvMacs[0];
+      if (tvMacs.join(",") !== before) {
+        saveConfig();
+        log("TV reported its MAC(s): " + tvMacs.join(", "));
       }
-      if (mac !== tvMac) { tvMac = mac; saveConfig(); log("TV reported its MAC: " + mac); }
-      json(200, { ok: true, mac: tvMac });
+      json(200, { ok: true, mac: tvMac, macs: tvMacs });
     });
   }
 

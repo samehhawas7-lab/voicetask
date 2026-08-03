@@ -911,15 +911,21 @@ tv.onReady = () => {
   // وعليها يقوم إيقاظه وهو مطفأ. نسألها مرة عند كل جهوز.
   if (onServer){
     tv.request("ssap://com.webos.service.connectionmanager/getinfo").then(net => {
+      // للتلفزيون بطاقتان: سلكية ولاسلكية. وكنّا نختار واحدة، فإن
+      // أخذنا الساكنة ذهبت حزمة الإيقاظ إلى بطاقةٍ لا تنصت — وصمت.
+      // فنرسلهما معاً ويوقظهما الخادم معاً.
       const pick = (o) => (o && typeof o.macAddress === "string") ? o.macAddress : "";
-      const mac = (pick(net && net.wifiInfo) || pick(net && net.wifi) ||
-                   pick(net && net.wiredInfo) || pick(net && net.wired) || "").toLowerCase();
-      if (!/^([0-9a-f]{2}:){5}[0-9a-f]{2}$/.test(mac)) return;
-      diag("بطاقة التلفزيون من التلفزيون نفسه: " + mac);
+      const macs = [pick(net && net.wifiInfo), pick(net && net.wifi),
+                    pick(net && net.wiredInfo), pick(net && net.wired)]
+        .map(m => String(m || "").toLowerCase())
+        .filter(m => /^([0-9a-f]{2}:){5}[0-9a-f]{2}$/.test(m) && !/^(00:){5}00$/.test(m))
+        .filter((m, i, a) => a.indexOf(m) === i);
+      if (!macs.length) return;
+      diag("بطاقات التلفزيون من التلفزيون نفسه: " + macs.join(" · "));
       fetch("/tv-mac", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mac }),
+        body: JSON.stringify({ macs }),
       }).then(() => paintInfo()).catch(() => {});
     }).catch(() => {});
   }

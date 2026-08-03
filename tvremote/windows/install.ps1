@@ -168,6 +168,8 @@ if (Test-Path $cfgPath) {
 $cfg = [ordered]@{
   tvIp   = if ($env:TV_IP) { $TvIp } elseif ($old -and $old.tvIp) { $old.tvIp } else { $TvIp }
   tvMac  = if ($old -and $old.tvMac) { $old.tvMac } else { "" }
+  # بطاقتا التلفزيون معاً — تُحفظان كما تُحفظ الواحدة، وإلا ضاعتا
+  tvMacs = if ($old -and $old.tvMacs) { $old.tvMacs } else { @() }
   projIp = if ($old -and $old.projIp) { $old.projIp } else { "192.168.8.13" }
   autoUpdate = if ($old -and ($null -ne $old.autoUpdate)) { [bool]$old.autoUpdate } else { $true }
   # الموضع لمواقيت الصلاة والقبلة — يُحفظ كما تُحفظ بطاقة التلفزيون،

@@ -105,10 +105,18 @@ function pinNeighbour(ip, mac) {
  */
 function wake(mac, opts = {}) {
   const { ip = "", bursts = 12 } = opts;
-  let pkt;
-  try { pkt = magicPacket(mac); } catch (e) { return Promise.reject(e); }
+  // التلفزيون له بطاقتان — سلكية ولاسلكية — ولكلٍّ عنوانها. والحزمة
+  // لا توقظ إلا البطاقة التي تحمل عنوانها. فإن أرسلنا إلى السلكية
+  // والتلفزيون على الواي‑فاي لم يقع شيء، والصمتُ لا يدلّ على السبب.
+  // فتُرسل إلى ما نعرفه منهما جميعاً — والحزمة أرخص من الحيرة.
+  const macs = (Array.isArray(mac) ? mac : [mac])
+    .map((m) => String(m || "").toLowerCase())
+    .filter((m, i, a) => m && a.indexOf(m) === i);
+  let pkts;
+  try { pkts = macs.map(magicPacket); } catch (e) { return Promise.reject(e); }
+  if (!pkts.length) return Promise.reject(new Error("بلا عنوان بطاقة"));
 
-  return (ip ? pinNeighbour(ip, mac) : Promise.resolve(false)).then((pinned) =>
+  return (ip ? pinNeighbour(ip, macs[0]) : Promise.resolve(false)).then((pinned) =>
     new Promise((resolve, reject) => {
       const sock = dgram.createSocket({ type: "udp4", reuseAddr: true });
       const targets = broadcasts().concat(ip ? [ip] : []);
@@ -118,7 +126,7 @@ function wake(mac, opts = {}) {
         if (done) return;
         done = true;
         try { sock.close(); } catch {}
-        sent ? resolve({ sent, targets, pinned }) : reject(new Error("ما نجح إرسال أي حزمة"));
+        sent ? resolve({ sent, targets, pinned, macs }) : reject(new Error("ما نجح إرسال أي حزمة"));
       };
 
       sock.once("error", (e) => { if (!done) { done = true; try { sock.close(); } catch {} reject(e); } });
@@ -127,9 +135,11 @@ function wake(mac, opts = {}) {
         sock.setBroadcast(true);
         let round = 0;
         const fire = () => {
-          for (const host of targets) {
-            for (const port of PORTS) {
-              sock.send(pkt, 0, pkt.length, port, host, (err) => { if (!err) sent++; });
+          for (const pkt of pkts) {
+            for (const host of targets) {
+              for (const port of PORTS) {
+                sock.send(pkt, 0, pkt.length, port, host, (err) => { if (!err) sent++; });
+              }
             }
           }
           // نمدّ الدفعات إلى نحو نصف دقيقة: بطاقةُ بعض التلفزيونات
