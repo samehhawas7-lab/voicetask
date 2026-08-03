@@ -1041,6 +1041,41 @@ wss.on("connection", async (client, req) => {
   let upstream = null;
   let searched = false;             // نبحث مرة واحدة لكل اتصال، لا مرّتين
 
+  // ---------- النبض ----------
+  // قناة الأزرار تجلس ساكنةً تماماً بين ضغطتين، فتقطعها مهلةُ السكون
+  // في الطريق — رأيناها تموت بعد خمسٍ وعشرين ثانية برمز 1006.
+  // فيطرقها الخادم بـ ping، والمتصفّح يردّ pong في طبقة البروتوكول
+  // بلا سطرِ JavaScript. وبه يبقى الطريق دافئاً، ويُكتشف الموتُ في
+  // دورةٍ واحدة بدل انتظار TCP.
+  const BEAT_MS = Number(process.env.WS_BEAT_MS) || 20000;
+  const seen = { client: Date.now(), upstream: 0 };
+  const idleOf = (who) => seen[who] ? ((Date.now() - seen[who]) / 1000).toFixed(1) : "?";
+  let beat = null;
+  let alive = { client: true, upstream: true };
+
+  client.on("pong", () => { alive.client = true; seen.client = Date.now(); });
+
+  function startBeat() {
+    stopBeat();
+    beat = setInterval(() => {
+      for (const [who, sock] of [["client", client], ["upstream", upstream]]) {
+        if (!sock || sock.readyState !== WebSocket.OPEN) continue;
+        if (!alive[who]) {
+          log("--  no pong from " + who + " for one beat - terminating");
+          try { sock.terminate(); } catch {}
+          continue;
+        }
+        alive[who] = false;
+        try { sock.ping(); } catch {}
+      }
+    }, BEAT_MS);
+    // لا يمنع خروجَ العملية: الخادم يُقتل في أثناء التحديث
+    if (beat.unref) beat.unref();
+  }
+  // المؤقّت يُنظَّف عند كل إغلاق، وإلا تراكم مع كل إعادة وصل — وهي
+  // متكرّرة هنا بطبعها — حتى يُثقل الخادم
+  function stopBeat() { if (beat) { clearInterval(beat); beat = null; } }
+
   // 1004 و1005 و1006 و1015 محجوزة: يرفض البروتوكول إرسالها، ومحاولة
   // تمرير رمز إغلاق التلفزيون كما هو تُسقط الخادم كلّه
   const sendable = (c) =>
@@ -1062,8 +1097,12 @@ wss.on("connection", async (client, req) => {
       // بلا ترويسة Origin عمداً — هي سبب تقييد التلفزيون للمتصفحات
     });
 
+    upstream.on("pong", () => { alive.upstream = true; seen.upstream = Date.now(); });
+
     upstream.on("open", () => {
       ready = true;
+      alive.upstream = true;
+      seen.upstream = Date.now();
       log("OK  TV answered on " + target);
       // التلفزيون شغّال يقيناً الآن، وهذه أوثق لحظة لالتقاط بطاقته:
       // لا تظهر في جدول ARP إلا لمن خُوطب حديثاً، ولا تُعرف وهو مطفأ
@@ -1072,12 +1111,16 @@ wss.on("connection", async (client, req) => {
     });
 
     upstream.on("message", (data) => {
+      seen.upstream = Date.now();
       if (client.readyState === WebSocket.OPEN) client.send(data.toString());
     });
 
     upstream.on("close", (code, reason) => {
       if (!ready) return;          // فشل الوصل يعالجه معالج الخطأ أدناه
-      log("--  TV channel closed (" + code + (reason ? " " + reason : "") + ")");
+      // زمنُ السكون مع الرمز: به نعرف أهو انقطاعُ سكونٍ أم تبدُّلُ طريق،
+      // فنقيس بدل أن نخمّن
+      log("--  TV channel closed (" + code + (reason ? " " + reason : "") +
+          ") after " + idleOf("upstream") + "s idle");
       bail(code, reason && reason.toString());
     });
 
@@ -1099,13 +1142,19 @@ wss.on("connection", async (client, req) => {
 
   client.on("message", (data) => {
     const text = data.toString();
+    seen.client = Date.now();
     if (ready && upstream) upstream.send(text);
     else queue.push(text);          // الأوامر المبكرة تنتظر جهوز القناة
   });
 
-  client.on("close", () => { try { upstream && upstream.close(); } catch {} });
-  client.on("error", () => { try { upstream && upstream.close(); } catch {} });
+  client.on("close", (code) => {
+    log("--  browser channel closed (" + code + ") after " + idleOf("client") + "s idle");
+    stopBeat();
+    try { upstream && upstream.close(); } catch {}
+  });
+  client.on("error", () => { stopBeat(); try { upstream && upstream.close(); } catch {} });
 
+  startBeat();
   open();
 });
 

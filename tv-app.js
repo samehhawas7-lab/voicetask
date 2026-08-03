@@ -425,18 +425,27 @@ class WebOSRemote {
   }
 
   // انقطاع غير مقصود: نعيد الوصل تلقائياً بالمفتاح المحفوظ دون إزعاج المستخدم
+  //
+  // والمحاولة الأولى فورية: أكثر الانقطاعات عابرة — مهلةُ سكونٍ في
+  // الطريق أو تبدّلُ مسار — فتُشفى قبل أن يشعر بها من يضغط زرّاً.
+  // ثم تتراجع إن تكرّر الفشل، فلا نُغرق تلفزيوناً مطفأً بالمحاولات.
   _scheduleReconnect(){
     if (this._reconnectTimer || !this.ip) return;
     if (!store.get("webos_key_" + this.ip)) return; // بلا مفتاح يلزم موافقة يدوية
-    diag("انقطع الاتصال — إعادة الوصل بعد ثانيتين");
+    const tries = this._retries || 0;
+    const wait = tries === 0 ? 0 : Math.min(2000 * Math.pow(2, tries - 1), 8000);
+    this._retries = tries + 1;
+    diag(wait ? "انقطع الاتصال — إعادة الوصل بعد " + (wait / 1000) + "ث"
+              : "انقطع الاتصال — إعادة الوصل فوراً");
     this._reconnectTimer = setTimeout(() => {
       this._reconnectTimer = null;
       if (this.status !== "ready") this.connect(this.ip);
-    }, 2000);
+    }, wait);
   }
 
   // بعد الجاهزية: نفتح قناة الأزرار ونشترك في الصوت والتطبيق الحالي
   async _afterReady(){
+    this._retries = 0;          // نجح الوصل، فيعود التراجع إلى أوّله
     this._startHeartbeat();
     this.onReady();
     try {
