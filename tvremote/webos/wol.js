@@ -15,6 +15,7 @@
 // ============================================================
 
 const dgram = require("dgram");
+const net = require("net");
 const os = require("os");
 const { exec } = require("child_process");
 
@@ -162,4 +163,81 @@ function macOf(ip) {
   });
 }
 
-module.exports = { wake, macOf, magicPacket, broadcasts };
+/** يحذف مدخل الجوار — به نتخلّص من ذاكرةٍ قديمة ومن مدخلٍ ثبّتناه نحن */
+function forgetNeighbour(ip) {
+  return new Promise((resolve) => {
+    const iface = process.platform === "win32" ? ifaceFor(ip) : null;
+    const tries = process.platform === "win32"
+      ? [iface ? `netsh interface ipv4 delete neighbors "${iface}" ${ip}` : null, `arp -d ${ip}`]
+          .filter(Boolean)
+      : [`ip neigh del ${ip} dev $(ip route get ${ip} 2>/dev/null | awk '{print $3; exit}') 2>/dev/null`,
+         `arp -d ${ip} 2>/dev/null`];
+    let n = 0;
+    const next = () => {
+      if (n >= tries.length) return resolve(false);
+      exec(tries[n++], { timeout: 4000 }, (err) => (err ? next() : resolve(true)));
+    };
+    next();
+  });
+}
+
+/** يستثير الجوار: محاولة وصلٍ تفشل، لكنها تُرغم البطاقة على الجواب */
+function provoke(ip, ms = 1200) {
+  return new Promise((resolve) => {
+    const s = new net.Socket();
+    let done = false;
+    const end = () => { if (!done) { done = true; s.destroy(); resolve(); } };
+    s.setTimeout(ms);
+    s.once("connect", end);
+    s.once("timeout", end);
+    s.once("error", end);
+    try { s.connect(9, ip); } catch { end(); }
+  });
+}
+
+/**
+ * هل بطاقة الجهاز مستيقظة وهو مطفأ؟ وهذا وحده يحسم إمكان الإيقاظ.
+ *
+ * وفيه فخّان لولاهما لكذب الجواب:
+ *
+ * ١) جدول الجوار يحتفظ بالأثر دقائقَ بعد نوم الجهاز، فيقول «حيّ» وهو
+ *    ميت. فيُحذف المدخل أولاً ثم يُستثار ثم يُقرأ.
+ *
+ * ٢) و`pinNeighbour` يثبّت مدخلاً **ساكناً** في أثناء الإيقاظ — وهو
+ *    من صنعنا لا من الجهاز. فلو قبلناه لرأينا صنع أيدينا وحسبناه
+ *    جوابه. فيُشترط `dynamic`، ويُردّ `static` و`permanent`.
+ */
+async function probeStandby(ip) {
+  if (!ip) return { alive: false, mac: null, why: "بلا عنوان" };
+  await forgetNeighbour(ip);
+  await provoke(ip);
+  await new Promise((r) => setTimeout(r, 400));   // الجدول يُحدَّث بعد الردّ
+
+  const cmd = process.platform === "win32"
+    ? `arp -a ${ip}`
+    : `ip neigh show ${ip} 2>/dev/null || arp -n ${ip} 2>/dev/null`;
+
+  return new Promise((resolve) => {
+    exec(cmd, { timeout: 4000 }, (err, out) => {
+      const text = String(out || "");
+      const line = text.split(/\r?\n/).find((l) => l.includes(ip)) || "";
+      const m = line.match(/([0-9a-fA-F]{2}[:-]){5}[0-9a-fA-F]{2}/);
+      if (!m) return resolve({ alive: false, mac: null, why: "لا جواب من بطاقته" });
+
+      const mac = m[0].replace(/-/g, ":").toLowerCase();
+      if (/^(00:){5}00$/.test(mac) || /ff:ff:ff:ff:ff:ff/.test(mac)) {
+        return resolve({ alive: false, mac: null, why: "لا جواب من بطاقته" });
+      }
+      // ويندوز: static — ولينكس: PERMANENT. وكلاهما من صنعنا لا منه.
+      // والعربية تُفحص بلا \b: حدُّ الكلمة في JavaScript محارفُ ASCII
+      // وحدها، فـ \bثابت\b لا يطابق أبداً — وويندوزه معرّب
+      if (/\b(static|PERMANENT)\b/i.test(line) || /ثابت|ساكن/.test(line)) {
+        return resolve({ alive: false, mac, static: true,
+                         why: "المدخل الموجود ثبّتناه نحن، وليس جواباً منه" });
+      }
+      resolve({ alive: true, mac, why: "بطاقته أجابت وهو مطفأ" });
+    });
+  });
+}
+
+module.exports = { wake, macOf, magicPacket, broadcasts, probeStandby, forgetNeighbour };

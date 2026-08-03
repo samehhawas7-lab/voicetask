@@ -21,7 +21,7 @@ const fs = require("fs");
 const path = require("path");
 const { WebSocketServer, WebSocket } = require("ws");
 const { discover, verify } = require("./discover");
-const { wake, macOf } = require("./wol");
+const { wake, macOf, probeStandby } = require("./wol");
 const adb = require("./adb");
 const { TuyaCloud, REGIONS } = require("./tuya-cloud");
 const { TuyaDevice } = require("./tuya");
@@ -684,6 +684,31 @@ const server = http.createServer((req, res) => {
     } catch { text = "لم يُجهَّز بابُ الطوارئ بعد"; }
     res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" });
     return res.end(text);
+  }
+
+  // هل يمكن تشغيله وهو مطفأ؟ قياسٌ لا تخمين — القاعدة الأولى.
+  // قارئة، فتبقى GET.
+  if (url.pathname === "/wake-check") {
+    const what = url.searchParams.get("what") === "proj" ? "proj" : "tv";
+    const ip = what === "proj" ? projIp : tvIp;
+    const port = what === "proj" ? PROJ_PORT : TV_PORT;
+    const name = what === "proj" ? "البروجيكتر" : "التلفزيون";
+    if (!ip) {
+      return json(200, { ok: true, verdict: "unknown", what,
+                         why: "لا أعرف عنوانه بعد — شغّله مرّة وأنا أحفظه" });
+    }
+    // شغّالٌ الآن؟ فلا معنى للفحص: المقصود قياسه وهو مطفأ
+    return portOpenOn(ip, port, 1500).then(async (up) => {
+      if (up) {
+        return json(200, { ok: true, verdict: "awake", what, ip,
+                           why: name + " يعمل الآن. أطفئه، وانتظر دقيقتين، ثم أعد الفحص." });
+      }
+      const r = await probeStandby(ip);
+      const verdict = r.alive ? "reachable" : "dead";
+      log("wake-check " + what + " (" + ip + "): " + verdict + " — " + r.why);
+      return json(200, { ok: true, verdict, what, ip, mac: r.mac || null,
+                         pinned: !!r.static, why: r.why });
+    }).catch((e) => json(500, { ok: false, why: e.message }));
   }
 
   // سجلّ الخادم نفسه — كسجلّ التحديث، يُقرأ من الجوّال لا من اللابتوب

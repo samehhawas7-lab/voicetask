@@ -412,6 +412,9 @@ input::placeholder{color:#5c6579}
     <p>«إطفاء الشاشة» ينتهي بإطفاء كامل بعد مدة — وعندها لا يفتحه إلا
        الإيقاظ الشبكي.</p>
     <button class="key" id="tvOffWake">تشغيل التلفزيون</button>
+    <button class="key sm" id="tvWakeCheck" style="width:100%;margin-top:10px;
+      background:var(--surface-2);color:var(--text)">هل يمكن تشغيله وهو مطفأ؟</button>
+    <div id="tvWakeMsg" class="hint" style="text-align:start"></div>
   </div>
 
   <div class="setup" id="setupPanel">
@@ -594,7 +597,9 @@ input::placeholder{color:#5c6579}
       <button class="key sm" id="projHelp">كيف أفعّله؟</button>
       <button class="key sm" id="projScan">افحص الجهاز</button>
       <button class="key sm" id="projScanWide">فحص شامل</button>
+      <button class="key sm" id="projWakeCheck">هل يُشغَّل وهو مطفأ؟</button>
     </div>
+    <div id="projWakeMsg" class="hint" style="text-align:start"></div>
     <div class="code" id="projReport" hidden style="margin-top:12px;white-space:pre-wrap"></div>
   </div>
 
@@ -610,7 +615,7 @@ input::placeholder{color:#5c6579}
         </div>
         <div class="mid">
           <button class="key" data-pk="VOLUME_MUTE">🔇</button>
-          <button class="key" id="projWake">تشغيل</button>
+          <button class="key" id="projWake" title="يوقظه من إطفاء الشاشة، لا من الإطفاء الكامل">أيقظ الشاشة</button>
         </div>
         <div class="rocker">
           <button data-pk="MEDIA_FAST_FORWARD">▶▶</button>
@@ -2474,6 +2479,51 @@ function wakeTv(btn){
    الخادم هو من يتكلّم ADB؛ المتصفح لا يملك مقابس خام. فالصفحة تطلب
    منه بأوامر بسيطة، وهو يقيّد ما يُمرَّر إلى صدفة الجهاز.
    ============================================================ */
+/* ============================================================
+   هل يُشغَّل وهو مطفأ؟ — قياسٌ لا تخمين (القاعدة الأولى)
+   السؤال كلّه: أبطاقةُ شبكته مستيقظة وهو مطفأ؟ فإن أجابت فالإيقاظ
+   ممكن والعلّة في إعداده، وإن لم تُجب فلا يوقظه شيء من الشبكة.
+   ============================================================ */
+function setupWakeCheck(what, btnId, msgId){
+  const btn = $(btnId), msg = $(msgId);
+  if (!btn || !msg) return;
+
+  const SAY = {
+    awake:     (r) => ["var(--muted)", r.why],
+    reachable: (r) => ["var(--ok)",
+      "بطاقته أجابت وهو مطفأ — فالإيقاظ ممكن، والعلّة في إعداده." +
+      (what === "tv"
+        ? "\n\nبريموت التلفزيون: الإعدادات ← عام ← Quick Start+ ← فعّله."
+        : "")],
+    dead:      (r) => ["var(--danger)",
+      "لا جواب من بطاقته وهو مطفأ — فلا يوقظه شيء من الشبكة، ولن أعدك بما لا يقع." +
+      "\n\nوالحلّ الوحيد مقبس ذكي أمامه." +
+      (r.pinned ? "\n\n(ما في الجدول أثرٌ ثبّتناه نحن، لا جوابٌ منه.)" : "")],
+    unknown:   (r) => ["var(--warn)", r.why],
+  };
+
+  btn.onclick = () => {
+    if (!onServer) return (msg.textContent = "الفحص يحتاج الخادم");
+    btn.disabled = true;
+    const t = btn.textContent;
+    btn.textContent = "أقيس…";
+    msg.style.color = "var(--muted)";
+    msg.textContent = "أحذف أثره القديم، ثم أسأل بطاقته…";
+    fetch("/wake-check?what=" + what, { cache:"no-store" })
+      .then(r => r.json())
+      .then(r => {
+        const [color, text] = (SAY[r.verdict] || SAY.unknown)(r);
+        msg.style.color = color;
+        msg.style.whiteSpace = "pre-wrap";
+        msg.textContent = text;
+      })
+      .catch(() => { msg.style.color = "var(--danger)"; msg.textContent = "تعذّر الوصول للخادم"; })
+      .finally(() => { btn.disabled = false; btn.textContent = t; });
+  };
+}
+setupWakeCheck("tv", "tvWakeCheck", "tvWakeMsg");
+setupWakeCheck("proj", "projWakeCheck", "projWakeMsg");
+
 (function setupProjector(){
   const setup = $("projSetup"), remote = $("projRemote");
   if (!setup) return;
@@ -2588,7 +2638,9 @@ function wakeTv(btn){
     el.addEventListener("click", () => press(el.dataset.pk, el));
   });
 
-  $("projWake").onclick  = () => { buzz(20); post("/proj/wake").then(()=>toast("أُرسلت إشارة التشغيل")); };
+  // ADB لا يعمل إلا والجهاز مستيقظ، فهذا يوقظ الشاشة لا الجهاز المطفأ.
+  // والقاعدة الثانية عشرة: لا يُبنى زرٌّ يوهم بما لا يقع
+  $("projWake").onclick  = () => { buzz(20); post("/proj/wake").then(()=>toast("أُرسلت إشارة إيقاظ الشاشة")); };
   $("projSleep").onclick = () => { buzz(20); post("/proj/sleep").then(()=>toast("أُطفئت الشاشة")); };
 
   let appsLoaded = false;
