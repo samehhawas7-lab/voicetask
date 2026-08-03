@@ -479,10 +479,21 @@ function startUpdate() {
     log("update did not finish in " + (LATCH_MS / 60000) + " min - unlatched; see " + logFile);
   }, LATCH_MS);
   if (updateLatch.unref) updateLatch.unref();
+  // نكتب ترويسةً قبل الإطلاق، ونجعل بوويرشيل يُلحق لا يستبدل (`*>>`).
+  // فإن بقي السجلّ ترويسةً وحدها عرفنا أن بوويرشيل لم يكتب حرفاً —
+  // وذلك خبرٌ في نفسه. وكان السجلّ يغيب فلا يُعرف أوقع الإطلاق أصلاً.
+  try {
+    fs.appendFileSync(logFile,
+      "\r\n==== " + new Date().toISOString() + " update requested ====\r\n");
+  } catch { /* القرص للقراءة أحياناً — لا يمنع المحاولة */ }
+
   const cmd = process.env.UPDATE_CMD || "powershell.exe";
   const args = process.env.UPDATE_CMD ? [] : [
     "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command",
-    "& { irm '" + INSTALLER + "' | iex } *> '" + logFile + "'",
+    // TLS يُضبط صراحةً: بوويرشيل ٥ يبدأ أحياناً ببروتوكول قديم ترفضه
+    // GitHub، فيسقط `irm` صامتاً قبل أن يكتب السجلّ سطراً
+    "[Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12; " +
+    "& { irm '" + INSTALLER + "' | iex } *>> '" + logFile + "'",
   ];
 
   try {
@@ -496,6 +507,13 @@ function startUpdate() {
       // لا سؤال حين لا أحد أمام الشاشة: المنصّب يقتل هذا الخادم قبل
       // أن يُتمّ، فلو وقف عند سؤالٍ لا مجيب له لَبقي البيت بلا خادم
       env: Object.assign({}, process.env, { KMC_NO_PROMPT: "1" }),
+    });
+    // فشلُ الإطلاق يقع بعد العودة لا فيها (ENOENT مثلاً)، فبلا هذا
+    // المعالج يبقى الخطأ مكتوماً ويظنّ صاحبُ البيت أن التنصيب يمضي
+    child.on("error", (e) => {
+      updating = false;
+      log("update failed to start: " + e.message);
+      try { fs.appendFileSync(logFile, "spawn failed: " + e.message + "\r\n"); } catch {}
     });
     child.unref();
     log("update started -> " + logFile);
