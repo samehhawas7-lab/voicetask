@@ -31,6 +31,19 @@ function magicPacket(mac) {
   return pkt;
 }
 
+/**
+ * أهو عنوانٌ في نطاق Tailscale؟ ‏100.64.0.0/10 — أي 100.64 إلى 100.127
+ *
+ * ولمَ نسأل؟ لأن Tailscale نفقٌ إلى الخارج لا شبكةٌ فيها أجهزة. ولا
+ * يُوقَظ جهازٌ عبر نفق: الحزمة السحرية تُلتقط من بطاقةٍ نائمة على سلكٍ
+ * أو هواء، والنفق يبدأ بعد أن يستيقظ الجهاز. فكلّ حزمةٍ ترسل إليه
+ * ضائعة، وتُبطئ الدفعات الحقيقية.
+ */
+function isTailnet(ip) {
+  const a = String(ip || "").split(".").map(Number);
+  return a.length === 4 && a[0] === 100 && a[1] >= 64 && a[1] <= 127;
+}
+
 /** عناوين البثّ لكل شبكة موصولة، مع البثّ العام احتياطاً */
 function broadcasts() {
   const out = ["255.255.255.255"];
@@ -38,6 +51,7 @@ function broadcasts() {
     for (const i of list || []) {
       const fam = typeof i.family === "string" ? i.family : `IPv${i.family}`;
       if (fam !== "IPv4" || i.internal) continue;
+      if (isTailnet(i.address)) continue;
       // بعض الأنظمة لا تعطي i.broadcast، فنحسبه من العنوان والقناع
       let b = i.broadcast;
       if (!b && i.netmask) {
@@ -45,7 +59,9 @@ function broadcasts() {
         const m = i.netmask.split(".").map(Number);
         b = a.map((x, n) => (x & m[n]) | (~m[n] & 255)).join(".");
       }
-      if (b && !out.includes(b)) out.push(b);
+      // قناعٌ /32 يجعل «البثّ» هو العنوان نفسه — وتلك واجهةُ نفقٍ لا
+      // مجالَ بثٍّ فيها، فلا تُرسل إليها حزمة
+      if (b && b !== i.address && !out.includes(b)) out.push(b);
     }
   }
   return out;
@@ -104,7 +120,8 @@ function pinNeighbour(ip, mac) {
  * @param {{ip?:string, bursts?:number}} opts
  */
 function wake(mac, opts = {}) {
-  const { ip = "", bursts = 12 } = opts;
+  const { bursts = 12 } = opts;
+  const ip = isTailnet(opts.ip) ? "" : (opts.ip || "");
   // التلفزيون له بطاقتان — سلكية ولاسلكية — ولكلٍّ عنوانها. والحزمة
   // لا توقظ إلا البطاقة التي تحمل عنوانها. فإن أرسلنا إلى السلكية
   // والتلفزيون على الواي‑فاي لم يقع شيء، والصمتُ لا يدلّ على السبب.
@@ -250,4 +267,4 @@ async function probeStandby(ip) {
   });
 }
 
-module.exports = { wake, macOf, magicPacket, broadcasts, probeStandby, forgetNeighbour };
+module.exports = { wake, macOf, magicPacket, broadcasts, probeStandby, forgetNeighbour, isTailnet };
