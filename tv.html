@@ -238,6 +238,10 @@ input[type=text]{background:var(--surface-2);border:1px solid var(--line);border
 input[type=text]:focus{border-color:var(--accent)}
 input::placeholder{color:#5c6579}
 .hint{font-size:11.5px;color:var(--muted);margin:8px 0 0;line-height:1.7}
+.addrtip{background:var(--surface-2);border:1px solid var(--warn);border-radius:16px;
+  padding:14px 15px;margin:0 0 14px}
+.addrtip b{display:block;font-size:14px;font-weight:700;margin-bottom:6px;color:var(--warn)}
+.addrtip p{margin:0 0 10px;font-size:12px;color:var(--muted);line-height:1.8}
 .btn{background:var(--accent);color:#fff;border:none;border-radius:12px;padding:13px 18px;
   font-size:14px;font-weight:600;font-family:inherit;cursor:pointer;white-space:nowrap;
   transition:transform .08s,filter .15s}
@@ -364,6 +368,18 @@ input::placeholder{color:#5c6579}
   <div class="hero">
     <h2>حبيبتي نون</h2>
     <p>كل أجهزة البيت في مكان واحد</p>
+  </div>
+
+  <!-- يظهر حين تُفتح الصفحة من عنوان البيت وثمّة عنوانٌ يعمل خارجه -->
+  <div class="addrtip" id="addrTip" hidden>
+    <b>احفظ هذا العنوان بدلاً منه</b>
+    <p>الذي فتحتَ منه يعمل داخل البيت وحده، ويتبدّل مع إعادة تشغيل
+       الراوتر. وهذا يعمل في البيت وخارجه سواء:</p>
+    <div class="code" id="addrTipUrl"></div>
+    <div class="act-row" style="margin-bottom:0">
+      <button class="key sm" id="addrTipCopy">انسخه</button>
+      <button class="key sm" id="addrTipHide">لا تُذكّرني</button>
+    </div>
   </div>
   <div class="tiles">
     <button class="tile" data-go="dev-tv">
@@ -927,7 +943,7 @@ input::placeholder{color:#5c6579}
     <h3>الحالة</h3>
     <dl class="info">
       <dt>الخادم</dt>      <dd id="infoServer">—</dd>
-      <dt>من خارج البيت</dt><dd id="infoAway">—</dd>
+      <dt>من خارج البيت</dt><dd id="infoAway" style="cursor:pointer" title="اضغط لنسخه">—</dd>
       <dt>التلفزيون</dt>   <dd id="infoTv">—</dd>
       <dt>بطاقة الشبكة</dt><dd id="infoMac">—</dd>
       <dt>القناة</dt>      <dd id="infoLink">—</dd>
@@ -2484,6 +2500,49 @@ function wakeTv(btn){
    السؤال كلّه: أبطاقةُ شبكته مستيقظة وهو مطفأ؟ فإن أجابت فالإيقاظ
    ممكن والعلّة في إعداده، وإن لم تُجب فلا يوقظه شيء من الشبكة.
    ============================================================ */
+/* ============================================================
+   العنوان الصحيح — للخادم عنوانان، وأحدهما لا يعمل خارج البيت
+   فمن حفظ اختصاره على عنوان البيت وجده معطّلاً حين يبتعد. والتطبيق
+   يعرف العنوانين ويعرف من أيّهما فُتح، فليقلها بدل أن يصمت.
+   ============================================================ */
+(function setupAddressTip(){
+  const box = $("addrTip");
+  if (!box || !onServer) return;
+  if (store.get("addrtip_off") === "1") return;
+
+  fetch("/health", { cache: "no-store" }).then(r => r.json()).then(h => {
+    if (!h.away) return;                        // لا شبكة خاصة، فلا نصيحة
+    if (location.hostname === h.away) return;   // مفتوحٌ من الصحيح أصلاً
+    const url = "http://" + h.away + ":" + (location.port || 8099);
+    $("addrTipUrl").textContent = url;
+    box.hidden = false;
+
+    $("addrTipCopy").onclick = () => {
+      const done = () => toast("نُسخ — الصقه في سفاري ثم أضفه للشاشة الرئيسية");
+      // سفاري لا يمنح الحافظة على http أحياناً، فله بديلٌ لا يسقط
+      const fallback = () => {
+        const t = document.createElement("textarea");
+        t.value = url;
+        t.style.position = "fixed"; t.style.opacity = "0";
+        document.body.appendChild(t);
+        t.select();
+        try { document.execCommand("copy"); done(); }
+        catch { toast("انسخه يدوياً من الصندوق", true); }
+        document.body.removeChild(t);
+      };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(url).then(done).catch(fallback);
+      } else fallback();
+    };
+
+    // نصيحةٌ لا إلحاح: الأمر يبقى بيده (القاعدة العاشرة)
+    $("addrTipHide").onclick = () => {
+      store.set("addrtip_off", "1");
+      box.hidden = true;
+    };
+  }).catch(() => {});
+})();
+
 function setupWakeCheck(what, btnId, msgId){
   const btn = $(btnId), msg = $(msgId);
   if (!btn || !msg) return;
@@ -3262,6 +3321,14 @@ function paintInfo(){
         away.style.color = h.away ? "var(--ok)" : "var(--muted)";
         away.style.direction = "ltr";
         away.style.textAlign = "right";
+        // نسخُ عنوانٍ من شاشة جوال متعب، فالضغط عليه ينسخه
+        away.onclick = h.away ? () => {
+          const url = away.textContent;
+          const done = () => toast("نُسخ العنوان");
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(url).then(done).catch(() => toast("انسخه يدوياً", true));
+          } else toast("انسخه يدوياً", true);
+        } : null;
       }
       watchBuild(h);
     })
