@@ -937,6 +937,8 @@ input::placeholder{color:#5c6579}
     <button class="key sm" id="cmdReload">تحديث الصفحة</button>
     <button class="key sm" id="cmdRestart">إعادة تشغيل الخادم</button>
     <button class="key sm" id="cmdLog">سجلّ آخر تحديث</button>
+    <button class="key sm" id="cmdSrvLog">سجلّ الخادم</button>
+    <button class="key sm" id="cmdStatic">تثبيت عنوان اللابتوب</button>
   </div>
   <div id="updLog" class="code" style="max-height:260px;overflow:auto;white-space:pre-wrap" hidden></div>
 
@@ -963,25 +965,23 @@ input::placeholder{color:#5c6579}
   </div>
 
   <div class="card">
-    <h3>تثبيت عنوان اللابتوب</h3>
-    <p>يمنع تبدّل العنوان بعد إعادة تشغيل الراوتر. يتحقّق من بقاء
-       الاتصال ويرجع وحده إن انقطع.</p>
-    <div class="code" data-copy>powershell -ExecutionPolicy Bypass -File C:\kmc-remote\tvremote\windows\set-static-ip.ps1</div>
-    <button class="key sm" data-copy-for="prev">نسخ</button>
-  </div>
-
-  <div class="card">
-    <h3>إعادة تشغيل الخادم</h3>
-    <p>حين يتوقف الريموت ولا ينفع التحديث.</p>
-    <div class="code" data-copy>Stop-ScheduledTask "KMC TV Remote"; Start-ScheduledTask "KMC TV Remote"</div>
-    <button class="key sm" data-copy-for="prev">نسخ</button>
-  </div>
-
-  <div class="card">
-    <h3>سجل الخادم</h3>
-    <p>آخر أربعين سطراً — ابعثها لي عند أي خلل.</p>
-    <div class="code" data-copy>Get-Content C:\kmc-remote\tvremote\windows\server.log -Tail 40</div>
-    <button class="key sm" data-copy-for="prev">نسخ</button>
+    <h3>مفتاح الطوارئ</h3>
+    <p>كل زرٍّ في هذه الصفحة يسقط بسقوط الخادم — فإن مات، لم يبق إلا
+       القيام إلى اللابتوب. وهذا بابٌ <b>لا يمرّ به</b>، فيعمل ولو مات.</p>
+    <p style="color:var(--warn)">وهو يفتح صدفة أوامر على اللابتوب.
+       مقصورةٌ على شبكتك الخاصة، وبالمفتاح لا بكلمة المرور — ومن ليس
+       في شبكتك لا يرى المنفذ أصلاً.</p>
+    <p>من تطبيق SSH في جوّالك (Termius أو Blink) ولّد زوج مفاتيح مرّة،
+       ثم الصق هنا <b>المفتاح العامّ</b> — الذي يبدأ بـ <code>ssh-ed25519</code>.
+       ولا تُرسل الخاصّ إلى أحد، ولا إليّ.</p>
+    <div class="field"><label>المفتاح العامّ</label>
+      <input id="sshKey" type="text" autocomplete="off" spellcheck="false"
+             placeholder="ssh-ed25519 AAAA… me@iphone" dir="ltr"></div>
+    <div class="act-row" style="margin-bottom:0">
+      <button class="key sm" id="sshGo">سلّح الباب</button>
+      <button class="key sm" id="sshLog">سجلّ التجهيز</button>
+    </div>
+    <div id="sshMsg" class="hint"></div>
   </div>
 
   <div class="card">
@@ -2386,18 +2386,61 @@ function wakeTv(btn){
       });
   };
 
-  const cg = $("cmdLog");
-  if (cg) cg.onclick = () => {
+  // سجلّان يُعرضان في الصندوق نفسه — والضغط ثانيةً يطويه
+  const showLog = (path, empty) => {
     const box = $("updLog");
     if (!box) return;
-    if (!box.hidden) { box.hidden = true; return; }
+    if (!box.hidden && box.dataset.src === path) { box.hidden = true; return; }
     box.hidden = false;
+    box.dataset.src = path;
     box.textContent = "يُجلب…";
-    fetch("/update-log", { cache:"no-store" })
+    fetch(path, { cache:"no-store" })
       .then(r => r.text())
-      .then(t => { box.textContent = t.trim() || "السجلّ فارغ"; box.scrollTop = box.scrollHeight; })
+      .then(t => { box.textContent = t.trim() || empty; box.scrollTop = box.scrollHeight; })
       .catch(() => { box.textContent = "تعذّر جلب السجلّ"; });
   };
+
+  const cg = $("cmdLog");
+  if (cg) cg.onclick = () => showLog("/update-log", "السجلّ فارغ");
+
+  const csl = $("cmdSrvLog");
+  if (csl) csl.onclick = () => showLog("/server-log", "السجلّ فارغ");
+
+  // تثبيت العنوان: السكربت يختبر البوّابة بعد التغيير ويرجع وحده إن
+  // انقطع، فالخطر محسوب — لكنه يُقال قبل الضغط لا بعده
+  const cst = $("cmdStatic");
+  if (cst) cst.onclick = () => {
+    if (!onServer) return toast("يحتاج الخادم", true);
+    if (!confirm("تثبيت عنوان اللابتوب على الشبكة؟\n\n"
+               + "قد ينقطع الاتصال ثوانيَ. والأداة تختبر الشبكة بعد التغيير "
+               + "وترجع إلى التوزيع التلقائي وحدها إن انقطع.")) return;
+    cst.disabled = true; const t = cst.textContent; cst.textContent = "يُثبَّت…";
+    post("/static-ip")
+      .then(r => toast(r.ok ? (r.why || "بدأ") : (r.why || "تعذّر"), !r.ok))
+      .catch(() => toast("انقطع الاتصال — راجع بعد دقيقة", true))
+      .finally(() => setTimeout(() => { cst.disabled = false; cst.textContent = t; }, 8000));
+  };
+
+  // بابُ الطوارئ
+  const sk = $("sshGo"), sm = $("sshMsg");
+  if (sk) sk.onclick = () => {
+    const key = $("sshKey").value.trim();
+    if (!key) return (sm.textContent = "الصق المفتاح العامّ أولاً");
+    if (!confirm("تسليح باب الطوارئ؟\n\n"
+               + "يفتح صدفة أوامر على اللابتوب، من شبكتك الخاصة وحدها، "
+               + "وبهذا المفتاح لا بكلمة مرور.")) return;
+    sm.textContent = "يُجهَّز…";
+    sk.disabled = true;
+    post("/ssh/enable", { publicKey: key })
+      .then(r => {
+        sm.textContent = r.ok ? (r.why || "تمّ") : (r.why || "تعذّر");
+        if (r.ok) $("sshKey").value = "";
+      })
+      .catch(() => { sm.textContent = "تعذّر الوصول للخادم"; })
+      .finally(() => { sk.disabled = false; });
+  };
+  const sl = $("sshLog");
+  if (sl) sl.onclick = () => showLog("/ssh/log", "لم يُجهَّز بعد");
 
   // زر نسخ لكل كتلة أمر — النسخ من الشاشة على الجوال متعب
   document.querySelectorAll("[data-copy-for]").forEach(btn => {
@@ -2631,13 +2674,18 @@ function post(path, body){
   };
 
   // ثلاث مراحل نراها من الخارج: يعمل الآن، ثم ينقطع، ثم يعود
+  //
+  // والمهلة ستٌّ لا ثلاث: اللابتوب بطيء، والتنصيب تنزيلٌ ونسخٌ
+  // و`npm install`. وثلاثُ دقائق كانت تُعلن الفشل والمنصّب ما زال
+  // يعمل — فيُخيَّل إلى صاحب البيت أنه سقط وهو ماضٍ. وهي ستٌّ في
+  // الخادم أيضاً (UPDATE_LATCH_MS) فيتّفقان.
   function waitForServer(){
     const started = Date.now();
     let sawDown = false;
     const tick = () => {
-      if (Date.now() - started > 180000){
+      if (Date.now() - started > 360000){
         mark(1, "fail");
-        toast("طال الانتظار — راجع update.log على اللابتوب", true);
+        toast("طال الانتظار — افتح «سجلّ آخر تحديث» لترى أين وقف", true);
         btn.disabled = false;
         return;
       }

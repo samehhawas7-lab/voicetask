@@ -127,7 +127,8 @@ $expect = @("tv.html", "tvremote\webos\server.js", "tvremote\windows\run.cmd",
             "tvremote\webos\adb.js", "tvremote\webos\wol.js",
             "tvremote\webos\survey.js", "tvremote\webos\router.js",
             "tvremote\webos\secure.js",
-            "tvremote\windows\tailscale.ps1",
+            "tvremote\windows\tailscale.ps1", "tvremote\windows\ssh.ps1",
+            "tvremote\windows\set-static-ip.ps1",
             "tvremote\tools\probe-device.js", "tvremote\tools\scan.js")
 $missing = @($expect | Where-Object { -not (Test-Path (Join-Path $Root $_)) })
 if ($missing.Count) { Die ("copy incomplete, missing: " + ($missing -join ", ")) }

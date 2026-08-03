@@ -561,7 +561,7 @@ const server = http.createServer((req, res) => {
                     "/ac/link", "/ac/assign", "/ac/hall/set", "/ac/bed/set",
                     "/proj/find", "/proj/key", "/proj/app", "/proj/wake", "/proj/sleep",
                     "/router/link", "/router/find", "/router/block", "/router/wifi",
-                    "/router/reboot", "/restart"];
+                    "/router/reboot", "/restart", "/static-ip", "/ssh/enable"];
   if (CHANGING.includes(url.pathname)) {
     if (req.method !== "POST") {
       return json(405, { ok: false, why: "هذه النقطة تُطلب بـ POST" });
@@ -636,6 +636,91 @@ const server = http.createServer((req, res) => {
     } catch (e) { text = "ما وجدت سجلّاً — لم يجرِ تحديث بعد أو حُذف"; }
     res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" });
     return res.end(text);
+  }
+
+  // بابُ الطوارئ: صدفةٌ لا تمرّ بهذا الخادم، فتعمل ولو مات.
+  // والمفتاح العامّ يُمرَّر إلى PowerShell، فلا يُقبل إلا بصيغته
+  // الصارمة: نوعٌ معروف، وقاعدةُ ٦٤ خالصة، وتعليقٌ بلا محارف خطرة.
+  if (url.pathname === "/ssh/enable") {
+    return readJson(req, 8192).then((b) => {
+      const key = String(b.publicKey || "").trim();
+      // سطرٌ واحد لا غير: محرف السطر يفتح بابَ سطرٍ ثانٍ في الملف
+      if (/[\r\n]/.test(key)) return json(400, { ok: false, why: "المفتاح سطرٌ واحد" });
+      const m = key.match(
+        /^(ssh-ed25519|ssh-rsa|ecdsa-sha2-nistp(?:256|384|521)) ([A-Za-z0-9+/]+={0,3})( [^\s"'`$;&|<>]{0,64})?$/);
+      if (!m) return json(400, { ok: false, why: "هذا ليس مفتاحاً عامّاً صالحاً — انسخ سطر id_ed25519.pub كاملاً" });
+      if (m[2].length < 40) return json(400, { ok: false, why: "المفتاح أقصر مما ينبغي" });
+      if (key.length > 1024) return json(400, { ok: false, why: "المفتاح أطول مما ينبغي" });
+
+      if (process.platform !== "win32" && !process.env.PS_CMD) {
+        return json(501, { ok: false, why: "هذه لويندوز وحده" });
+      }
+      const script = path.join(__dirname, "..", "windows", "ssh.ps1");
+      const logFile = path.join(__dirname, "..", "windows", "ssh.log");
+      const cmd = process.env.PS_CMD || "powershell.exe";
+      // المفتاح وسيطٌ مستقلّ لا جزءٌ من سطر أوامر يُفسَّر
+      const args = process.env.PS_CMD ? [] : [
+        "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script, "-PublicKey", key,
+      ];
+      try {
+        const child = spawn(cmd, args, {
+          detached: true, stdio: "ignore", windowsHide: true, shell: !!process.env.PS_CMD,
+        });
+        child.unref();
+        log("ssh enable requested (" + m[1] + ") -> " + logFile);
+        return json(200, { ok: true, why: "يُجهَّز — راجع سجلّ SSH بعد دقيقة" });
+      } catch (e) {
+        return json(500, { ok: false, why: e.message });
+      }
+    }).catch((e) => json(400, { ok: false, why: e.message }));
+  }
+
+  if (url.pathname === "/ssh/log") {
+    const f = path.join(__dirname, "..", "windows", "ssh.log");
+    let text = "";
+    try {
+      const buf = fs.readFileSync(f);
+      text = buf.slice(Math.max(0, buf.length - 12000)).toString("utf8");
+    } catch { text = "لم يُجهَّز بابُ الطوارئ بعد"; }
+    res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" });
+    return res.end(text);
+  }
+
+  // سجلّ الخادم نفسه — كسجلّ التحديث، يُقرأ من الجوّال لا من اللابتوب
+  if (url.pathname === "/server-log") {
+    const f = path.join(__dirname, "..", "windows", "server.log");
+    let text = "";
+    try {
+      const buf = fs.readFileSync(f);
+      text = buf.slice(Math.max(0, buf.length - 12000)).toString("utf8");
+    } catch { text = "ما وجدت سجلّاً — قد يكون الخادم يعمل من نافذةٍ لا من المهمّة"; }
+    res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" });
+    return res.end(text);
+  }
+
+  // تثبيت عنوان اللابتوب. والسكربت يختبر البوّابة بعد التغيير ويرجع
+  // إلى التوزيع التلقائي إن انقطع — فالقاعدة الرابعة محقّقةٌ فيه،
+  // ولا يُبنى لها حَرَسٌ ثانٍ هنا
+  if (url.pathname === "/static-ip") {
+    if (process.platform !== "win32" && !process.env.PS_CMD) {
+      return json(501, { ok: false, why: "هذه لويندوز وحده" });
+    }
+    const script = path.join(__dirname, "..", "windows", "set-static-ip.ps1");
+    const logFile = path.join(__dirname, "..", "windows", "static-ip.log");
+    const cmd = process.env.PS_CMD || "powershell.exe";
+    const args = process.env.PS_CMD ? [] : [
+      "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script,
+    ];
+    try {
+      const child = spawn(cmd, args, {
+        detached: true, stdio: "ignore", windowsHide: true, shell: !!process.env.PS_CMD,
+      });
+      child.unref();
+      log("static-ip requested -> " + logFile);
+      return json(200, { ok: true, why: "بدأ التثبيت — يتحقّق من نفسه ويرجع إن انقطع" });
+    } catch (e) {
+      return json(500, { ok: false, why: e.message });
+    }
   }
 
   // إعادة تشغيل الخادم. run.cmd حلقةٌ تُعيده بعد خمس ثوانٍ إن خرج،
@@ -1023,6 +1108,19 @@ wss.on("connection", async (client, req) => {
 
   open();
 });
+
+/** يقرأ جسماً JSON بحدٍّ أعلى، فلا يُغرق الخادمَ طلبٌ بلا نهاية */
+function readJson(req, limit = 4096) {
+  return new Promise((resolve, reject) => {
+    let b = "";
+    req.on("data", (c) => {
+      b += c;
+      if (b.length > limit) { req.destroy(); reject(new Error("الطلب أكبر مما يُقبل")); }
+    });
+    req.on("end", () => { try { resolve(JSON.parse(b || "{}")); } catch { resolve({}); } });
+    req.on("error", () => reject(new Error("انقطع الطلب")));
+  });
+}
 
 function log(msg) {
   console.log(new Date().toLocaleTimeString("en-GB") + "  " + msg);
