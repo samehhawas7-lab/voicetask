@@ -2529,15 +2529,39 @@ try { localStorage.setItem("__t","1"); localStorage.removeItem("__t"); diag("ا�
 catch { diag("التخزين المحلي: محظور ← بيطلب الإقران كل مرة"); }
 diag("المتصفح: " + navigator.userAgent);
 
-$("copyDiagBtn").onclick = () => {
-  const text = diagLines.join("\n");
-  const done = () => toast("تم النسخ — الصقها في المحادثة");
+/**
+ * نسخٌ يعمل على http.
+ *
+ * `navigator.clipboard` **غير موجودة أصلاً** على عنوانٍ غير مشفَّر —
+ * لا تفشل بل تكون undefined. وصفحتنا على http://100.x. فكانت كلّ
+ * أزرار النسخ تسقط إلى «انسخه يدوياً» ولا تنسخ شيئاً.
+ *
+ * والبديل القديم `execCommand("copy")` لا يشترط أصلاً مشفَّراً، فهو
+ * يعمل حيث تعجز الجديدة. فتُجرَّب الجديدة إن وُجدت، وإلا فالقديمة.
+ */
+function copyText(text, okMsg){
+  const done = () => toast(okMsg || "نُسخ");
+  const legacy = () => {
+    const t = document.createElement("textarea");
+    t.value = text;
+    t.setAttribute("readonly", "");
+    t.style.cssText = "position:fixed;top:0;left:0;opacity:0;pointer-events:none";
+    document.body.appendChild(t);
+    // سفاري لا ينسخ من حقلٍ لم يُحدَّد مداه صراحةً
+    t.select();
+    t.setSelectionRange(0, text.length);
+    let ok = false;
+    try { ok = document.execCommand("copy"); } catch {}
+    document.body.removeChild(t);
+    ok ? done() : toast("تعذّر النسخ — اضغط مطوّلاً على النصّ وانسخه", true);
+  };
   if (navigator.clipboard && navigator.clipboard.writeText){
-    navigator.clipboard.writeText(text).then(done, () => toast("انسخها يدوياً من فوق", true));
-  } else {
-    toast("انسخها يدوياً من فوق", true);
-  }
-};
+    navigator.clipboard.writeText(text).then(done).catch(legacy);
+  } else legacy();
+}
+
+$("copyDiagBtn").onclick = () =>
+  copyText(diagLines.join("\n"), "تم النسخ — الصقها في المحادثة");
 
 /* ============================================================
    الإيقاظ وصفحة الأوامر — لا تعملان إلا خلف الخادم
@@ -2708,14 +2732,8 @@ function wakeTv(btn){
   // زر نسخ لكل كتلة أمر — النسخ من الشاشة على الجوال متعب
   document.querySelectorAll("[data-copy-for]").forEach(btn => {
     const code = btn.previousElementSibling;
-    btn.onclick = () => {
-      const text = code ? code.textContent : "";
-      if (navigator.clipboard && navigator.clipboard.writeText){
-        navigator.clipboard.writeText(text)
-          .then(() => toast("نُسخ — الصقه في PowerShell"),
-                () => toast("انسخه يدوياً من فوق", true));
-      } else toast("انسخه يدوياً من فوق", true);
-    };
+    btn.onclick = () => copyText(code ? code.textContent.trim() : "",
+                                 "نُسخ — الصقه في PowerShell");
   });
 
   const cd = $("cmdCopyDiag");
@@ -2750,23 +2768,8 @@ function wakeTv(btn){
     $("addrTipUrl").textContent = url;
     box.hidden = false;
 
-    $("addrTipCopy").onclick = () => {
-      const done = () => toast("نُسخ — الصقه في سفاري ثم أضفه للشاشة الرئيسية");
-      // سفاري لا يمنح الحافظة على http أحياناً، فله بديلٌ لا يسقط
-      const fallback = () => {
-        const t = document.createElement("textarea");
-        t.value = url;
-        t.style.position = "fixed"; t.style.opacity = "0";
-        document.body.appendChild(t);
-        t.select();
-        try { document.execCommand("copy"); done(); }
-        catch { toast("انسخه يدوياً من الصندوق", true); }
-        document.body.removeChild(t);
-      };
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(url).then(done).catch(fallback);
-      } else fallback();
-    };
+    $("addrTipCopy").onclick = () =>
+      copyText(url, "نُسخ — الصقه في سفاري ثم أضفه للشاشة الرئيسية");
 
     // نصيحةٌ لا إلحاح: الأمر يبقى بيده (القاعدة العاشرة)
     $("addrTipHide").onclick = () => {
@@ -4138,13 +4141,7 @@ function paintInfo(){
         away.style.direction = "ltr";
         away.style.textAlign = "right";
         // نسخُ عنوانٍ من شاشة جوال متعب، فالضغط عليه ينسخه
-        away.onclick = h.away ? () => {
-          const url = away.textContent;
-          const done = () => toast("نُسخ العنوان");
-          if (navigator.clipboard && navigator.clipboard.writeText) {
-            navigator.clipboard.writeText(url).then(done).catch(() => toast("انسخه يدوياً", true));
-          } else toast("انسخه يدوياً", true);
-        } : null;
+        away.onclick = h.away ? () => copyText(away.textContent, "نُسخ العنوان") : null;
       }
       watchBuild(h);
     })
