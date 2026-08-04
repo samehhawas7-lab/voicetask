@@ -575,8 +575,19 @@ function servePage(res) {
   // الصفحةُ ختمَها بما عند الخادم وتُعيد تحميل نفسها إن تخلّفت.
   let stamp = "";
   try { stamp = String(fs.statSync(PAGE).mtimeMs | 0); } catch {}
+  // وفاهمُ الأمر المنطوق يُحقن مع الصفحة لا يُطلب بعدها.
+  //
+  // **ولماذا؟** كان `<script src="/voice.js">` وسمَ تحميلٍ حاجزاً:
+  // المتصفّح يقف عنده فلا يرسم شيئاً حتى يصله الملف. فإن تعثّر الطلب
+  // — والخادم يُعاد تشغيله، والشبكة تتقلّب — بقيت الشاشة سوداء وقد
+  // نزلت الصفحة كاملة. **فالصفحة لا يجوز أن تحتاج طلباً ثانياً
+  // لتُرسم** (القاعدة الخامسة عشرة). وهو ملفٌّ واحد ما زال، يُقاس في
+  // node ويُحقن هنا — لا نسختان تفترقان.
+  let voiceSrc = "";
+  try { voiceSrc = fs.readFileSync(path.join(__dirname, "voice.js"), "utf8"); } catch {}
   const flag = `<script>window.__TV_PROXY__=${JSON.stringify(tvIp || "auto")};` +
-               `window.__BUILD__=${JSON.stringify(stamp)};</script>\n`;
+               `window.__BUILD__=${JSON.stringify(stamp)};</script>\n` +
+               (voiceSrc ? "<script>\n" + voiceSrc + "\n</script>\n" : "");
   html = html.replace("<script>", flag + "<script>");
   res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" });
   res.end(html);
