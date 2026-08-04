@@ -6,3 +6,4 @@ webos/adbkey.pem
 windows/server.log
 windows/update.log
 windows/version.json
+windows/certs/

@@ -1150,6 +1150,19 @@ input::placeholder{color:#5c6579}
   </div>
   <div id="updLog" class="code" style="max-height:260px;overflow:auto;white-space:pre-wrap" hidden></div>
 
+  <!-- الاتصال المشفَّر: بدونه لا ميكروفون ولا بوصلة، وهو قيدُ سفاري -->
+  <div class="card" id="tlsCard">
+    <h3>اتصالٌ مشفَّر <span class="chip" id="tlsChip" hidden>يعمل</span></h3>
+    <p id="tlsNote" class="hint" style="margin-top:0">
+      سفاري يمنع الميكروفون والحافظة والبوصلة على العنوان غير المشفَّر.
+      وTailscale يمنح شهادةً حقيقية لجهازك، فتعمل الثلاثة.
+    </p>
+    <button class="key sm" id="tlsBtn" style="width:100%">استصدر الشهادة</button>
+    <div id="tlsMsg" class="hint"></div>
+    <div class="code" id="tlsUrl" data-copy hidden></div>
+    <button class="key sm" id="tlsCopy" data-copy-for="prev" hidden style="width:100%">نسخ العنوان</button>
+  </div>
+
   <div class="card">
     <h3>تحديث الخادم <span class="chip" id="updChip" hidden>يوجد تحديث</span></h3>
     <p id="updNote">يجلب آخر نسخة ويعيد تشغيل الخادم وحده — بلا لمس اللابتوب.</p>
@@ -2179,7 +2192,8 @@ function show(id){
     const ip = $("ipInput").value.trim() || store.get("webos_ip");
     if (ip && store.get("webos_key_" + ip)) tv.connect(ip);
   }
-  if (id === "dev-maint"){ paintInfo(); if (window.__checkVersion) window.__checkVersion(); }
+  if (id === "dev-maint"){ paintInfo(); if (window.__checkVersion) window.__checkVersion();
+                           if (window.__tlsCheck) window.__tlsCheck(); }
   if (id === "dev-proj" && window.__projCheck) window.__projCheck();
   if (id === "dev-ac-hall" && window.__acCheck) window.__acCheck("hall");
   if (id === "dev-ac-bed"  && window.__acCheck) window.__acCheck("bed");
@@ -2738,6 +2752,47 @@ function wakeTv(btn){
 
   const cd = $("cmdCopyDiag");
   if (cd) cd.onclick = () => $("copyDiagBtn").click();
+
+  /* ---------- الاتصال المشفَّر ----------
+     ليس ترفاً: الميكروفون والحافظة ومستشعر الاتجاه محجوبةٌ كلّها على
+     http في سفاري. وهذه الشهادة تفتحها جميعاً بضغطةٍ من الجوّال. */
+  const tlsBtn = $("tlsBtn");
+  if (tlsBtn){
+    const show = (s) => {
+      const chip = $("tlsChip"), msg = $("tlsMsg"), box = $("tlsUrl"), cp = $("tlsCopy");
+      chip.hidden = !s.serving;
+      if (s.url){
+        box.textContent = s.url; box.hidden = false; cp.hidden = false;
+        msg.textContent = s.serving
+          ? "افتح هذا العنوان في سفاري وأضفه للشاشة الرئيسية — ومنه تعمل الأوامر الصوتية"
+          : "الشهادة محفوظة، وتعمل بعد إعادة تشغيل الخادم";
+        tlsBtn.textContent = "جدّد الشهادة";
+      } else {
+        box.hidden = true; cp.hidden = true;
+        msg.textContent = s.why || "لم تُستصدر بعد";
+        tlsBtn.textContent = "استصدر الشهادة";
+      }
+    };
+    window.__tlsCheck = () => fetch("/https", { cache:"no-store" })
+      .then(r => r.json()).then(show).catch(() => {});
+    tlsBtn.onclick = async () => {
+      tlsBtn.disabled = true; tlsBtn.textContent = "يُستصدر… قد يأخذ دقيقة";
+      $("tlsMsg").textContent = "";
+      try {
+        const r = await post("/https/enable");
+        if (r.running){ $("tlsMsg").textContent = "جارٍ — انتظر قليلاً"; return; }
+        if (!r.ok){
+          $("tlsMsg").style.color = "var(--danger)";
+          $("tlsMsg").textContent = r.why || "تعذّر";
+        } else {
+          $("tlsMsg").style.color = "";
+          toast("صدرت الشهادة");
+        }
+        await window.__tlsCheck();
+      } catch (e) { $("tlsMsg").textContent = "تعذّر الوصول للخادم"; }
+      finally { tlsBtn.disabled = false; }
+    };
+  }
 })();
 
 

@@ -30,6 +30,7 @@ const { HuaweiRouter, probe: routerProbe, find: routerFind } = require("./router
 const { harden } = require("./secure");
 const islam = require("./islam");
 const selfupdate = require("./selfupdate");
+const tls = require("./tls");
 const { spawn } = require("child_process");
 
 // حين يعمل الخادم خدمةً في الخلفية لا سبيل لتمرير متغيّرات البيئة إليه،
@@ -473,6 +474,7 @@ let autoUpdate = CFG.autoUpdate !== false;      // مفعّل ما لم يُطف
 let lastCheck = { at: null, found: false };
 // نتيجةُ آخر تحديث — تُقرأ من الصفحة، فيُعرف سببُ التعثّر بلا سجلّ
 let lastUpdateResult = null;
+let httpsBusy = false;
 
 function startUpdate() {
   if (updating) return { ok: false, code: 409, why: "التحديث جارٍ بالفعل" };
@@ -597,7 +599,8 @@ const server = http.createServer((req, res) => {
                     "/router/link", "/router/find", "/router/block", "/router/wifi",
                     "/router/reboot", "/restart", "/static-ip", "/ssh/enable",
                     "/islam/fetch", "/islam/place",
-                    "/islam/audio/probe", "/islam/audio/save", "/islam/audio/stop"];
+                    "/islam/audio/probe", "/islam/audio/save", "/islam/audio/stop",
+                    "/https/enable"];
   if (CHANGING.includes(url.pathname)) {
     if (req.method !== "POST") {
       return json(405, { ok: false, why: "هذه النقطة تُطلب بـ POST" });
@@ -658,6 +661,35 @@ const server = http.createServer((req, res) => {
       .then((r) => { surveyCache = { at: Date.now(), data: r }; json(200, r); })
       .catch((e) => json(500, { ok: false, why: e.message, devices: [] }))
       .finally(() => { surveyRunning = false; });
+  }
+
+  // ---------- الشهادة ----------
+  // زرٌّ في الجوّال يستصدرها، فلا يُقام إلى اللابتوب لأجلها
+  if (url.pathname === "/https") {
+    const c = tls.current();
+    return tls.dnsName().then((d) => json(200, {
+      ok: true,
+      have: !!c, name: (c && c.name) || d.name || null,
+      at: (c && c.at) || null,
+      port: HTTPS_PORT,
+      serving: !!secureServer,
+      why: d.name ? "" : d.why,
+      url: (c && c.name) ? "https://" + c.name + ":" + HTTPS_PORT : null,
+    }));
+  }
+
+  if (url.pathname === "/https/enable") {
+    if (httpsBusy) return json(200, { ok: true, running: true });
+    httpsBusy = true;
+    return tls.issue(log)
+      .then((r) => {
+        if (r.ok && !secureServer) startSecure();
+        return json(r.ok ? 200 : 502, Object.assign(r, {
+          url: r.ok ? "https://" + r.name + ":" + HTTPS_PORT : null,
+        }));
+      })
+      .catch((e) => json(500, { ok: false, why: e.message }))
+      .finally(() => { httpsBusy = false; });
   }
 
   if (url.pathname === "/version") {
@@ -1476,6 +1508,42 @@ function onFatal(e) {
 server.on("error", onFatal);
 wss.on("error", onFatal);
 
+/**
+ * خادمٌ مشفَّر بجوار العادي — لا بدلاً منه.
+ *
+ * سفاري يمنع الميكروفون والحافظة ومستشعر الاتجاه على http. فبلا هذا
+ * لا أوامرَ صوتية ولا بوصلةٌ تدور، مهما أُتقنت الشيفرة.
+ *
+ * والعادي يبقى: هو طريق النجاة إن انتهت الشهادة أو تعطّل Tailscale
+ * (القاعدة الخامسة عشرة — ما يُنقذ لا يمرّ بما قد ينكسر).
+ */
+const HTTPS_PORT = Number(process.env.HTTPS_PORT || CFG.httpsPort || 8443);
+let secureServer = null;
+
+function startSecure() {
+  if (process.env.NO_HTTPS) return;
+  const cert = tls.load();
+  if (!cert) return;
+  try {
+    secureServer = https.createServer({ key: cert.key, cert: cert.cert }, server.listeners("request")[0]);
+    // المقابس تُرقّى على الخادمين معاً، وإلا عمل الريموت على العادي وحده
+    secureServer.on("upgrade", (req, sock, head) => {
+      wss.handleUpgrade(req, sock, head, (ws) => wss.emit("connection", ws, req));
+    });
+    secureServer.on("error", (e) => {
+      log("https listen failed: " + e.message);
+      secureServer = null;
+    });
+    secureServer.listen(HTTPS_PORT, "0.0.0.0", () => {
+      console.log("  secure: https://" + cert.name + ":" + HTTPS_PORT + "   <- الصوت والبوصلة يعملان هنا");
+      log("https ready on " + HTTPS_PORT + " for " + cert.name);
+    });
+  } catch (e) {
+    log("https could not start: " + e.message);
+    secureServer = null;
+  }
+}
+
 server.listen(PORT, "0.0.0.0", () => {
   const addrs = localAddresses();
   console.log("──────────────────────────────────────────");
@@ -1491,6 +1559,8 @@ server.listen(PORT, "0.0.0.0", () => {
   console.log("");
   console.log("  TV: " + (tvIp ? tvIp + ":" + TV_PORT : "searching..."));
   console.log("──────────────────────────────────────────");
+
+  startSecure();
 
   // نتحقّق من العنوان المحفوظ فور الإقلاع، فيكون جاهزاً قبل أول ضغطة زر
   if (!process.env.TV_URL) ensureTv();
