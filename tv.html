@@ -245,22 +245,38 @@ input::placeholder{color:#5c6579}
 .qbar select{flex:1;min-width:130px;background:var(--surface-2);color:var(--text);
   border:1px solid var(--line);border-radius:12px;height:40px;padding:0 10px;
   font-family:inherit;font-size:13px}
-.qhead{text-align:center;background:var(--surface-2);border:1px solid var(--accent-dim);
-  border-radius:16px;padding:12px;margin-bottom:14px}
-.qhead b{display:block;font-size:17px;font-weight:700}
-.qhead small{color:var(--muted);font-size:11.5px}
-.qbody{display:grid;gap:2px}
-.ayah{padding:11px 13px;border-radius:12px;cursor:pointer;transition:background .12s}
-.ayah:active{background:var(--surface-2)}
-.ayah.open{background:var(--surface-2)}
-.ayah .txt{font-family:"Uthmani","SF Arabic","Noto Naskh Arabic",serif;
-  font-size:var(--qsize,21px);line-height:2.5;text-align:justify;text-align-last:right}
+/* الصفحة تُعرض كصفحة المصحف: نصٌّ متّصلٌ مضبوط الطرفين، لا آيةٌ في
+   كلّ سطر. وحدودُ الصفحات هي حدودُ مصحف المدينة نفسها */
+.qsheet{background:var(--surface-2);border:1px solid var(--line);border-radius:18px;
+  padding:16px 15px 8px;overflow:hidden}
+.qtext{font-family:"Uthmani","SF Arabic","Noto Naskh Arabic",serif;
+  font-size:var(--qsize,21px);line-height:2.55;text-align:justify;text-align-last:center;
+  word-spacing:.02em}
+.qtext .ay{cursor:pointer;border-radius:7px;transition:background .12s}
+.qtext .ay.sel{background:var(--accent-dim)}
 /* رقم الآية بخطّ الواجهة لا بخطّ المصحف: الخطّ العثمانيّ لا أرقام
    فيه، فكانت تُرسم مسوخاً صغيرة داخل الدائرة */
-.ayah .num{display:inline-block;min-width:27px;height:27px;line-height:25px;
+.qtext .num{display:inline-block;min-width:25px;height:25px;line-height:23px;
   border:1px solid var(--accent-dim);border-radius:50%;text-align:center;
-  font-size:12px;color:var(--accent);margin:0 6px;vertical-align:middle;
+  font-size:11px;color:var(--accent);margin:0 5px;vertical-align:middle;
   font-family:"SF Arabic","Noto Kufi Arabic",-apple-system,sans-serif}
+/* عنوان السورة يقع في وسط الصفحة كما في المصحف، لا في رأسها وحده */
+.qsura{text-align:center;background:var(--surface);border:1px solid var(--accent-dim);
+  border-radius:12px;padding:8px 10px;margin:14px 2px 10px}
+.qsura b{display:block;font-size:15.5px;font-weight:700}
+.qsura small{color:var(--muted);font-size:11px}
+.qbsml{text-align:center;font-family:"Uthmani","SF Arabic",serif;font-size:calc(var(--qsize,21px) * .86);
+  color:var(--accent);margin:6px 0 10px;line-height:2.1}
+.qfoot{display:flex;justify-content:space-between;align-items:center;gap:8px;
+  margin-top:14px;padding-top:9px;border-top:1px solid var(--line);
+  font-size:11px;color:var(--muted)}
+.qpg{border:1px solid var(--accent-dim);border-radius:999px;padding:3px 13px;
+  color:var(--accent);font-weight:700;font-size:12px}
+.qnav{display:flex;gap:8px;align-items:center;margin-top:12px}
+.qnav .key{flex:1}
+.qjump{width:74px;height:40px;text-align:center;background:var(--surface-2);
+  color:var(--text);border:1px solid var(--line);border-radius:12px;
+  font-family:inherit;font-size:14px;font-weight:600}
 /* الهامش: يُفصل بحدٍّ جانبيّ وخطٍّ أصغر، فيُقرأ حاشيةً لا متناً */
 .marg{margin:9px 4px 2px;padding:9px 12px;border-inline-start:2px solid var(--accent-dim);
   background:var(--surface);border-radius:0 10px 10px 0;font-size:13px;line-height:2.05;
@@ -907,17 +923,18 @@ input::placeholder{color:#5c6579}
 <section class="screen" id="dev-islam" data-title="إسلامي" data-sub="المصحف والأذكار والمواقيت">
   <div class="card" id="islamNeed" hidden>
     <h3>تنزيل النصوص</h3>
-    <p>المصحف والتفسيران والأذكار — نحو خمسة ميغابايت، تُنزَّل مرّة على
-       اللابتوب ثم يعمل القسم بلا إنترنت أبداً.</p>
+    <p>المصحف والتفسيران والأذكار وتخطيط الصفحات — نحو خمسة ميغابايت،
+       تُنزَّل مرّة على اللابتوب ثم يعمل القسم بلا إنترنت أبداً.</p>
     <p style="color:var(--warn)">ولا يُحفظ نصٌّ حتى تُعدّ آياته وتُطابَق
-       الجدول المعتمد — فما لم يجتز القياس لا يُعرض منه حرف.</p>
+       الجدول المعتمد، ولا تُقبل الصفحات حتى تقع بدايات الأجزاء الثلاثين
+       في مواضعها — فما لم يجتز القياس لا يُعرض منه حرف.</p>
     <button class="key sm" id="islamGet" style="width:100%">نزّلها الآن</button>
     <div id="islamGetMsg" class="hint"></div>
   </div>
 
   <div class="tiles" id="islamTiles" hidden style="margin-top:0">
     <button class="tile" data-go="islam-quran" style="grid-column:1/-1">
-      <svg><use href="#i-islam"></use></svg><b>المصحف</b><small>بالتفسير في الهامش</small>
+      <svg><use href="#i-islam"></use></svg><b>المصحف</b><small>بصفحات مصحف المدينة ٦٠٤</small>
     </button>
     <button class="tile" data-go="islam-azkar"><b>الأذكار</b><small>بالمراجع</small></button>
     <button class="tile" data-go="islam-times"><b>المواقيت</b><small>أمّ القرى</small></button>
@@ -938,8 +955,20 @@ input::placeholder{color:#5c6579}
     <button class="key sm" id="qSmaller">ﻉ−</button>
     <button class="key sm" id="qBigger">ﻉ+</button>
   </div>
-  <div class="qhead" id="qHead" hidden></div>
-  <div id="qBody" class="qbody"></div>
+  <div class="qsheet" id="qSheet">
+    <div id="qBody"></div>
+    <div class="qfoot" id="qFoot" hidden>
+      <span id="qFootSura"></span>
+      <span class="qpg" id="qFootPage"></span>
+      <span id="qFootJuz"></span>
+    </div>
+  </div>
+  <div class="qnav">
+    <button class="key sm" id="qPrev">السابقة ›</button>
+    <input id="qGo" class="qjump" inputmode="numeric" pattern="[0-9]*" aria-label="رقم الصفحة">
+    <button class="key sm" id="qNext">‹ التالية</button>
+  </div>
+  <div id="qMarg"></div>
 </section>
 
 <!-- الأذكار -->
@@ -2712,9 +2741,10 @@ function wakeTv(btn){
    ============================================================ */
 (function setupIslam(){
   if (!$("dev-islam")) return;
-  const D = { quran:null, tafsir:{}, suras:null, azkar:null };
+  const D = { quran:null, at:null, tafsir:{}, suras:null, pages:null, azkar:null };
   let which = store.get("tafsir_which") || "muyassar";
   let qsize = Number(store.get("quran_size")) || 21;
+  let page = Number(store.get("quran_page")) || 1;
 
   const NAMES = { muyassar:"الميسَّر", jalalayn:"الجلالين" };
 
@@ -2766,8 +2796,14 @@ function wakeTv(btn){
 
   // ---------- المصحف ----------
   async function loadQuran(){
-    if (!D.quran) D.quran = (await getJson("quran.json")).quran;
+    if (!D.quran){
+      D.quran = (await getJson("quran.json")).quran;
+      // فهرسٌ للوصول إلى الآية بسورتها ورقمها بلا مسحٍ للستّة آلاف
+      D.at = new Map();
+      D.quran.forEach((a, i) => D.at.set(a.chapter * 1000 + a.verse, i));
+    }
     if (!D.suras) D.suras = await getJson("suras.json");
+    if (!D.pages) D.pages = await getJson("pages.json");
     if (!D.tafsir[which]) {
       D.tafsir[which] = (await getJson(which === "muyassar"
         ? "tafsir-muyassar.json" : "tafsir-jalalayn.json")).quran;
@@ -2785,60 +2821,120 @@ function wakeTv(btn){
     });
   }
 
-  function paintSura(n){
-    const s = D.suras[n - 1];
-    const head = $("qHead");
-    head.hidden = false;
-    head.innerHTML = "";
-    const b = document.createElement("b");
-    b.textContent = "سورة " + bare(s.name);
-    const sm = document.createElement("small");
-    sm.textContent = s.place + " · " + ayahWord(s.ayahs) + " · الجزء " + AD(s.juz) + " · صفحة " + AD(s.page);
-    head.append(b, sm);
-    // البسملة عنوانٌ لا آية — إلا الفاتحة فهي آيةٌ منها، والتوبة بلا بسملة
-    if (n !== 1 && n !== 9){
-      const bs = document.createElement("div");
-      bs.className = "txt";
-      bs.style.cssText = "font-family:Uthmani,serif;font-size:19px;margin-top:9px;color:var(--accent)";
-      bs.textContent = "بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ";
-      head.appendChild(bs);
-    }
+  /* ---- التنوين المفتوح: تسويةٌ للعرض لا تعديلٌ في النصّ ----
+     ناشرُ النسخة يذكر صراحةً أنه استبدل علامات التنوين المفتوح التي
+     تعرفها خطوطُ المجمّع (٠٦٥٦ و٠٦٥٧ و٠٦٥E) بعلاماتٍ أخرى (٠٨F٢
+     و٠٨F٠ و٠٨F١). وخطُّنا — خطُّ المجمّع — لا يرسم الثانية، فتسقط
+     العلامة من الشاشة. فنعيدها إلى ما يعرفه الخطّ عند الرسم.
 
+     وفي النصّ مسافةٌ بين العلامة وألفها: «قَوۡمࣰ ا». فتنفصل الميم عن
+     الألف وتبدو الألف رقماً قائماً بذاته. فتُوصل — ولا تُوصل إلا إذا
+     كان التالي ألفاً وحدها. وقِستُ ذلك على المصحف كلّه: ٢٤١٨ موضعاً
+     ألفٌ وحدها فتُوصل، و٣٠٠١ موضعاً كلمةٌ تالية فتبقى منفصلة.
+
+     ولا يُمسّ الملفُّ المحفوظ: هو كما نزل وكما قيس، والتسوية هنا
+     في الرسم وحده. */
+  const OPEN_TANWEEN = { "ࣰ":"ٗ", "ࣱ":"ٞ", "ࣲ":"ٖ" };
+  const JOIN_ALEF = /([ٖٗٞ]) ([اى][ؐ-ًؚ-ٰٟۖ-ۭ]*)(?=\s|$)/g;
+  const forDisplay = (t) => String(t)
+    .replace(/[ࣰ-ࣲ]/g, (c) => OPEN_TANWEEN[c])
+    .replace(JOIN_ALEF, "$1$2");
+
+  /** آياتُ صفحةٍ من ٦٠٤، بحدود مصحف المدينة كما نُزّلت وقيست */
+  function ayahsOfPage(p){
+    const [s1, a1, s2, a2] = D.pages[p - 1];
+    const from = D.at.get(s1 * 1000 + a1);
+    const to   = D.at.get(s2 * 1000 + a2);
+    return (from == null || to == null) ? [] : D.quran.slice(from, to + 1);
+  }
+
+  let selected = null;
+
+  /** الهامش: تفسيرُ الآية الملموسة، تحت الصفحة لا داخل النصّ —
+      إذ لو حُشر داخلها لتقطّعت الصفحة ولم تعد صفحة */
+  function showTafsir(a, span){
+    if (selected) selected.classList.remove("sel");
+    selected = span;
+    span.classList.add("sel");
+    const note = D.tafsir[which].find(x => x.chapter === a.chapter && x.verse === a.verse);
+    const m = $("qMarg");
+    m.innerHTML = "";
+    const box = document.createElement("div");
+    box.className = "marg";
+    const lab = document.createElement("b");
+    lab.textContent = NAMES[which] + " — " + bare(D.suras[a.chapter - 1].name) + " " + AD(a.verse);
+    const t = document.createElement("span");
+    t.textContent = note ? note.text : "—";
+    box.append(lab, t);
+    m.appendChild(box);
+  }
+
+  function paintPage(p){
+    p = Math.max(1, Math.min(D.pages.length, Math.round(p) || 1));
+    page = p;
     const body = $("qBody");
     body.innerHTML = "";
     body.style.setProperty("--qsize", qsize + "px");
-    const ayat = D.quran.filter(a => a.chapter === n);
-    const tf = D.tafsir[which];
-    ayat.forEach(a => {
-      const div = document.createElement("div");
-      div.className = "ayah";
-      const t = document.createElement("div");
-      t.className = "txt";
-      t.textContent = a.text + " ";
+    $("qMarg").innerHTML = "";
+    selected = null;
+
+    const rows = ayahsOfPage(p);
+    const suras = [];
+    let block = null, lastSura = 0;
+
+    for (const a of rows){
+      if (a.chapter !== lastSura){
+        lastSura = a.chapter;
+        suras.push(a.chapter);
+        // عنوانُ السورة لا يُكتب إلا حيث تبدأ فعلاً — فإن انسابت من
+        // الصفحة السابقة فلا عنوان لها هنا، كما في المصحف
+        if (a.verse === 1){
+          const s = D.suras[a.chapter - 1];
+          const h = document.createElement("div");
+          h.className = "qsura";
+          const b = document.createElement("b");
+          b.textContent = "سورة " + bare(s.name);
+          const sm = document.createElement("small");
+          sm.textContent = s.place + " · " + ayahWord(s.ayahs);
+          h.append(b, sm);
+          body.appendChild(h);
+          // البسملة عنوانٌ لا آية — إلا الفاتحة فهي آيةٌ منها،
+          // وبراءةُ بلا بسملة
+          if (a.chapter !== 1 && a.chapter !== 9){
+            const bs = document.createElement("div");
+            bs.className = "qbsml";
+            bs.textContent = "بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ";
+            body.appendChild(bs);
+          }
+        }
+        block = null;
+      }
+      if (!block){
+        block = document.createElement("div");
+        block.className = "qtext";
+        body.appendChild(block);
+      }
+      const span = document.createElement("span");
+      span.className = "ay";
+      span.textContent = forDisplay(a.text) + " ";
       const num = document.createElement("span");
       num.className = "num";
       num.textContent = AD(a.verse);
-      t.appendChild(num);
-      div.appendChild(t);
+      span.appendChild(num);
+      span.onclick = () => showTafsir(a, span);
+      block.append(span, document.createTextNode(" "));
+    }
 
-      div.onclick = () => {
-        const open = div.querySelector(".marg");
-        if (open){ open.remove(); div.classList.remove("open"); return; }
-        const note = tf.find(x => x.chapter === n && x.verse === a.verse);
-        const m = document.createElement("div");
-        m.className = "marg";
-        const lab = document.createElement("b");
-        lab.textContent = NAMES[which];
-        const p = document.createElement("span");
-        p.textContent = note ? note.text : "—";
-        m.append(lab, p);
-        div.appendChild(m);
-        div.classList.add("open");
-      };
-      body.appendChild(div);
-    });
-    store.set("quran_sura", String(n));
-    screenSub("islam-quran", bare(s.name) + " · " + NAMES[which]);
+    const names = suras.map(n => bare(D.suras[n - 1].name)).join(" · ");
+    $("qFoot").hidden = false;
+    $("qFootSura").textContent = names;
+    $("qFootPage").textContent = "صفحة " + AD(p);
+    $("qFootJuz").textContent = "الجزء " + AD(D.pages[p - 1][4]);
+    $("qGo").value = AD(p);
+    $("qSura").value = String(suras[0] || 1);
+    store.set("quran_page", String(p));
+    screenSub("islam-quran", names + " · صفحة " + AD(p) + " · " + NAMES[which]);
+    $("qSheet").scrollIntoView({ block: "start" });
   }
 
   window.__islamQuran = async () => {
@@ -2847,19 +2943,42 @@ function wakeTv(btn){
     try {
       await loadQuran();
       fillSuras();
-      const n = Number(store.get("quran_sura")) || 1;
-      $("qSura").value = String(n);
-      paintSura(n);
+      paintPage(Number(store.get("quran_page")) || 1);
     } catch (e) { body.textContent = "النصوص لم تُنزَّل بعد — ارجع ونزّلها"; }
   };
 
-  $("qSura").onchange = () => paintSura(Number($("qSura").value));
+  // اختيار السورة ينقل إلى صفحتها الأولى، لا إلى قائمةٍ منفصلة
+  $("qSura").onchange = () => paintPage(D.suras[Number($("qSura").value) - 1].page || 1);
+  $("qPrev").onclick = () => paintPage(page - 1);
+  $("qNext").onclick = () => paintPage(page + 1);
+  // الرقم يُكتب هندياً في الخانة، فيُقبل بالوجهين
+  $("qGo").onchange = () => {
+    const v = $("qGo").value.replace(/[٠-٩]/g, d => "٠١٢٣٤٥٦٧٨٩".indexOf(d));
+    paintPage(Number(v.replace(/\D/g, "")) || page);
+  };
+
+  // وتُقلَّب بالإصبع كما تُقلَّب الورقة: سحبٌ نحو اليسار يُقدّم
+  (() => {
+    const sheet = $("qSheet");
+    let x0 = 0, y0 = 0;
+    sheet.addEventListener("touchstart", (e) => {
+      x0 = e.touches[0].clientX; y0 = e.touches[0].clientY;
+    }, { passive: true });
+    sheet.addEventListener("touchend", (e) => {
+      const t = e.changedTouches[0];
+      const dx = t.clientX - x0, dy = t.clientY - y0;
+      // سحبٌ أفقيٌّ واضح، وإلا فهو تمريرٌ رأسيّ أو لمسةٌ على آية
+      if (Math.abs(dx) < 55 || Math.abs(dx) < Math.abs(dy) * 1.6) return;
+      paintPage(page + (dx < 0 ? 1 : -1));
+    }, { passive: true });
+  })();
+
   $("qTafsirWhich").onclick = async () => {
     which = which === "muyassar" ? "jalalayn" : "muyassar";
     store.set("tafsir_which", which);
     $("qTafsirWhich").textContent = NAMES[which];
     await loadQuran();
-    paintSura(Number($("qSura").value));
+    paintPage(page);
   };
   const resize = (d) => {
     qsize = Math.max(16, Math.min(34, qsize + d));

@@ -35,6 +35,15 @@ const SURA_AYAHS = [
 ];
 const TOTAL_AYAHS = SURA_AYAHS.reduce((a, b) => a + b, 0);   // ٦٢٣٦
 
+// صفحاتُ بدء الأجزاء الثلاثين في مصحف المدينة — جدولٌ مستقلٌّ نقيس به
+// ما يُنزَّل، كما نقيس المصحف بجدول آيات السور. فإن طابقها الملفُّ في
+// الثلاثين جميعاً فهو تخطيطُ مصحف المدينة لا غيره.
+const JUZ_PAGES = [
+  1, 22, 42, 62, 82, 102, 121, 142, 162, 182, 201, 222, 242, 262, 282,
+  302, 322, 342, 362, 382, 402, 422, 442, 462, 482, 502, 522, 542, 562, 582,
+];
+const TOTAL_PAGES = 604;
+
 const BASE = "https://raw.githubusercontent.com/fawazahmed0/quran-api/1";
 
 const SOURCES = {
@@ -61,6 +70,12 @@ const SOURCES = {
     file: "suras.json",
     label: "فهرس السور",
     credit: "quran-api",
+  },
+  pages: {
+    url: BASE + "/info.json",
+    file: "pages.json",
+    label: "تخطيط صفحات مصحف المدينة",
+    credit: "quran-api — وقِيس ببدايات الأجزاء الثلاثين",
   },
   azkar: {
     url: "https://raw.githubusercontent.com/osamayy/azkar-db/master/azkar.json",
@@ -152,6 +167,55 @@ function shrinkMeta(obj) {
   }));
 }
 
+/**
+ * تخطيط صفحات مصحف المدينة: لكلّ صفحةٍ أوّلُ آيةٍ فيها وآخرُها وجزؤها.
+ *
+ * ولا يُقبل الملف حتى يجتاز أربعة قياسات: أن تكون الصفحات ٦٠٤، وأن
+ * تُغطّي ٦٢٣٦ آية بلا نقصٍ ولا تكرار، وألّا يتراجع ترقيمها ولا يقفز،
+ * وأن تقع بداياتُ الأجزاء الثلاثين على الصفحات المعتمدة. فما طابق
+ * الأربعة فهو المصحف المدنيّ الذي بين يديه، لا تخطيطاً آخر.
+ */
+function shrinkPages(obj) {
+  const ch = obj && obj.chapters;
+  if (!Array.isArray(ch) || ch.length !== 114) throw new Error("الفهرس ناقص");
+
+  const flat = [];
+  for (const c of ch) {
+    for (const v of c.verses || []) {
+      flat.push({ s: c.chapter, a: v.verse, p: v.page, j: v.juz });
+    }
+  }
+  if (flat.length !== TOTAL_AYAHS) {
+    throw new Error("عدد الآيات " + flat.length + " والمنتظر " + TOTAL_AYAHS);
+  }
+
+  const pages = [];
+  let prev = 0;
+  for (const r of flat) {
+    if (!(r.p >= 1 && r.p <= TOTAL_PAGES)) throw new Error("رقم صفحة خارج المدى: " + r.p);
+    if (r.p < prev || r.p > prev + 1) {
+      throw new Error("ترقيم الصفحات غير متّصل عند " + r.s + ":" + r.a);
+    }
+    if (r.p !== prev) { pages.push([r.s, r.a, r.s, r.a, r.j]); prev = r.p; }
+    else { const last = pages[pages.length - 1]; last[2] = r.s; last[3] = r.a; }
+  }
+  if (pages.length !== TOTAL_PAGES) {
+    throw new Error("عدد الصفحات " + pages.length + " والمنتظر " + TOTAL_PAGES);
+  }
+  // والجزء قد يبدأ في وسط صفحة، فصفحتُه هي صفحةُ أوّل آيةٍ منه —
+  // لا أوّلُ صفحةٍ تبدأ به
+  const juzPage = {};
+  for (const r of flat) if (juzPage[r.j] === undefined) juzPage[r.j] = r.p;
+  for (let z = 0; z < 30; z++) {
+    const at = juzPage[z + 1];
+    if (at !== JUZ_PAGES[z]) {
+      throw new Error("الجزء " + (z + 1) + " يبدأ في صفحة " + at +
+                      " والمعتمد " + JUZ_PAGES[z]);
+    }
+  }
+  return pages;
+}
+
 /** الأذكار: تُحوَّل من صيغة الجدول إلى قائمة مفهومة، بمراجعها */
 function shrinkAzkar(obj) {
   const rows = obj && obj.rows;
@@ -176,13 +240,17 @@ function readJson(name) {
 async function ensureData(log = () => {}, onStep = () => {}) {
   fs.mkdirSync(DATA, { recursive: true });
   const done = [], failed = [];
+  // الفهرس وتخطيط الصفحات يُستخرجان من ملفٍ واحد وزنه ميغابايتان —
+  // فلا يُجلب مرّتين على شبكةٍ قد تكون بطيئة
+  const fetched = new Map();
 
   for (const [key, src] of Object.entries(SOURCES)) {
     if (have(src.file)) { done.push(key); continue; }
     onStep({ key, label: src.label, state: "downloading" });
     log("islam: fetching " + src.file);
     try {
-      const buf = await get(src.url, src.binary);
+      let buf = fetched.get(src.url);
+      if (!buf) { buf = await get(src.url, src.binary); fetched.set(src.url, buf); }
       let toWrite = buf;
 
       if (!src.binary) {
@@ -191,6 +259,7 @@ async function ensureData(log = () => {}, onStep = () => {}) {
         else if (key === "muyassar" || key === "jalalayn") {
           verifyTafsir(obj); toWrite = Buffer.from(JSON.stringify(obj));
         } else if (key === "meta") toWrite = Buffer.from(JSON.stringify(shrinkMeta(obj)));
+        else if (key === "pages") toWrite = Buffer.from(JSON.stringify(shrinkPages(obj)));
         else if (key === "azkar") toWrite = Buffer.from(JSON.stringify(shrinkAzkar(obj)));
       }
 
@@ -330,7 +399,7 @@ function hhmm(t) {
 }
 
 module.exports = {
-  SOURCES, SURA_AYAHS, TOTAL_AYAHS, DATA,
-  ensureData, verifyQuran, verifyTafsir, shrinkMeta, shrinkAzkar,
+  SOURCES, SURA_AYAHS, TOTAL_AYAHS, JUZ_PAGES, TOTAL_PAGES, DATA,
+  ensureData, verifyQuran, verifyTafsir, shrinkMeta, shrinkAzkar, shrinkPages,
   have, readJson, qibla, distanceToKaaba, prayerTimes, hhmm, METHODS,
 };
