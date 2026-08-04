@@ -277,6 +277,21 @@ input::placeholder{color:#5c6579}
 .qjump{width:74px;height:40px;text-align:center;background:var(--surface-2);
   color:var(--text);border:1px solid var(--line);border-radius:12px;
   font-family:inherit;font-size:14px;font-weight:600}
+/* ---------- الأمر الصوتيّ ---------- */
+.mic-row{display:flex;align-items:center;gap:14px;background:var(--surface-2);
+  border:1px solid var(--line);border-radius:18px;padding:12px 14px;margin-bottom:14px}
+.mic{width:54px;height:54px;flex:0 0 54px;border-radius:50%;border:1px solid var(--accent-dim);
+  background:var(--surface);color:var(--accent);display:grid;place-items:center;
+  cursor:pointer;transition:transform .12s,background .12s}
+.mic:active{transform:scale(.94)}
+.mic[disabled]{opacity:.45;color:var(--muted);border-color:var(--line)}
+/* النبض يقول «أنا أسمع الآن» — ولا ينبض إلا وهو يسمع فعلاً */
+.mic.on{background:var(--accent-dim);color:var(--text);animation:micpulse 1.2s ease-in-out infinite}
+@keyframes micpulse{0%,100%{box-shadow:0 0 0 0 var(--accent-dim)}50%{box-shadow:0 0 0 10px transparent}}
+.mic-txt{min-width:0;flex:1}
+.mic-txt b{display:block;font-size:14px}
+.mic-txt small{display:block;color:var(--muted);font-size:11.5px;line-height:1.7;
+  overflow:hidden;text-overflow:ellipsis}
 .qplay{margin-top:12px}
 .qopts{display:flex;gap:10px;flex-wrap:wrap}
 .qopts label{flex:1;min-width:120px;font-size:11.5px;color:var(--muted);
@@ -447,6 +462,18 @@ input::placeholder{color:#5c6579}
       <button class="key sm" id="addrTipHide">لا تُذكّرني</button>
     </div>
   </div>
+  <!-- الأمر بالصوت: زرٌّ واحد، ويقول ما فهم قبل أن ينفّذ -->
+  <div class="mic-row">
+    <button class="mic" id="micBtn" aria-label="أمرٌ صوتيّ">
+      <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor"
+           stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/>
+        <path d="M19 10v2a7 7 0 0 1-14 0v-2"/><path d="M12 19v3"/>
+      </svg>
+    </button>
+    <div class="mic-txt"><b id="micState">قل أمرك</b><small id="micHeard"></small></div>
+  </div>
+
   <div class="tiles">
     <button class="tile" data-go="dev-tv">
       <i class="pip" id="pipTv"></i>
@@ -1229,6 +1256,9 @@ input::placeholder{color:#5c6579}
 
 </main>
 <div class="toast" id="toast" hidden></div>
+<!-- فاهمُ الأمر المنطوق: ملفٌّ واحد يعمل في node وفي المتصفّح،
+     فما قِيس بـ٨٥ جملةً هناك هو نفسه ما يفهم هنا -->
+<script src="/voice.js"></script>
 <script>
 "use strict";
 /* ============================================================
@@ -3616,6 +3646,171 @@ setupWakeCheck("proj", "projWakeCheck", "projWakeMsg");
    متوقَّع لا خطأ. نستطلع /health حتى يردّ، ثم نعيد تحميل الصفحة
    لتُحمَّل الواجهة الجديدة معه.
    ============================================================ */
+/* ============================================================
+   الأمر الصوتيّ بالعربية
+
+   سفاري يتعرّف على الكلام، و`voice.js` يفهمه — وهو الملفّ نفسه الذي
+   قِيس بـ٨٥ جملةً في node قبل أن يصل إلى هنا.
+
+   **ولا يُنفَّذ ما لم يُفهم يقيناً.** إن قصُر الفهم عن العتبة قيل
+   «ما فهمت» مع ما سُمع — فأمرٌ خاطئ يُطفئ تلفزيوناً أسوأ من أمرٍ لم
+   يقع. والمفهوم يُعرض بالعربية قبل تنفيذه، فيُرى ما وقع.
+   ============================================================ */
+(function setupVoice(){
+  const btn = $("micBtn"), stateEl = $("micState"), heardEl = $("micHeard");
+  if (!btn) return;
+
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const say = (s, h) => { stateEl.textContent = s; if (h !== undefined) heardEl.textContent = h; };
+
+  // القيدُ يُقال ولا يُخفى: الميكروفون محجوبٌ على http في سفاري
+  if (!SR || !window.isSecureContext){
+    btn.disabled = true;
+    say("الأمر الصوتيّ يحتاج اتصالاً مشفَّراً",
+        !SR ? "متصفّحك لا يدعم التعرّف على الكلام"
+            : "افتح «الصيانة ← اتصالٌ مشفَّر» واستصدر الشهادة، ثم افتح العنوان الذي تراه هناك");
+    return;
+  }
+
+  let rec = null, listening = false;
+
+  function stop(){
+    listening = false;
+    btn.classList.remove("on");
+    try { rec && rec.stop(); } catch {}
+  }
+
+  btn.onclick = () => {
+    if (listening) return stop();
+    if (!window.Voice){ say("لم يُحمَّل فاهمُ الأوامر", "أعد تحميل الصفحة"); return; }
+    try {
+      rec = new SR();
+    } catch (e) { say("تعذّر فتح الميكروفون", e.message); return; }
+    rec.lang = "ar-SA";
+    rec.interimResults = true;
+    rec.maxAlternatives = 3;
+    rec.continuous = false;
+
+    let finalText = "", alts = [];
+    rec.onstart = () => { listening = true; btn.classList.add("on"); say("أسمعك…", ""); };
+    rec.onresult = (e) => {
+      let interim = "";
+      for (let i = e.resultIndex; i < e.results.length; i++){
+        const r = e.results[i];
+        if (r.isFinal){
+          finalText = r[0].transcript;
+          // البدائل تُجرَّب أيضاً: قد يخطئ الأوّل ويصيب الثاني
+          alts = [];
+          for (let k = 0; k < r.length; k++) alts.push(r[k].transcript);
+        } else interim += r[0].transcript;
+      }
+      if (interim) say("أسمعك…", interim);
+    };
+    rec.onerror = (e) => {
+      stop();
+      const m = { "not-allowed": "لم تُؤذن للميكروفون — اسمح به من إعدادات سفاري",
+                  "no-speech": "ما سمعت شيئاً", "network": "التعرّف يحتاج إنترنت",
+                  "audio-capture": "لا ميكروفون" }[e.error];
+      say(m || "تعذّر السماع", e.error || "");
+    };
+    rec.onend = () => {
+      stop();
+      if (!finalText) { if (stateEl.textContent === "أسمعك…") say("ما سمعت شيئاً", ""); return; }
+      // نأخذ أوّل بديلٍ يُفهم يقيناً
+      let best = null;
+      for (const a of (alts.length ? alts : [finalText])){
+        const r = window.Voice.parse(a);
+        if (r.intent && r.sure >= window.Voice.THRESHOLD){ best = r; break; }
+        if (!best) best = r;
+      }
+      heardEl.textContent = "سمعت: " + finalText;
+      if (!best.intent || best.sure < window.Voice.THRESHOLD){
+        stateEl.textContent = best.why || "ما فهمت";
+        buzz(30);
+        return;
+      }
+      stateEl.textContent = window.Voice.describe(best);
+      buzz(15);
+      run(best);
+    };
+
+    try { rec.start(); } catch (e) { say("تعذّر البدء", e.message); }
+  };
+
+  /** ينفّذ ما فُهم — بالطرق نفسها التي تعمل بها الأزرار، لا بطريقٍ آخر */
+  async function run(r){
+    const go = (id) => show(id);
+    try {
+      switch (r.intent){
+        case "power":
+          if (r.device === "tv"){
+            go("dev-tv");
+            const res = await post("/power-on");
+            toast(res.ok ? "يُوقَظ التلفزيون…" : (res.why || "تعذّر"), !res.ok);
+          } else if (r.device === "proj"){
+            go("dev-proj");
+            await post("/proj/wake"); toast("أُرسلت إشارة التشغيل");
+          } else go("dev-" + r.device);
+          return;
+
+        case "powerOff":
+          if (r.device === "tv"){ go("dev-tv"); await tv.request(SSAP.power); toast("أُطفئ التلفزيون"); }
+          else if (r.device === "proj"){ go("dev-proj"); await post("/proj/sleep"); toast("أُطفئ البروجكتر"); }
+          return;
+
+        case "volUp":   go("dev-tv"); await runCmd("volUp"); return;
+        case "volDown": go("dev-tv"); await runCmd("volDown"); return;
+        case "mute":    go("dev-tv"); await runCmd("mute"); return;
+
+        case "app":
+          if (r.device === "proj"){ go("dev-proj"); await post("/proj/app", { app: r.app }); }
+          else { go("dev-tv"); await runCmd(r.app); }
+          toast("يُفتح " + r.app);
+          return;
+
+        case "acPower": {
+          const room = r.room || "hall";
+          go("dev-ac-" + room);
+          await post("/ac/" + room + "/set", { power: r.value === "on" });
+          toast((r.value === "on" ? "شُغّل" : "أُطفئ") + " المكيف");
+          return;
+        }
+        case "acTemp": {
+          const room = r.room || "hall";
+          go("dev-ac-" + room);
+          await post("/ac/" + room + "/set", { temp: r.value });
+          toast("المكيف على " + r.value + "°");
+          return;
+        }
+        case "acMode": {
+          const room = r.room || "hall";
+          go("dev-ac-" + room);
+          await post("/ac/" + room + "/set", { mode: r.value });
+          return;
+        }
+
+        case "routerReboot":
+          go("dev-router");
+          toast("اضغط «إعادة تشغيل الراوتر» للتأكيد");
+          return;
+        case "wifi":
+          go("dev-router");
+          toast("افتح الشبكة التي تريدها من هنا");
+          return;
+
+        case "islam":
+          go("dev-islam");
+          setTimeout(() => go("islam-" + r.value), 250);
+          return;
+
+        case "open": go("dev-" + (r.device === "ac" ? "ac-hall" : r.device)); return;
+        case "home": go("home"); return;
+        case "back": { const b = $("backBtn"); if (b) b.click(); return; }
+      }
+    } catch (e) { toast("تعذّر التنفيذ: " + e.message, true); }
+  }
+})();
+
 function post(path, body){
   const opt = { method: "POST", cache: "no-store" };
   if (body !== undefined){

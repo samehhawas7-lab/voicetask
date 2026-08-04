@@ -1022,6 +1022,14 @@ const server = http.createServer((req, res) => {
     return json(r.ok ? 200 : (r.code || 500), r);
   }
 
+  // فاهمُ الأمر المنطوق — ملفٌّ واحد يعمل هنا وفي المتصفّح، فما
+  // قِيس في node هو نفسه ما يفهم في الجوّال
+  if (url.pathname === "/voice.js") {
+    res.writeHead(200, { "Content-Type": "application/javascript; charset=utf-8",
+                         "Cache-Control": "no-store" });
+    return fs.createReadStream(path.join(__dirname, "voice.js")).pipe(res);
+  }
+
   if (url.pathname === "/health") {
     let stamp = "";
     try { stamp = String(fs.statSync(PAGE).mtimeMs | 0); } catch {}
