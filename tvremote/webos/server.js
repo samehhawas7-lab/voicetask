@@ -444,7 +444,7 @@ function latestSha() {
   return new Promise((resolve) => {
     const req = https.get({
       host: "api.github.com",
-      path: "/repos/" + REPO + "/commits/main",
+      path: "/repos/" + REPO + "/commits/" + encodeURIComponent(CFG.branch || "main"),
       headers: { "User-Agent": "kmc-remote", "Accept": "application/vnd.github.sha" },
       timeout: 6000,
     }, (r) => {
@@ -496,7 +496,7 @@ function startUpdate() {
 
   // node يحدّث نفسه: يجلب ويقيس ثم يستبدل دفعةً ثم يخرج، و run.cmd
   // يعيده. ولا بوويرشيل في الطريق — وكان هو موضع الانكسار الصامت
-  selfupdate.selfUpdate({ repo: REPO, log })
+  selfupdate.selfUpdate({ repo: REPO, branch: CFG.branch || "main", log })
     .then((r) => {
       updating = false;
       clearTimeout(updateLatch);

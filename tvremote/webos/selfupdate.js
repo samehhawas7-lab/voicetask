@@ -94,11 +94,11 @@ function fetchText(url, ms = 60000) {
 }
 
 /** آخر تعديلٍ على الفرع — نثبّت عليه فلا يختلط قديمٌ بجديد */
-function headSha(repo) {
+function headSha(repo, branch = "main") {
   return new Promise((resolve, reject) => {
     const req = https.get({
       host: "api.github.com",
-      path: "/repos/" + repo + "/commits/main",
+      path: "/repos/" + repo + "/commits/" + encodeURIComponent(branch),
       headers: { "User-Agent": "kmc-remote", "Accept": "application/vnd.github.sha" },
       timeout: 15000,
     }, (r) => {
@@ -158,6 +158,8 @@ function depsChanged(oldRaw, newRaw) {
  */
 async function selfUpdate(opts = {}) {
   const repo = opts.repo || "samehhawas7-lab/voicetask";
+  // الفرع الذي نتابعه — main إلا أن يُطلب غيره لتجربة عملٍ قبل اعتماده
+  const branch = opts.branch || "main";
   const root = opts.root || ROOT;
   const files = opts.files || FILES;
   const base = opts.rawBase || "https://raw.githubusercontent.com/" + repo;
@@ -168,8 +170,8 @@ async function selfUpdate(opts = {}) {
 
   let sha;
   try {
-    sha = opts.sha || await headSha(repo);
-    log("آخر تعديل: " + sha.slice(0, 7));
+    sha = opts.sha || await headSha(repo, branch);
+    log("الفرع " + branch + " · آخر تعديل: " + sha.slice(0, 7));
   } catch (e) {
     log("تعذّر سؤال GitHub — " + e.message);
     return { ok: false, why: "تعذّر سؤال GitHub: " + e.message };

@@ -29,8 +29,12 @@ try { Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force -ErrorAc
 $Root     = "C:\kmc-remote"
 $TvIp     = if ($env:TV_IP) { $env:TV_IP } else { "192.168.8.77" }
 $Port     = if ($env:PORT)  { [int]$env:PORT } else { 8099 }
-$ZipUrl   = "https://github.com/samehhawas7-lab/voicetask/archive/refs/heads/main.zip"
-$InstallerUrl = "https://raw.githubusercontent.com/samehhawas7-lab/voicetask/main/tvremote/windows/install.ps1"
+# الفرع: main افتراضاً، ويُبدَّل بمتغيّر بيئة لتجربة عملٍ قبل اعتماده.
+# ويُحفظ في الإعدادات فيتابعه التحديث الذاتيّ بعدُ — وإلا رجع الخادم
+# إلى main في أول تحديث وضاع ما جُرّب.
+$Branch   = if ($env:BRANCH) { $env:BRANCH } else { "main" }
+$ZipUrl   = "https://github.com/samehhawas7-lab/voicetask/archive/refs/heads/$Branch.zip"
+$InstallerUrl = "https://raw.githubusercontent.com/samehhawas7-lab/voicetask/$Branch/tvremote/windows/install.ps1"
 $TaskName = "KMC TV Remote"
 
 function Say  ($m) { Write-Host $m }
@@ -94,8 +98,12 @@ try {
   Die "could not extract archive. ($($_.Exception.Message))"
 }
 
-$src = Join-Path $tmpDir "voicetask-main"
-if (-not (Test-Path $src)) { Die "unexpected archive layout" }
+# لا نبني الاسم من الفرع: GitHub يستبدل الشرطة المائلة في أسماء
+# الفروع، فاسم المجلّد لا يطابق اسم الفرع. نأخذ ما في الأرشيف كما هو.
+$roots = @(Get-ChildItem $tmpDir -Directory)
+if ($roots.Count -ne 1) { Die "unexpected archive layout ($($roots.Count) roots)" }
+$src = $roots[0].FullName
+Ok ("branch: $Branch")
 
 New-Item -ItemType Directory -Path $Root -Force | Out-Null
 
@@ -188,6 +196,8 @@ $cfg = [ordered]@{
   # لَعاد يقيسها من أوّلها، ولَسكت الصوتُ حتى يُعاد القياس
   reciters = if ($old -and $old.reciters) { $old.reciters } else { $null }
   recitersProbedAt = if ($old -and $old.recitersProbedAt) { $old.recitersProbedAt } else { $null }
+  # الفرع الذي يُتابعه التحديث الذاتيّ
+  branch = $Branch
   tvPort = 3001
   port   = $Port
 }
