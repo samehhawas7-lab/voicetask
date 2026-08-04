@@ -1104,8 +1104,18 @@ const server = http.createServer((req, res) => {
     if (what === "app") {
       const pkg = url.searchParams.get("pkg") || "";
       if (!PKGNAME.test(pkg)) return json(400, { ok: false, why: "اسم حزمة غير صالح" });
-      return projShell("monkey -p " + pkg + " -c android.intent.category.LAUNCHER 1")
-        .then(() => json(200, { ok: true })).catch(fail);
+      // `am start` لا `monkey`: الأخير مولّدُ ضغطاتٍ عشوائية لا مُشغّل
+      // تطبيقات — وإن لم يجد ما يفتحه ضغط أزراراً من عنده، فيقفز
+      // الجهاز إلى شاشته الرئيسية. وهو تفسيرُ ما كان يقع.
+      return projShell("am start -a android.intent.action.MAIN " +
+                       "-c android.intent.category.LAUNCHER -p " + pkg)
+        .then((out) => {
+          // `am` يكتب سببَ الفشل ولا يرفع خطأ — فيُقرأ ما كتب
+          if (/Error|Exception|does not exist|no activity/i.test(out || "")) {
+            return json(502, { ok: false, why: "لم يُفتح: " + String(out).split("\n")[0].slice(0, 120) });
+          }
+          return json(200, { ok: true, out: out || "" });
+        }).catch(fail);
     }
     // الإيقاظ: WAKEUP يوقظ ولا يُطفئ، بخلاف POWER الذي يقلب الحالة
     if (what === "wake") {

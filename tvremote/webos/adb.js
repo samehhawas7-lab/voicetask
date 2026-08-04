@@ -118,14 +118,36 @@ function session(host, port = 5555, timeout = 8000) {
     let settled = false;
     let sentPubKey = false;
 
+    // مجارٍ متعدّدة على اتّصالٍ واحد: لكلّ أمرٍ رقمُه، فلا تلزم
+    // مصافحةٌ جديدة لكلّ ضغطة زرّ
+    const streams = new Map();
+    let nextId = 1;
+
     const api = {
       connected: false,
+      alive: true,
       onConnect: null,
       onOpenOk: null,
       onData: null,
       onClose: null,
       send: (m) => sock.write(m),
-      end: () => { try { sock.end(); } catch {} },
+      end: () => { api.alive = false; try { sock.end(); } catch {} },
+      /** ينفّذ أمراً على هذا الاتّصال ويعيد مخرجاته */
+      exec: (command, ms = 6000) => new Promise((res) => {
+        const id = ++nextId;
+        const st = { out: "", done: false, timer: null };
+        st.finish = () => {
+          if (st.done) return;
+          st.done = true;
+          clearTimeout(st.timer);
+          streams.delete(id);
+          res(st.out.trim());
+        };
+        st.timer = setTimeout(st.finish, ms);
+        streams.set(id, st);
+        try { sock.write(pack(CMD.OPEN, id, 0, "shell:" + command + "\0")); }
+        catch (e) { st.finish(); }
+      }),
     };
 
     const fail = (e) => { if (!settled) { settled = true; try { sock.destroy(); } catch {} reject(e); } };
@@ -177,30 +199,80 @@ function session(host, port = 5555, timeout = 8000) {
         if (cmd === CMD.OKAY && api.onOpenOk) { api.onOpenOk(arg0, arg1); continue; }
         if (cmd === CMD.WRTE) {
           sock.write(pack(CMD.OKAY, arg1, arg0));
-          if (api.onData) api.onData(data);
+          const st = streams.get(arg1);
+          if (st) st.out += data.toString("utf8");
+          else if (api.onData) api.onData(data);
           continue;
         }
-        if (cmd === CMD.CLSE) { if (api.onClose) api.onClose(); continue; }
+        if (cmd === CMD.CLSE) {
+          const st = streams.get(arg1);
+          if (st) st.finish();
+          else if (api.onClose) api.onClose();
+          continue;
+        }
       }
     });
 
-    sock.on("close", () => { if (api.onClose) api.onClose(); fail(new Error("أُغلق الاتصال")); });
+    sock.on("close", () => {
+      api.alive = false;
+      // ما بقي من مجارٍ معلّقة يُنهى، وإلا انتظر من طلبها مهلتَه كاملة
+      for (const st of streams.values()) st.finish();
+      if (api.onClose) api.onClose();
+      fail(new Error("أُغلق الاتصال"));
+    });
   });
 }
 
-/** ينفّذ أمر صدفة على الجهاز ويعيد مخرجاته */
-async function shell(host, command, port = 5555) {
+// ============================================================
+// اتّصالٌ محفوظ، وطابورٌ صارم
+//
+// **لماذا؟** كانت كلُّ ضغطة زرّ تفتح اتّصالاً جديداً بمصافحةٍ
+// وتوقيعٍ كاملين. فالسهمُ يأخذ ثانية، والضغطُ السريع يفتح اتّصالاتٍ
+// متوازية على جهازٍ صغير لا يحتمل إلا القليل — فيتعثّر ويتجمّد،
+// وتصل الضغطات في غير أوانها.
+//
+// فصار الاتّصال يُفتح مرّةً ويُعاد استعماله، والأوامر تُصفّ واحداً
+// بعد واحد. ويُغلق بعد سكونٍ قصير فلا يُمسك الجهاز أبداً.
+// ============================================================
+const pool = new Map();          // "host:port" -> { s, idle }
+let chain = Promise.resolve();
+const IDLE_MS = 20000;
+
+async function getSession(host, port) {
+  const k = host + ":" + port;
+  const held = pool.get(k);
+  if (held && held.s.alive) {
+    clearTimeout(held.idle);
+    held.idle = setTimeout(() => { pool.delete(k); try { held.s.end(); } catch {} }, IDLE_MS);
+    if (held.idle.unref) held.idle.unref();
+    return held.s;
+  }
   const s = await session(host, port);
-  return new Promise((resolve) => {
-    let out = "";
-    let done = false;
-    const finish = () => { if (!done) { done = true; s.end(); resolve(out.trim()); } };
-    s.onData = (d) => { out += d.toString("utf8"); };
-    s.onClose = finish;
-    s.onOpenOk = () => {};
-    s.send(pack(CMD.OPEN, 1, 0, "shell:" + command + "\0"));
-    setTimeout(finish, 5000);
+  const entry = { s, idle: null };
+  entry.idle = setTimeout(() => { pool.delete(k); try { s.end(); } catch {} }, IDLE_MS);
+  if (entry.idle.unref) entry.idle.unref();
+  pool.set(k, entry);
+  return s;
+}
+
+/**
+ * ينفّذ أمر صدفة على الجهاز ويعيد مخرجاته.
+ * والأوامر تُصفّ: لا يُرسَل أمرٌ حتى يفرغ الذي قبله.
+ */
+function shell(host, command, port = 5555) {
+  const run = chain.then(async () => {
+    try {
+      const s = await getSession(host, port);
+      return await s.exec(command);
+    } catch (e) {
+      // الاتّصال المحفوظ قد يكون مات بين الطلبين — نجرّب مرّةً بجديد
+      pool.delete(host + ":" + port);
+      const s = await getSession(host, port);
+      return await s.exec(command);
+    }
   });
+  chain = run.then(() => {}, () => {});
+  return run;
 }
 
 /** يفحص إن كان الجهاز مفتوحاً لنا، ويعيد وصفه */
