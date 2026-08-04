@@ -177,6 +177,10 @@ $cfg = [ordered]@{
   lat = if ($old -and ($null -ne $old.lat)) { [double]$old.lat } else { 24.7136 }
   lon = if ($old -and ($null -ne $old.lon)) { [double]$old.lon } else { 46.6753 }
   tz  = if ($old -and ($null -ne $old.tz))  { [double]$old.tz }  else { 3 }
+  # مصادرُ القرّاء التي قِيست في هذا البيت. ولو مُسحت في كل تحديث
+  # لَعاد يقيسها من أوّلها، ولَسكت الصوتُ حتى يُعاد القياس
+  reciters = if ($old -and $old.reciters) { $old.reciters } else { $null }
+  recitersProbedAt = if ($old -and $old.recitersProbedAt) { $old.recitersProbedAt } else { $null }
   tvPort = 3001
   port   = $Port
 }

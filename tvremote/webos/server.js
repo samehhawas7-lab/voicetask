@@ -464,6 +464,8 @@ const LATCH_MS = Number(process.env.UPDATE_LATCH_MS) || 6 * 60 * 1000;
 let updateLatch = null;
 let waking = null;          // حال آخر إيقاظ، يُسأل عنه بدل أن يُنتظر
 let islamFetching = false;
+let audioProbing = false;
+let saving = null;          // حفظُ سورةٍ جارٍ — تقدّمه يُسأل عنه
 let surveyCache = { at: 0, data: null };
 let surveyRunning = false;
 let autoUpdate = CFG.autoUpdate !== false;      // مفعّل ما لم يُطفأ صراحةً
@@ -642,7 +644,8 @@ const server = http.createServer((req, res) => {
                     "/proj/find", "/proj/key", "/proj/app", "/proj/wake", "/proj/sleep",
                     "/router/link", "/router/find", "/router/block", "/router/wifi",
                     "/router/reboot", "/restart", "/static-ip", "/ssh/enable",
-                    "/islam/fetch", "/islam/place"];
+                    "/islam/fetch", "/islam/place",
+                    "/islam/audio/probe", "/islam/audio/save", "/islam/audio/stop"];
   if (CHANGING.includes(url.pathname)) {
     if (req.method !== "POST") {
       return json(405, { ok: false, why: "هذه النقطة تُطلب بـ POST" });
@@ -820,6 +823,96 @@ const server = http.createServer((req, res) => {
       const type = src.binary ? "font/woff2" : "application/json; charset=utf-8";
       res.writeHead(200, { "Content-Type": type, "Cache-Control": "public, max-age=604800" });
       return fs.createReadStream(p).pipe(res);
+    }
+
+    // ---------- التلاوة ----------
+    // القرّاء ومصادرهم: ما قِيس منها في هذا البيت، لا ما ظننتُه أنا
+    if (rest === "audio/reciters") {
+      const picked = CFG.reciters || {};
+      const list = islam.RECITERS.map((r) => ({
+        key: r.key, name: r.name, note: r.note,
+        ready: !!picked[r.key], saved: 0,
+      }));
+      return json(200, { ok: true, reciters: list, probed: !!CFG.recitersProbedAt,
+                         at: CFG.recitersProbedAt || null });
+    }
+
+    if (rest === "audio/probe") {
+      if (audioProbing) return json(200, { ok: true, running: true });
+      audioProbing = true;
+      const only = url.searchParams.get("r") || null;
+      return islam.probeReciters(log, only)
+        .then((r) => {
+          const picked = Object.assign({}, CFG.reciters || {});
+          for (const [k, v] of Object.entries(r)) {
+            if (v.url) picked[k] = v.url; else delete picked[k];
+          }
+          CFG.reciters = picked;
+          CFG.recitersProbedAt = new Date().toISOString();
+          saveConfig();
+          return json(200, { ok: true, result: r, picked });
+        })
+        .catch((e) => json(500, { ok: false, why: e.message }))
+        .finally(() => { audioProbing = false; });
+    }
+
+    // آيةٌ واحدة: من القرص إن كانت محفوظة، وإلا تُجلب وتُحفظ ثم تُقدَّم.
+    // فالاستماع نفسه يبني المكتبة شيئاً فشيئاً
+    if (rest === "audio/ayah") {
+      const r = String(url.searchParams.get("r") || "");
+      const s = Number(url.searchParams.get("s")), a = Number(url.searchParams.get("a"));
+      const tpl = (CFG.reciters || {})[r];
+      if (!tpl) return json(404, { ok: false, why: "هذا القارئ لم يُقَس بعد", need: "probe" });
+      let file;
+      try { file = islam.ayahFile(r, s, a); } catch (e) { return json(400, { ok: false, why: e.message }); }
+      const send = () => {
+        const st = fs.statSync(file);
+        res.writeHead(200, {
+          "Content-Type": "audio/mpeg", "Content-Length": st.size,
+          "Cache-Control": "public, max-age=31536000",
+        });
+        fs.createReadStream(file).pipe(res);
+      };
+      if (islam.haveAyah(r, s, a)) return send();
+      return islam.fetchAyah(r, tpl, s, a).then(send)
+        .catch((e) => json(502, { ok: false, why: e.message }));
+    }
+
+    // حفظُ سورةٍ كاملة للاستماع بلا إنترنت
+    if (rest === "audio/save") {
+      const r = String(url.searchParams.get("r") || "");
+      const s = Number(url.searchParams.get("s"));
+      const tpl = (CFG.reciters || {})[r];
+      if (!tpl) return json(404, { ok: false, why: "هذا القارئ لم يُقَس بعد", need: "probe" });
+      if (!(s >= 1 && s <= 114)) return json(400, { ok: false, why: "رقم سورة خارج المدى" });
+      if (saving && !saving.done) return json(200, { ok: true, running: true, at: saving });
+      const total = islam.SURA_AYAHS[s - 1];
+      saving = { r, s, done: false, n: 0, total, failed: 0, why: "" };
+      const mine = saving;
+      (async () => {
+        for (let a = 1; a <= total; a++) {
+          try { await islam.fetchAyah(r, tpl, s, a); } catch { mine.failed++; }
+          mine.n = a;
+          if (mine.stop) break;
+        }
+        mine.done = true;
+        log("audio: saved sura " + s + " for " + r + " — " +
+            (total - mine.failed) + "/" + total);
+      })();
+      return json(200, { ok: true, started: true, total });
+    }
+
+    if (rest === "audio/stop") {
+      if (saving && !saving.done) { saving.stop = true; log("audio: save cancelled"); }
+      return json(200, { ok: true });
+    }
+
+    if (rest === "audio/status") {
+      const r = String(url.searchParams.get("r") || "");
+      const s = Number(url.searchParams.get("s"));
+      const out = { ok: true, saving: saving && !saving.done ? saving : null };
+      if ((CFG.reciters || {})[r] && s >= 1 && s <= 114) out.sura = islam.suraSaved(r, s);
+      return json(200, out);
     }
 
     if (rest === "times") {

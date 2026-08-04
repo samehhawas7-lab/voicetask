@@ -277,6 +277,14 @@ input::placeholder{color:#5c6579}
 .qjump{width:74px;height:40px;text-align:center;background:var(--surface-2);
   color:var(--text);border:1px solid var(--line);border-radius:12px;
   font-family:inherit;font-size:14px;font-weight:600}
+.qplay{margin-top:12px}
+.qopts{display:flex;gap:10px;flex-wrap:wrap}
+.qopts label{flex:1;min-width:120px;font-size:11.5px;color:var(--muted);
+  display:flex;flex-direction:column;gap:5px}
+.qopts select{background:var(--surface-2);color:var(--text);border:1px solid var(--line);
+  border-radius:10px;height:36px;padding:0 8px;font-family:inherit;font-size:13px}
+/* الآية التي تُتلى الآن: تُميَّز عن الملموسة، فإحداهما للتفسير والأخرى للسمع */
+.qtext .ay.now{background:var(--accent-dim);box-shadow:inset 0 0 0 1px var(--accent)}
 /* الهامش: يُفصل بحدٍّ جانبيّ وخطٍّ أصغر، فيُقرأ حاشيةً لا متناً */
 .marg{margin:9px 4px 2px;padding:9px 12px;border-inline-start:2px solid var(--accent-dim);
   background:var(--surface);border-radius:0 10px 10px 0;font-size:13px;line-height:2.05;
@@ -968,7 +976,38 @@ input::placeholder{color:#5c6579}
     <input id="qGo" class="qjump" inputmode="numeric" pattern="[0-9]*" aria-label="رقم الصفحة">
     <button class="key sm" id="qNext">‹ التالية</button>
   </div>
+
+  <div class="card qplay">
+    <div class="qbar" style="margin-bottom:10px">
+      <select id="qReciter"></select>
+      <button class="key sm" id="qPlay">▶ استمع</button>
+    </div>
+    <div class="qopts">
+      <label>التكرار
+        <select id="qRepeat">
+          <option value="1">مرّة</option><option value="2">مرّتين</option>
+          <option value="3">٣</option><option value="5">٥</option>
+          <option value="7">٧</option><option value="10">١٠</option>
+          <option value="0">بلا نهاية</option>
+        </select>
+      </label>
+      <label>المدى
+        <select id="qScope">
+          <option value="page">الصفحة</option>
+          <option value="ayah">الآية وحدها</option>
+          <option value="sura">السورة</option>
+        </select>
+      </label>
+    </div>
+    <div id="qPlayMsg" class="hint"></div>
+    <div class="act-row" style="margin:10px 0 0">
+      <button class="key sm" id="qSave">احفظ السورة للاستماع بلا إنترنت</button>
+    </div>
+    <div id="qSaveMsg" class="hint"></div>
+  </div>
+
   <div id="qMarg"></div>
+  <audio id="qAudio" preload="none"></audio>
 </section>
 
 <!-- الأذكار -->
@@ -2148,6 +2187,9 @@ function show(id){
   if (id === "dev-router" && window.__router) window.__router();
   if (id === "dev-islam"   && window.__islamHub)    window.__islamHub();
   if (id === "islam-quran" && window.__islamQuran)  window.__islamQuran();
+  // الخروج من المصحف يُسكت التلاوة: صوتٌ يتبعك إلى شاشةٍ أخرى بلا
+  // زرٍّ يوقفه إزعاجٌ لا ميزة
+  if (id !== "islam-quran" && window.__islamHush)   window.__islamHush();
   if (id === "islam-azkar" && window.__islamAzkar)  window.__islamAzkar();
   if (id === "islam-times" && window.__islamTimes)  window.__islamTimes();
   if (id === "islam-qibla" && window.__islamQibla)  window.__islamQibla();
@@ -2916,6 +2958,8 @@ function wakeTv(btn){
       }
       const span = document.createElement("span");
       span.className = "ay";
+      span.dataset.s = String(a.chapter);
+      span.dataset.a = String(a.verse);
       span.textContent = forDisplay(a.text) + " ";
       const num = document.createElement("span");
       num.className = "num";
@@ -2944,6 +2988,8 @@ function wakeTv(btn){
       await loadQuran();
       fillSuras();
       paintPage(Number(store.get("quran_page")) || 1);
+      await loadReciters().catch(() => {});
+      saveTick().catch(() => {});
     } catch (e) { body.textContent = "النصوص لم تُنزَّل بعد — ارجع ونزّلها"; }
   };
 
@@ -2987,6 +3033,184 @@ function wakeTv(btn){
   };
   $("qBigger").onclick = () => resize(2);
   $("qSmaller").onclick = () => resize(-2);
+
+  /* ---------- التلاوة ----------
+     الآيات تُطلب من خادمنا لا من المصدر البعيد مباشرة: فهو يحفظ ما
+     يمرّ به، فيصير الاستماعُ نفسه بانياً للمكتبة. وما حُفظ مرّةً
+     يُسمع بعدها بلا إنترنت. */
+  const player = {
+    list: [],        // آياتُ المدى الحاليّ
+    i: 0,            // أين نحن منها
+    left: 1,         // كم بقي من تكرار هذه الآية
+    on: false,
+  };
+  const audio = $("qAudio");
+
+  const spanOf = (a) => [...document.querySelectorAll("#qBody .ay")]
+    .find(s => s.dataset.s === String(a.chapter) && s.dataset.a === String(a.verse));
+
+  function markNow(a){
+    document.querySelectorAll("#qBody .ay.now").forEach(s => s.classList.remove("now"));
+    if (!a) return;
+    const s = spanOf(a);
+    if (s) s.scrollIntoView({ block: "center", behavior: "smooth" });
+    if (s) s.classList.add("now");
+  }
+
+  function stopPlay(msg){
+    player.on = false;
+    audio.pause();
+    audio.removeAttribute("src");
+    markNow(null);
+    $("qPlay").textContent = "▶ استمع";
+    $("qPlayMsg").textContent = msg || "";
+  }
+
+  function scopeAyahs(from){
+    const scope = $("qScope").value;
+    if (scope === "ayah") return [from];
+    if (scope === "sura"){
+      const all = D.quran.filter(x => x.chapter === from.chapter);
+      return all.slice(all.findIndex(x => x.verse === from.verse));
+    }
+    const pg = ayahsOfPage(page);
+    return pg.slice(pg.findIndex(x => x.chapter === from.chapter && x.verse === from.verse));
+  }
+
+  function playCurrent(){
+    const a = player.list[player.i];
+    if (!a) return stopPlay("تمّ");
+    markNow(a);
+    const r = $("qReciter").value;
+    audio.src = "/islam/audio/ayah?r=" + encodeURIComponent(r) +
+                "&s=" + a.chapter + "&a=" + a.verse;
+    audio.play().catch((e) => stopPlay("تعذّر التشغيل: " + e.message));
+    const rep = Number($("qRepeat").value);
+    $("qPlayMsg").textContent = bare(D.suras[a.chapter - 1].name) + " " + AD(a.verse) +
+      (rep === 0 ? " · تكرارٌ بلا نهاية"
+                 : rep > 1 ? " · التكرار " + AD(rep - player.left + 1) + "/" + AD(rep) : "");
+  }
+
+  audio.onended = () => {
+    if (!player.on) return;
+    const rep = Number($("qRepeat").value);
+    if (rep === 0) return playCurrent();          // بلا نهاية: الآية نفسها
+    if (--player.left > 0) return playCurrent();
+    player.i++;
+    player.left = rep || 1;
+    if (player.i >= player.list.length){
+      // المدى انتهى — وإن كان مدى الصفحة انتقلنا إلى التي بعدها
+      if ($("qScope").value === "page" && page < D.pages.length){
+        paintPage(page + 1);
+        const first = ayahsOfPage(page)[0];
+        player.list = scopeAyahs(first);
+        player.i = 0;
+        return playCurrent();
+      }
+      return stopPlay("تمّت التلاوة");
+    }
+    playCurrent();
+  };
+  audio.onerror = () => { if (player.on) stopPlay("تعذّر جلب هذه الآية"); };
+
+  function startFrom(a){
+    const r = $("qReciter").value;
+    if (!r) return void ($("qPlayMsg").textContent = "لا قارئ مُتاح — اضغط «اقرأ القرّاء» أوّلاً");
+    player.list = scopeAyahs(a);
+    player.i = 0;
+    player.left = Number($("qRepeat").value) || 1;
+    player.on = true;
+    $("qPlay").textContent = "❚❚ إيقاف";
+    playCurrent();
+  }
+
+  window.__islamHush = () => { if (player.on) stopPlay(""); };
+
+  $("qPlay").onclick = () => {
+    if (player.on) return stopPlay("");
+    // يبدأ من الآية الملموسة إن كانت في هذه الصفحة، وإلا من أوّلها
+    const rows = ayahsOfPage(page);
+    let from = rows[0];
+    if (selected){
+      const s = Number(selected.dataset.s), v = Number(selected.dataset.a);
+      const hit = rows.find(x => x.chapter === s && x.verse === v);
+      if (hit) from = hit;
+    }
+    startFrom(from);
+  };
+
+  async function loadReciters(){
+    const sel = $("qReciter");
+    const r = await fetch("/islam/audio/reciters", { cache: "no-store" }).then(x => x.json());
+    sel.innerHTML = "";
+    const ready = r.reciters.filter(x => x.ready);
+    for (const x of ready){
+      const o = document.createElement("option");
+      o.value = x.key; o.textContent = x.name;
+      sel.appendChild(o);
+    }
+    const saved = store.get("reciter");
+    if (saved && ready.some(x => x.key === saved)) sel.value = saved;
+    sel.onchange = () => store.set("reciter", sel.value);
+
+    if (!ready.length){
+      const o = document.createElement("option");
+      o.value = ""; o.textContent = r.probed ? "لم يُجب أحد" : "لم يُقَس بعد";
+      sel.appendChild(o);
+      $("qPlayMsg").innerHTML = "";
+      const b = document.createElement("button");
+      b.className = "key sm"; b.style.width = "100%"; b.textContent = "اقرأ القرّاء الآن";
+      b.onclick = async () => {
+        b.disabled = true; b.textContent = "يُقاس… قد يأخذ دقيقة";
+        try {
+          const out = await post("/islam/audio/probe");
+          if (out.running) { $("qPlayMsg").textContent = "قياسٌ جارٍ — انتظر"; return; }
+          const bad = Object.entries(out.result || {}).filter(([, v]) => !v.url);
+          await loadReciters();
+          $("qPlayMsg").textContent = bad.length
+            ? "لم يُجب: " + bad.map(([, v]) => v.name).join("، ")
+            : "أجاب القرّاء الأربعة";
+        } catch (e) { $("qPlayMsg").textContent = "تعذّر القياس: " + e.message; }
+        finally { b.disabled = false; b.textContent = "اقرأ القرّاء الآن"; }
+      };
+      $("qPlayMsg").appendChild(b);
+    }
+  }
+
+  // ---------- الحفظ للاستماع بلا إنترنت ----------
+  let saveTimer = null;
+  async function saveTick(){
+    const r = $("qReciter").value, s = Number($("qSura").value) || 1;
+    const st = await fetch("/islam/audio/status?r=" + encodeURIComponent(r) + "&s=" + s,
+                           { cache: "no-store" }).then(x => x.json()).catch(() => null);
+    if (!st) return;
+    if (st.saving){
+      $("qSaveMsg").textContent = "يُحفظ… " + AD(st.saving.n) + "/" + AD(st.saving.total) +
+        (st.saving.failed ? " (تعذّر " + AD(st.saving.failed) + ")" : "");
+      $("qSave").textContent = "أوقف الحفظ";
+      return;
+    }
+    clearInterval(saveTimer); saveTimer = null;
+    $("qSave").textContent = "احفظ السورة للاستماع بلا إنترنت";
+    if (st.sura){
+      $("qSaveMsg").textContent = st.sura.have >= st.sura.total
+        ? "محفوظةٌ كاملة — تعمل بلا إنترنت"
+        : "المحفوظ " + AD(st.sura.have) + " من " + AD(st.sura.total) + " آية";
+    }
+  }
+
+  $("qSave").onclick = async () => {
+    const r = $("qReciter").value;
+    if (!r) return void ($("qSaveMsg").textContent = "اختر قارئاً أوّلاً");
+    if (saveTimer){ await post("/islam/audio/stop"); return; }
+    const s = Number($("qSura").value) || 1;
+    $("qSaveMsg").textContent = "يبدأ…";
+    try {
+      await post("/islam/audio/save?r=" + encodeURIComponent(r) + "&s=" + s);
+      saveTimer = setInterval(saveTick, 1500);
+      saveTick();
+    } catch (e) { $("qSaveMsg").textContent = "تعذّر: " + e.message; }
+  };
 
   // ---------- الأذكار ----------
   window.__islamAzkar = async () => {
