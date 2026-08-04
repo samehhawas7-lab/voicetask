@@ -500,29 +500,49 @@ function startUpdate() {
   const cmd = process.env.UPDATE_CMD || "powershell.exe";
   const args = process.env.UPDATE_CMD ? [] : [
     "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command",
-    // `Start-Transcript` لا `*>>`: المنصّب يكتب بـ Write-Host، وهذا
-    // لا يلتقطه التوجيه حين يُطلق الأمر بلا نافذة — فكان السجلّ يبقى
-    // ترويسةً وحدها ولا نعرف أين وقف.
+    // `*>&1` تجمع كلّ المجاري في مجرى واحد — الأخطاء والتحذيرات وما
+    // يكتبه Write-Host — ثم يلتقطها المِقبض الذي فتحه node أدناه.
+    //
+    // ولمَ لا Start-Transcript؟ جرّبناها فبقي السجلّ ترويسةً وحدها
+    // ليلةً كاملة: التسجيل يحتاج مضيفاً يدعمه، والإطلاق هنا بلا
+    // نافذة، فتسقط في صمتٍ ويسقط معها كلُّ ما بعدها. والمِقبض لا
+    // يحتاج مضيفاً ولا نافذة.
+    //
     // و TLS يُضبط صراحةً: بوويرشيل ٥ يبدأ أحياناً ببروتوكول قديم
     // ترفضه GitHub فيسقط الجلب صامتاً.
+    "& { " +
     "$ErrorActionPreference='Continue'; " +
-    "try { Start-Transcript -Path '" + logFile + "' -Append -Force | Out-Null } catch {}; " +
     "[Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12; " +
-    "try { irm '" + INSTALLER + "' | iex } catch { Write-Output ('INSTALLER FAILED: ' + $_.Exception.Message) }; " +
-    "try { Stop-Transcript | Out-Null } catch {}",
+    "try { irm '" + INSTALLER + "' | iex } " +
+    "catch { Write-Output ('INSTALLER FAILED: ' + $_.Exception.Message) } " +
+    "} *>&1",
   ];
+
+  // مِقبضٌ على السجلّ يفتحه node ويورّثه للابن. فما كتبه الابن على
+  // مخرجه وقع في الملف، دعمَ المضيفُ التسجيل أو لم يدعمه.
+  let fd = null;
+  try { fd = fs.openSync(logFile, "a"); } catch { /* نمضي بلا سجلّ */ }
 
   try {
     // منفصلاً وجوباً: المنصّب يقتل عمليات node التابعة للمشروع، وهذا
     // الخادم منها. ولولا الفصل لمات المنصّب مع من أطلقه قبل أن يُتمّ.
     const child = spawn(cmd, args, {
       detached: true,
-      stdio: "ignore",
+      stdio: fd == null ? "ignore" : ["ignore", fd, fd],
       windowsHide: true,
       shell: !!process.env.UPDATE_CMD,
       // لا سؤال حين لا أحد أمام الشاشة: المنصّب يقتل هذا الخادم قبل
       // أن يُتمّ، فلو وقف عند سؤالٍ لا مجيب له لَبقي البيت بلا خادم
       env: Object.assign({}, process.env, { KMC_NO_PROMPT: "1" }),
+    });
+    // ورمزُ الخروج خبرٌ لا يملكه إلا node: لو مات بوويرشيل في أوّل
+    // لحظة لم يكتب شيئاً، وبقينا نظنّ التنصيب يمضي ستّ دقائق
+    child.on("exit", (code, sig) => {
+      log("update process exited (" + (sig || code) + ")");
+      try {
+        fs.appendFileSync(logFile,
+          "\r\n==== powershell exited: " + (sig || code) + " ====\r\n");
+      } catch {}
     });
     // فشلُ الإطلاق يقع بعد العودة لا فيها (ENOENT مثلاً)، فبلا هذا
     // المعالج يبقى الخطأ مكتوماً ويظنّ صاحبُ البيت أن التنصيب يمضي
@@ -532,10 +552,14 @@ function startUpdate() {
       try { fs.appendFileSync(logFile, "spawn failed: " + e.message + "\r\n"); } catch {}
     });
     child.unref();
+    // المِقبض وُرِّث للابن، ونسختُنا منه لا لزوم لها. ولو تُركت
+    // مفتوحة لبقيت تتراكم مع كلّ محاولة
+    if (fd != null) { try { fs.closeSync(fd); } catch {} }
     log("update started -> " + logFile);
     return { ok: true, log: logFile };
   } catch (e) {
     updating = false;
+    if (fd != null) { try { fs.closeSync(fd); } catch {} }
     return { ok: false, code: 500, why: e.message };
   }
 }
