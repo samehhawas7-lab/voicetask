@@ -31,6 +31,7 @@ const { harden } = require("./secure");
 const islam = require("./islam");
 const selfupdate = require("./selfupdate");
 const tls = require("./tls");
+const tuyaScan = require("./tuya-scan");
 const { spawn } = require("child_process");
 
 // حين يعمل الخادم خدمةً في الخلفية لا سبيل لتمرير متغيّرات البيئة إليه،
@@ -475,6 +476,7 @@ let lastCheck = { at: null, found: false };
 // نتيجةُ آخر تحديث — تُقرأ من الصفحة، فيُعرف سببُ التعثّر بلا سجلّ
 let lastUpdateResult = null;
 let httpsBusy = false;
+let tuyaSniffing = false;
 
 function startUpdate() {
   if (updating) return { ok: false, code: 409, why: "التحديث جارٍ بالفعل" };
@@ -1024,6 +1026,27 @@ const server = http.createServer((req, res) => {
 
   // فاهمُ الأمر المنطوق — ملفٌّ واحد يعمل هنا وفي المتصفّح، فما
   // قِيس في node هو نفسه ما يفهم في الجوّال
+  // كشفُ أجهزة Tuya: نُنصت لما تعلنه الأجهزة عن نفسها، فلا يُدَّعى
+  // على جهازٍ أنه Tuya حتى يقولها هو
+  if (url.pathname === "/tuya/sniff") {
+    if (tuyaSniffing) return json(200, { ok: true, running: true });
+    tuyaSniffing = true;
+    const secs = Math.min(30, Math.max(5, Number(url.searchParams.get("s")) || 15));
+    return tuyaScan.sniff(secs * 1000, log)
+      .then((r) => {
+        // ما نعرفه منها سلفاً يُعلَّم، فيُعرف الجديد من القديم
+        const known = new Set(Object.values(acSecrets.rooms || {}).filter(Boolean));
+        const named = new Map((acSecrets.devices || []).map((d) => [d.id, d.name || ""]));
+        r.devices = r.devices.map((d) => Object.assign({}, d, {
+          known: known.has(d.id),
+          name: named.get(d.id) || "",
+        }));
+        return json(200, r);
+      })
+      .catch((e) => json(500, { ok: false, why: e.message }))
+      .finally(() => { tuyaSniffing = false; });
+  }
+
   if (url.pathname === "/voice.js") {
     res.writeHead(200, { "Content-Type": "application/javascript; charset=utf-8",
                          "Cache-Control": "no-store" });

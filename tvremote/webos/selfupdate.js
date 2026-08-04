@@ -48,6 +48,7 @@ const FILES = [
   "tvremote/webos/islam.js",
   "tvremote/webos/voice.js",
   "tvremote/webos/tls.js",
+  "tvremote/webos/tuya-scan.js",
   "tvremote/webos/selfupdate.js",
   "tvremote/webos/package.json",
   "tvremote/windows/run.cmd",

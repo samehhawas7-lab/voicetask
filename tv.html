@@ -1147,6 +1147,18 @@ input::placeholder{color:#5c6579}
       <button class="key sm" id="svFresh">مسح جديد</button>
     </div>
   </div>
+
+  <!-- أجهزة Tuya تُعلن عن نفسها كل بضع ثوان. فمن أعلن فهو منها
+       يقيناً، ومن سكت لم يُدَّعَ عليه شيء -->
+  <div class="card">
+    <h3>أجهزة Tuya القابلة للتحكّم</h3>
+    <p>تطبيقات «ماندو» و«TSmartLife» و«Smart Life» كلّها واجهةٌ واحدة
+       تحتها. وأجهزتها تُعلن عن نفسها في الشبكة — فنُنصت خمس عشرة ثانية
+       ونرى من نادى.</p>
+    <button class="key sm" id="tuScan" style="width:100%">أنصِت الآن</button>
+    <div id="tuMsg" class="hint"></div>
+    <div id="tuList" style="display:grid;gap:8px;margin-top:10px"></div>
+  </div>
   <div id="svMsg" class="empty" hidden></div>
   <div id="svList" style="display:grid;gap:11px"></div>
 </section>
@@ -4356,6 +4368,43 @@ const AC_MODE_NAMES = { cold:"تبريد", hot:"تدفئة", wind:"مروحة", 
 
   $("svScan").onclick = () => run(false);
   $("svFresh").onclick = () => run(true);
+
+  /* ---------- الإنصات لأجهزة Tuya ----------
+     لا نمسح ولا نطرق الأبواب: نُنصت لما تعلنه الأجهزة عن نفسها.
+     فمن أعلن فهو Tuya يقيناً، ومن سكت لم يُدَّعَ عليه شيء. */
+  const tuBtn = $("tuScan");
+  if (tuBtn) tuBtn.onclick = async () => {
+    if (!onServer) return void ($("tuMsg").textContent = "يحتاج الخادم");
+    const msg = $("tuMsg"), box = $("tuList");
+    tuBtn.disabled = true; tuBtn.textContent = "أُنصِت… خمس عشرة ثانية";
+    msg.textContent = ""; box.innerHTML = "";
+    try {
+      const r = await fetch("/tuya/sniff?s=15", { cache:"no-store" }).then(x => x.json());
+      if (r.running){ msg.textContent = "إنصاتٌ جارٍ — انتظر"; return; }
+      if (!r.ok){ msg.textContent = r.why || "تعذّر"; return; }
+      if (!r.devices.length){
+        msg.textContent = "لم يُعلن أحد. إن كان المكيّف أو الغسّالة موصولاً " +
+          "بالواي‑فاي فجرّب مرّةً أخرى — بعضها يبثّ كل نصف دقيقة. " +
+          "وإن تكرّر السكوت فليست من Tuya، وسأبحث عن طريقٍ آخر.";
+        return;
+      }
+      msg.textContent = "أعلن " + r.devices.length + " جهازاً:";
+      for (const d of r.devices){
+        const row = document.createElement("div");
+        row.className = "zekr";
+        row.style.cssText = "padding:10px 12px";
+        const t = document.createElement("div");
+        t.style.cssText = "font-size:13px;font-weight:600";
+        t.textContent = (d.name || "جهاز Tuya") + (d.known ? " · مربوطٌ عندنا" : "");
+        const s = document.createElement("div");
+        s.style.cssText = "font-size:11.5px;color:var(--muted);direction:ltr;text-align:right";
+        s.textContent = d.ip + "  ·  " + d.id + "  ·  v" + (d.version || "?");
+        row.append(t, s);
+        box.appendChild(row);
+      }
+    } catch (e) { msg.textContent = "تعذّر الوصول للخادم"; }
+    finally { tuBtn.disabled = false; tuBtn.textContent = "أنصِت الآن"; }
+  };
   window.__survey = () => { if (!list.children.length) run(false); };
 })();
 
