@@ -588,7 +588,10 @@ function servePage(res) {
   const flag = `<script>window.__TV_PROXY__=${JSON.stringify(tvIp || "auto")};` +
                `window.__BUILD__=${JSON.stringify(stamp)};</script>\n` +
                (voiceSrc ? "<script>\n" + voiceSrc + "\n</script>\n" : "");
-  html = html.replace("<script>", flag + "<script>");
+  // بدالةٍ لا بنصّ: `String.replace` تُفسّر `$&` و`` $` `` في نصّ
+  // البديل، فيوم يدخل أحدها في voice.js تنسخ الصفحةُ نفسها في نفسها
+  // وتخرج مسخاً صامتاً. والدالّة لا تُفسّر شيئاً.
+  html = html.replace("<script>", () => flag + "<script>");
   res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" });
   res.end(html);
 }
@@ -1058,10 +1061,20 @@ const server = http.createServer((req, res) => {
       .finally(() => { tuyaSniffing = false; });
   }
 
+  // يبقى للتوافق — والصفحة لم تعد تحتاجه. ويُقرأ دفعةً لا بمجرى:
+  // المجرى إن أخطأ بعد إرسال الترويسة بقي الطلب معلّقاً إلى الأبد،
+  // وخطؤه بلا معالج يُسقط الخادم كلَّه. وأيُّهما وقع رأى صاحب البيت
+  // شاشةً سوداء لا يعرف سببها.
   if (url.pathname === "/voice.js") {
+    let src;
+    try { src = fs.readFileSync(path.join(__dirname, "voice.js")); }
+    catch (e) {
+      res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
+      return res.end("// voice.js غير موجود: " + e.message);
+    }
     res.writeHead(200, { "Content-Type": "application/javascript; charset=utf-8",
-                         "Cache-Control": "no-store" });
-    return fs.createReadStream(path.join(__dirname, "voice.js")).pipe(res);
+                         "Content-Length": src.length, "Cache-Control": "no-store" });
+    return res.end(src);
   }
 
   if (url.pathname === "/health") {
