@@ -29,6 +29,7 @@ const survey = require("./survey");
 const { HuaweiRouter, probe: routerProbe, find: routerFind } = require("./router");
 const { harden } = require("./secure");
 const islam = require("./islam");
+const selfupdate = require("./selfupdate");
 const { spawn } = require("child_process");
 
 // حين يعمل الخادم خدمةً في الخلفية لا سبيل لتمرير متغيّرات البيئة إليه،
@@ -470,20 +471,17 @@ let surveyCache = { at: 0, data: null };
 let surveyRunning = false;
 let autoUpdate = CFG.autoUpdate !== false;      // مفعّل ما لم يُطفأ صراحةً
 let lastCheck = { at: null, found: false };
+// نتيجةُ آخر تحديث — تُقرأ من الصفحة، فيُعرف سببُ التعثّر بلا سجلّ
+let lastUpdateResult = null;
 
 function startUpdate() {
-  if (process.platform !== "win32" && !process.env.UPDATE_CMD) {
-    return { ok: false, code: 501, why: "التحديث الذاتي لويندوز وحده" };
-  }
   if (updating) return { ok: false, code: 409, why: "التحديث جارٍ بالفعل" };
   updating = true;
 
-  const logFile = path.join(__dirname, "..", "windows", "update.log");
+  const logFile = selfupdate.LOG_FILE;
 
-  // المنصّب يقتل هذا الخادم في أثناء عمله، فالعلَم يموت بموت العملية.
-  // لكنّه إن سقط قبل أن يبلغ ذلك — تنزيلٌ فاشل، أو صلاحية ناقصة —
-  // بقي العلَم مرفوعاً أبداً، فيُقفل التحديثُ اليدويُّ والتلقائيُّ
-  // معاً، ولا سبيل إلى فكّه من التطبيق. فيُفَكّ بعد مهلة.
+  // العلَم يُفَكّ بمهلة: لو تعثّر التحديث في مكانٍ لم نتوقّعه بقي
+  // مرفوعاً أبداً فأقفل التحديث اليدويّ والتلقائيّ معاً
   clearTimeout(updateLatch);
   updateLatch = setTimeout(() => {
     if (!updating) return;
@@ -491,79 +489,33 @@ function startUpdate() {
     log("update did not finish in " + (LATCH_MS / 60000) + " min - unlatched; see " + logFile);
   }, LATCH_MS);
   if (updateLatch.unref) updateLatch.unref();
-  // نكتب ترويسةً قبل الإطلاق، ونجعل بوويرشيل يُلحق لا يستبدل (`*>>`).
-  // فإن بقي السجلّ ترويسةً وحدها عرفنا أن بوويرشيل لم يكتب حرفاً —
-  // وذلك خبرٌ في نفسه. وكان السجلّ يغيب فلا يُعرف أوقع الإطلاق أصلاً.
-  try {
-    fs.appendFileSync(logFile,
-      "\r\n==== " + new Date().toISOString() + " update requested ====\r\n");
-  } catch { /* القرص للقراءة أحياناً — لا يمنع المحاولة */ }
 
-  const cmd = process.env.UPDATE_CMD || "powershell.exe";
-  const args = process.env.UPDATE_CMD ? [] : [
-    "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command",
-    // `*>&1` تجمع كلّ المجاري في مجرى واحد — الأخطاء والتحذيرات وما
-    // يكتبه Write-Host — ثم يلتقطها المِقبض الذي فتحه node أدناه.
-    //
-    // ولمَ لا Start-Transcript؟ جرّبناها فبقي السجلّ ترويسةً وحدها
-    // ليلةً كاملة: التسجيل يحتاج مضيفاً يدعمه، والإطلاق هنا بلا
-    // نافذة، فتسقط في صمتٍ ويسقط معها كلُّ ما بعدها. والمِقبض لا
-    // يحتاج مضيفاً ولا نافذة.
-    //
-    // و TLS يُضبط صراحةً: بوويرشيل ٥ يبدأ أحياناً ببروتوكول قديم
-    // ترفضه GitHub فيسقط الجلب صامتاً.
-    "& { " +
-    "$ErrorActionPreference='Continue'; " +
-    "[Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12; " +
-    "try { irm '" + INSTALLER + "' | iex } " +
-    "catch { Write-Output ('INSTALLER FAILED: ' + $_.Exception.Message) } " +
-    "} *>&1",
-  ];
-
-  // مِقبضٌ على السجلّ يفتحه node ويورّثه للابن. فما كتبه الابن على
-  // مخرجه وقع في الملف، دعمَ المضيفُ التسجيل أو لم يدعمه.
-  let fd = null;
-  try { fd = fs.openSync(logFile, "a"); } catch { /* نمضي بلا سجلّ */ }
-
-  try {
-    // منفصلاً وجوباً: المنصّب يقتل عمليات node التابعة للمشروع، وهذا
-    // الخادم منها. ولولا الفصل لمات المنصّب مع من أطلقه قبل أن يُتمّ.
-    const child = spawn(cmd, args, {
-      detached: true,
-      stdio: fd == null ? "ignore" : ["ignore", fd, fd],
-      windowsHide: true,
-      shell: !!process.env.UPDATE_CMD,
-      // لا سؤال حين لا أحد أمام الشاشة: المنصّب يقتل هذا الخادم قبل
-      // أن يُتمّ، فلو وقف عند سؤالٍ لا مجيب له لَبقي البيت بلا خادم
-      env: Object.assign({}, process.env, { KMC_NO_PROMPT: "1" }),
-    });
-    // ورمزُ الخروج خبرٌ لا يملكه إلا node: لو مات بوويرشيل في أوّل
-    // لحظة لم يكتب شيئاً، وبقينا نظنّ التنصيب يمضي ستّ دقائق
-    child.on("exit", (code, sig) => {
-      log("update process exited (" + (sig || code) + ")");
-      try {
-        fs.appendFileSync(logFile,
-          "\r\n==== powershell exited: " + (sig || code) + " ====\r\n");
-      } catch {}
-    });
-    // فشلُ الإطلاق يقع بعد العودة لا فيها (ENOENT مثلاً)، فبلا هذا
-    // المعالج يبقى الخطأ مكتوماً ويظنّ صاحبُ البيت أن التنصيب يمضي
-    child.on("error", (e) => {
+  // node يحدّث نفسه: يجلب ويقيس ثم يستبدل دفعةً ثم يخرج، و run.cmd
+  // يعيده. ولا بوويرشيل في الطريق — وكان هو موضع الانكسار الصامت
+  selfupdate.selfUpdate({ repo: REPO, log })
+    .then((r) => {
       updating = false;
-      log("update failed to start: " + e.message);
-      try { fs.appendFileSync(logFile, "spawn failed: " + e.message + "\r\n"); } catch {}
+      clearTimeout(updateLatch);
+      if (!r.ok) {
+        log("update failed: " + r.why);
+        lastUpdateResult = { ok: false, why: r.why, at: Date.now(),
+                             needsInstaller: !!r.needsInstaller };
+        return;
+      }
+      lastUpdateResult = { ok: true, sha: r.sha, at: Date.now() };
+      log("update done (" + r.sha.slice(0, 7) + ") - restarting in 2s");
+      // مهلةٌ قصيرة ليصل الجواب إلى الصفحة قبل أن ينقطع الخادم
+      setTimeout(() => process.exit(0), 2000);
+    })
+    .catch((e) => {
+      updating = false;
+      clearTimeout(updateLatch);
+      log("update crashed: " + e.message);
+      lastUpdateResult = { ok: false, why: e.message, at: Date.now() };
     });
-    child.unref();
-    // المِقبض وُرِّث للابن، ونسختُنا منه لا لزوم لها. ولو تُركت
-    // مفتوحة لبقيت تتراكم مع كلّ محاولة
-    if (fd != null) { try { fs.closeSync(fd); } catch {} }
-    log("update started -> " + logFile);
-    return { ok: true, log: logFile };
-  } catch (e) {
-    updating = false;
-    if (fd != null) { try { fs.closeSync(fd); } catch {} }
-    return { ok: false, code: 500, why: e.message };
-  }
+
+  log("update started -> " + logFile);
+  return { ok: true, log: logFile };
 }
 
 
@@ -719,6 +671,9 @@ const server = http.createServer((req, res) => {
       updating,
       autoUpdate,
       lastCheck: lastCheck.at,
+      // سببُ تعثّر آخر محاولة يُعرض في الصفحة نفسها — لا يُبحث عنه
+      // في سجلّ على اللابتوب
+      last: lastUpdateResult,
     }));
   }
 

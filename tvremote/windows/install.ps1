@@ -128,6 +128,9 @@ $expect = @("tv.html", "tvremote\webos\server.js", "tvremote\windows\run.cmd",
             "tvremote\webos\survey.js", "tvremote\webos\router.js",
             "tvremote\webos\secure.js",
             "tvremote\webos\islam.js",
+            "tvremote\webos\discover.js",
+            # التحديث الذاتيّ: بغيابه لا يحدّث الخادم نفسه أبداً
+            "tvremote\webos\selfupdate.js",
             "tvremote\windows\tailscale.ps1", "tvremote\windows\ssh.ps1",
             "tvremote\windows\set-static-ip.ps1",
             "tvremote\tools\probe-device.js", "tvremote\tools\scan.js")
