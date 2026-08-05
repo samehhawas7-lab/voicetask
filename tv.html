@@ -23,6 +23,60 @@
   --accent:#4db6a5; --accent-dim:#2c6f66; --nav:#3c4653;
   --danger:#d9635f; --ok:#4fae7f; --warn:#e3ac52; --radius:18px;
 }
+/* ---------- الخلفيات ----------
+   لكلٍّ لوحةٌ كاملة لا خلفيةٌ وحدها: لو بُدّلت الخلفية دون النصّ
+   والحدود لصار في الشاشة نصٌّ فاتحٌ على ورقٍ فاتح. والتباين مقصود:
+   نصُّ المصحف يُقرأ طويلاً، فلا يُترك رماديّاً على رماديّ. */
+html[data-theme="black"]{            /* أسود عميق — يوفّر بطارية شاشات OLED */
+  --bg:#000000; --surface:#0a0d11; --surface-2:#12161b; --surface-3:#1c232b;
+  --line:#232b34; --text:#e9eef3; --muted:#8b96a5;
+}
+html[data-theme="paper"]{            /* ورقيّ — كالمصحف المطبوع */
+  --bg:#efe7d5; --surface:#faf5e8; --surface-2:#f5efdf; --surface-3:#e8dfc9;
+  --line:#d8ccae; --text:#2a2721; --muted:#6b6353;
+  --accent:#1d6f5e; --accent-dim:#c3e0d7; --nav:#d6c9a8;
+  --danger:#a8332f; --ok:#2a7349; --warn:#8f6415;
+}
+html[data-theme="light"]{            /* فاتح — لضوء النهار الشديد */
+  --bg:#eef1f5; --surface:#ffffff; --surface-2:#f6f8fa; --surface-3:#e7ebf0;
+  --line:#d6dce4; --text:#1a1f26; --muted:#5d6875;
+  --accent:#1a7f70; --accent-dim:#bfe3dc; --nav:#cfd6de;
+  --danger:#b3322e; --ok:#237a4c; --warn:#8a6212;
+}
+html[data-theme="green"]{            /* أخضر داكن — أهدأ ما جرّبت للقراءة الطويلة */
+  --bg:#0e1a15; --surface:#13241d; --surface-2:#182d24; --surface-3:#20392e;
+  --line:#26402f; --text:#e4efe7; --muted:#8ba496;
+  --accent:#5cc0a0; --accent-dim:#2b6b56; --nav:#345245;
+}
+
+/* ---------- ألوان التجويد ----------
+   ولا يُلوَّن إلا ما في النصّ من علامات: السكون سكونٌ مكتوب، والشدّة
+   شدّةٌ مكتوبة. فلا استنتاج ولا ظنّ — وما لا علامة له لا لون له. */
+.tj-madd   { color:#e2504a }
+.tj-maddn  { color:#e0908a }
+.tj-ghunna { color:#3fa869 }
+.tj-qalqala{ color:#3f9ed6 }
+.tj-shadda { color:#9c74d4 }
+.tj-sukun  { color:#d1922f }
+.tj-tanween{ color:#c05fa2 }
+.tj-wasl   { color:var(--muted) }
+html[data-theme="paper"] .tj-madd,
+html[data-theme="light"] .tj-madd   { color:#c3312b }
+html[data-theme="paper"] .tj-maddn,
+html[data-theme="light"] .tj-maddn  { color:#c4675f }
+html[data-theme="paper"] .tj-ghunna,
+html[data-theme="light"] .tj-ghunna { color:#1f7844 }
+html[data-theme="paper"] .tj-qalqala,
+html[data-theme="light"] .tj-qalqala{ color:#1b6f9e }
+html[data-theme="paper"] .tj-shadda,
+html[data-theme="light"] .tj-shadda { color:#6f45ab }
+html[data-theme="paper"] .tj-sukun,
+html[data-theme="light"] .tj-sukun  { color:#946012 }
+html[data-theme="paper"] .tj-tanween,
+html[data-theme="light"] .tj-tanween{ color:#96317a }
+.tjlegend{display:flex;flex-wrap:wrap;gap:7px;margin-top:10px}
+.tjlegend span{font-size:11px;border:1px solid var(--line);border-radius:999px;
+  padding:3px 10px;background:var(--surface)}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 [hidden]{display:none !important}
 html,body{margin:0;padding:0;background:var(--bg);color:var(--text);
@@ -1039,6 +1093,30 @@ input::placeholder{color:#5c6579}
       <button class="key sm" id="qGet">نزّلها إلى جوّالك</button>
     </div>
     <div id="qSaveMsg" class="hint"></div>
+  </div>
+
+  <!-- المظهر: الخلفية وألوان التجويد -->
+  <div class="card">
+    <h3>المظهر</h3>
+    <div class="qopts">
+      <label>الخلفية
+        <select id="qTheme">
+          <option value="dark">فحميّ — الافتراضيّ</option>
+          <option value="black">أسود عميق</option>
+          <option value="paper">ورقيّ — كالمصحف المطبوع</option>
+          <option value="light">فاتح</option>
+          <option value="green">أخضر داكن</option>
+        </select>
+      </label>
+      <label>ألوان التجويد
+        <select id="qTajweed">
+          <option value="0">بلا ألوان</option>
+          <option value="1">ملوَّن</option>
+        </select>
+      </label>
+    </div>
+    <div id="qTajLegend" class="tjlegend" hidden></div>
+    <p class="hint" id="qTajNote" hidden></p>
   </div>
 
   <div id="qMarg"></div>
@@ -2918,6 +2996,7 @@ function wakeTv(btn){
   const D = { quran:null, at:null, tafsir:{}, suras:null, pages:null, azkar:null };
   let which = store.get("tafsir_which") || "muyassar";
   let qsize = Number(store.get("quran_size")) || 21;
+  let tajweed = store.get("tajweed") === "1";
   let page = Number(store.get("quran_page")) || 1;
 
   const NAMES = { muyassar:"الميسَّر", jalalayn:"الجلالين" };
@@ -3008,6 +3087,98 @@ function wakeTv(btn){
 
      ولا يُمسّ الملفُّ المحفوظ: هو كما نزل وكما قيس، والتسوية هنا
      في الرسم وحده. */
+  /* ---------- ألوان التجويد ----------
+     طلبَ أن يُلوَّن المدُّ بلون والسكونُ بلون. وهذا أفعله على شرطٍ
+     واحد: **ألّا ألوّن إلا ما هو مكتوبٌ في النصّ نفسه**. فالسكون
+     علامةٌ في المصحف، والشدّة علامة، والمدّة علامة، والتنوين علامة،
+     وهمزةُ الوصل حرفٌ قائمٌ برأسه. فليس في هذا اجتهادٌ منّي
+     ولا ظنّ: كلُّ لونٍ هنا مردُّه رمزٌ موجودٌ في الآية، لا
+     استنباطٌ من جوارها.
+
+     وقد جرّبتُ ما هو أوسع: بيانات cpfair تعرف ثمانيةَ عشرَ حكماً —
+     إخفاءً وإدغاماً وإقلاباً. فأنزلتُها، وشغّلتُ مصنّفَها على نصّنا
+     نحن، وقابلتُ ما خرج بما نشروا. فوجدتُ الفهارس تُبنى على
+     نسخةٍ غير نسختنا (الهمزة مركّبة عندهم مفكوكة عندنا، وفينا
+     ٨٢٠ علامةَ اتّجاهٍ لا تُرى وتُزحزح كلّ فهرسٍ بعدها). وسوّيتُ
+     ذلك حتّى استقام، ثمّ وجدتُ المصنّف يلوّن لامَ لفظ الجلالة
+     لاماً شمسيّة في ٢٥٣٧ موضعاً — ولا تفعل ذلك المصاحفُ الملوّنة.
+
+     ولونٌ زائدٌ على كتاب الله ليس كزرٍّ لا يعمل. فتركتُ تلك
+     الأحكام حتّى أجد مصدراً أستطيع التحقّق منه، وأبقيتُ ما لا
+     يحتمل الشكّ. والنصّ لا يُمسّ: تُغلّف الحروف بعناصر، ولا يُزاد
+     حرفٌ ولا يُنقص — وقد قِيس ذلك على المصحف كلّه، آيةً آية. */
+  const TJ_MARK  = /[ً-ٰٟۖ-ۭ]/;
+  const TJ_STOP  = /[ۖ-۝۞۩]/;
+  const TJ_SUKUN = /[ْۡ]/;
+  const TJ_SHAD  = /ّ/;
+  const TJ_MADDA = /[ٓۤ]/;
+  const TJ_TANW  = /[ً-ٍٖٗٞ]/;
+  const TJ_FATHA = "\u064E", TJ_DAMMA = "\u064F", TJ_KASRA = "\u0650";
+  const TJ_VOWEL = /[ً-ْٖٗٞۡ]/;
+  const TJ_QALQ  = "قطبجد";
+  const TJ_GHUN  = "نم";
+  const TJ_SMALL = "ٰۥۦ";
+  const TJ_MADDL = "اويى";
+  const TJ_WASL  = "ٱ";
+
+  function tjLetters(t){
+    const out = [];
+    for (let i = 0; i < t.length; i++){
+      const c = t[i];
+      if (out.length && TJ_MARK.test(c) && !TJ_STOP.test(c) && !TJ_SMALL.includes(c)){
+        const L = out[out.length - 1];
+        L.marks += c; L.raw += c;
+        continue;
+      }
+      out.push({ base: c, marks: "", raw: c });
+    }
+    return out;
+  }
+
+  function tjClass(L, prev){
+    const b = L.base, m = L.marks;
+    if (TJ_STOP.test(b)) return "";
+    if (b === TJ_WASL) return "tj-wasl";
+    if (TJ_MADDA.test(m)) return "tj-madd";
+    if (TJ_SMALL.includes(b)) return "tj-maddn";
+    if (TJ_GHUN.includes(b) && TJ_SHAD.test(m)) return "tj-ghunna";
+    if (TJ_QALQ.includes(b) && TJ_SUKUN.test(m)) return "tj-qalqala";
+    if (TJ_MADDL.includes(b) && !TJ_VOWEL.test(m) && prev){
+      const pm = prev.marks;
+      if ((b === "\u0627" || b === "\u0649") && pm.includes(TJ_FATHA)) return "tj-maddn";
+      if (b === "\u0648" && pm.includes(TJ_DAMMA)) return "tj-maddn";
+      if (b === "\u064A" && pm.includes(TJ_KASRA)) return "tj-maddn";
+    }
+    if (TJ_SHAD.test(m)) return "tj-shadda";
+    if (TJ_SUKUN.test(m)) return "tj-sukun";
+    if (TJ_TANW.test(m)) return "tj-tanween";
+    return "";
+  }
+
+  function tjFrag(t){
+    const frag = document.createDocumentFragment();
+    const L = tjLetters(String(t));
+    let buf = "";
+    const flush = () => { if (buf){ frag.appendChild(document.createTextNode(buf)); buf = ""; } };
+    for (let i = 0; i < L.length; i++){
+      const cls = tjClass(L[i], i ? L[i - 1] : null);
+      if (!cls){ buf += L[i].raw; continue; }
+      flush();
+      const el = document.createElement("i");
+      el.className = cls;
+      el.style.fontStyle = "normal";
+      el.textContent = L[i].raw;
+      frag.appendChild(el);
+    }
+    flush();
+    return frag;
+  }
+  window.__tjFrag = tjFrag;
+
+  const TJ_NAMES = [["tj-madd","مدّ"],["tj-maddn","مدّ طبيعيّ"],["tj-ghunna","غنّة"],
+                    ["tj-qalqala","قلقلة"],["tj-shadda","شدّة"],["tj-sukun","سكون"],
+                    ["tj-tanween","تنوين"],["tj-wasl","همزة وصل"]];
+
   const OPEN_TANWEEN = { "ࣰ":"ٗ", "ࣱ":"ٞ", "ࣲ":"ٖ" };
   const JOIN_ALEF = /([ٖٗٞ]) ([اى][ؐ-ًؚ-ٰٟۖ-ۭ]*)(?=\s|$)/g;
   const forDisplay = (t) => String(t)
@@ -3077,7 +3248,8 @@ function wakeTv(btn){
           if (a.chapter !== 1 && a.chapter !== 9){
             const bs = document.createElement("div");
             bs.className = "qbsml";
-            bs.textContent = "بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ";
+            const bsT = "بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ";
+            if (tajweed) bs.appendChild(tjFrag(bsT)); else bs.textContent = bsT;
             body.appendChild(bs);
           }
         }
@@ -3092,7 +3264,8 @@ function wakeTv(btn){
       span.className = "ay";
       span.dataset.s = String(a.chapter);
       span.dataset.a = String(a.verse);
-      span.textContent = forDisplay(a.text) + " ";
+      const disp = forDisplay(a.text) + " ";
+      if (tajweed) span.appendChild(tjFrag(disp)); else span.textContent = disp;
       const num = document.createElement("span");
       num.className = "num";
       num.textContent = AD(a.verse);
@@ -3165,6 +3338,51 @@ function wakeTv(btn){
   };
   $("qBigger").onclick = () => resize(2);
   $("qSmaller").onclick = () => resize(-2);
+
+  /* ---------- المظهر ----------
+     اللوحةُ تُبدَّل للتطبيق كلّه لا للمصحف وحده: من اختار الورقيّ
+     للقراءة لا يريد أن ترتدّ عينُه إلى فحميّ حين يخرج إلى الأجهزة. */
+  const THEME_BG = { dark:"#12161b", black:"#000000", paper:"#efe7d5",
+                     light:"#eef1f5", green:"#0e1a15" };
+  function applyTheme(t){
+    if (!THEME_BG[t]) t = "dark";
+    document.documentElement.setAttribute("data-theme", t);
+    store.set("theme", t);
+    // شريطُ الحالة في الجوّال يتبع اللوحة، وإلا بدا التطبيق مقصوصاً
+    const m = document.querySelector('meta[name="theme-color"]');
+    if (m) m.setAttribute("content", THEME_BG[t]);
+    const sel = $("qTheme");
+    if (sel && sel.value !== t) sel.value = t;
+  }
+  window.__applyTheme = applyTheme;
+  applyTheme(store.get("theme") || "dark");
+  $("qTheme").onchange = () => applyTheme($("qTheme").value);
+
+  function paintLegend(){
+    const box = $("qTajLegend"), note = $("qTajNote");
+    box.hidden = !tajweed; note.hidden = !tajweed;
+    box.innerHTML = "";
+    if (!tajweed) return;
+    for (const [cls, name] of TJ_NAMES){
+      const s = document.createElement("span");
+      s.className = cls;
+      s.textContent = name;
+      box.appendChild(s);
+    }
+    // ما لا يُلوَّن يُقال، فلا يُظنّ المصحفُ خالياً من أحكامه
+    note.textContent = "تُلوَّن العلاماتُ المكتوبة في المصحف نفسه. "
+      + "وأحكامُ الإخفاء والإدغام والإقلاب لم تُلوَّن بعد: تحتاج "
+      + "مصدراً أتحقّق منه، ولم أجده يطابق نصَّنا — ولا أزيد لوناً "
+      + "على كتاب الله بالظنّ.";
+  }
+  $("qTajweed").value = tajweed ? "1" : "0";
+  $("qTajweed").onchange = () => {
+    tajweed = $("qTajweed").value === "1";
+    store.set("tajweed", tajweed ? "1" : "0");
+    paintLegend();
+    paintPage(page);
+  };
+  paintLegend();
 
   /* ---------- التلاوة ----------
      الآيات تُطلب من خادمنا لا من المصدر البعيد مباشرة: فهو يحفظ ما
