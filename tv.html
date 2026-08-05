@@ -3268,10 +3268,21 @@ function wakeTv(btn){
     const r = await fetch("/islam/audio/reciters", { cache: "no-store" }).then(x => x.json());
     sel.innerHTML = "";
     const ready = r.reciters.filter(x => x.ready);
-    for (const x of ready){
-      const o = document.createElement("option");
-      o.value = x.key; o.textContent = x.name;
-      sel.appendChild(o);
+    // المعلّم يُفصل عن المرتَّل: هما غرضان مختلفان، وخلطُهما في قائمةٍ
+    // واحدة يجعل الأب يبحث عن تسجيل ابنه بين تسجيلاتٍ ليست له
+    const groups = [["المرتَّل", ready.filter(x => !x.teacher)],
+                    ["المصحف المعلّم — للترديد", ready.filter(x => x.teacher)]];
+    for (const [label, list] of groups){
+      if (!list.length) continue;
+      const g = document.createElement("optgroup");
+      g.label = label;
+      for (const x of list){
+        const o = document.createElement("option");
+        o.value = x.key;
+        o.textContent = x.name + (x.note ? " · " + x.note : "");
+        g.appendChild(o);
+      }
+      sel.appendChild(g);
     }
     const saved = store.get("reciter");
     if (saved && ready.some(x => x.key === saved)) sel.value = saved;

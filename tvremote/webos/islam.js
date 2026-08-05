@@ -269,6 +269,29 @@ const RECITERS = [
       "https://everyayah.com/data/Ahmed_ibn_Ali_al_Ajamy_64kbps_QuranExplorer.Com/{sss}{aaa}.mp3",
     ],
   },
+  // ---- المصحف المعلّم: الشيخ يقرأ والأطفال يردّدون خلفه ----
+  // وهذه تسجيلاتٌ أخرى غير المرتَّل، لها مجلّداتها. ولستُ متيقّناً من
+  // أسمائها — مضيفو التلاوات محجوبون عن المكان الذي كُتبت فيه هذه
+  // الشيفرة. فلكلٍّ مرشَّحاتُه، **ويقيسها الخادم في البيت** كما قاس
+  // الأربعة قبلها. ومن لم يُجب قيل اسمه، ولم يُترك زرٌّ يُضغط فلا يقع.
+  {
+    key: "minshawi_teacher", name: "المنشاوي — المصحف المعلّم", note: "مع ترديد الأطفال",
+    teacher: true,
+    urls: [
+      "https://everyayah.com/data/Minshawy_Teacher_128kbps/{sss}{aaa}.mp3",
+      "https://everyayah.com/data/minshawy_teacher_128kbps/{sss}{aaa}.mp3",
+      "https://everyayah.com/data/Minshawy_Mualim_128kbps/{sss}{aaa}.mp3",
+    ],
+  },
+  {
+    key: "husary_teacher", name: "الحصري — المصحف المعلّم", note: "مع ترديد الأطفال",
+    teacher: true,
+    urls: [
+      "https://everyayah.com/data/Husary_Muallim_128kbps/{sss}{aaa}.mp3",
+      "https://everyayah.com/data/Husary_128kbps_Muallim/{sss}{aaa}.mp3",
+      "https://everyayah.com/data/husary_teacher_128kbps/{sss}{aaa}.mp3",
+    ],
+  },
   {
     key: "hudhaify", name: "علي بن عبدالرحمن الحذيفي", note: "مرتَّل",
     urls: [

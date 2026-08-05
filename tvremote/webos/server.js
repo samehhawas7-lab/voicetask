@@ -834,7 +834,7 @@ const server = http.createServer((req, res) => {
     if (rest === "audio/reciters") {
       const picked = CFG.reciters || {};
       const list = islam.RECITERS.map((r) => ({
-        key: r.key, name: r.name, note: r.note,
+        key: r.key, name: r.name, note: r.note, teacher: !!r.teacher,
         ready: !!picked[r.key], saved: 0,
       }));
       return json(200, { ok: true, reciters: list, probed: !!CFG.recitersProbedAt,
