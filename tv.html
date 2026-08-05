@@ -23,6 +23,36 @@
   --accent:#4db6a5; --accent-dim:#2c6f66; --nav:#3c4653;
   --danger:#d9635f; --ok:#4fae7f; --warn:#e3ac52; --radius:18px;
 }
+/* ---------- ملء الشاشة ----------
+   سفاري في الآيفون لا يعرف Fullscreen API (هي للآيباد والفيديو
+   وحدهما)، فلا يُنادى عليها ويُرجى. الصفحةُ تملأ الشاشة بالتخطيط
+   نفسه: يُطوى الرأسُ وما حول الورقة، وتمتدّ الورقةُ إلى الحوافّ.
+   وهذا يعمل حيث لا تعمل تلك، ويعمل في التطبيق المثبَّت كذلك. */
+html[data-imm="1"] .topbar,
+html[data-imm="1"] #islam-quran > .qbar,
+html[data-imm="1"] #islam-quran > .card,
+html[data-imm="1"] #islam-quran > #qMarg{ display:none !important }
+html[data-imm="1"] .screen{ padding:0 }
+html[data-imm="1"] #qSheet{
+  border:none;border-radius:0;min-height:100dvh;
+  /* أعلى الورقة يُفسح لأزرارها العائمة، فلا يقع الزرُّ على عنوان سورة */
+  padding:calc(env(safe-area-inset-top) + 48px) 13px calc(env(safe-area-inset-bottom) + 64px);
+  display:flex;flex-direction:column }
+html[data-imm="1"] #qBody{ flex:1 }
+html[data-imm="1"] .qnav{
+  position:fixed;inset-inline:0;bottom:0;z-index:40;margin:0;
+  padding:8px 13px calc(env(safe-area-inset-bottom) + 8px);
+  background:var(--bg);border-top:1px solid var(--line) }
+/* زرُّ الخروج ظاهرٌ دائماً: من دخل ملء الشاشة ولم يجد له باباً
+   يخرج منه ظنّ التطبيق قد عُطِّل (القاعدة الثانية عشرة) */
+#qImmBar{ position:fixed;top:calc(env(safe-area-inset-top) + 6px);inset-inline-start:6px;
+  z-index:41;display:none;gap:6px }
+html[data-imm="1"] #qImmBar{ display:flex }
+#qImmBar button{ width:36px;height:36px;border-radius:50%;
+  border:1px solid var(--line);background:var(--surface);color:var(--muted);
+  font-size:14px;font-family:inherit;cursor:pointer;opacity:.72 }
+#qImmBar button:active{ opacity:1 }
+
 /* ---------- الخلفيات ----------
    لكلٍّ لوحةٌ كاملة لا خلفيةٌ وحدها: لو بُدّلت الخلفية دون النصّ
    والحدود لصار في الشاشة نصٌّ فاتحٌ على ورقٍ فاتح. والتباين مقصود:
@@ -97,7 +127,7 @@ html,body{margin:0;padding:0;background:var(--bg);color:var(--text);
   touch-action:manipulation;overscroll-behavior:none;
   font-family:"SF Arabic","Noto Kufi Arabic",-apple-system,BlinkMacSystemFont,"Segoe UI",Tahoma,sans-serif;
   overscroll-behavior:none;height:100%}
-body{display:flex;flex-direction:column;height:100dvh;
+body{display:flex;flex-direction:column;height:100dvh;overflow:hidden;
   padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
 
 /* ---------- الرأس ---------- */
@@ -1057,6 +1087,7 @@ input::placeholder{color:#5c6579}
     <button class="key sm" id="qTafsirWhich">الميسَّر</button>
     <button class="key sm" id="qSmaller">ﻉ−</button>
     <button class="key sm" id="qBigger">ﻉ+</button>
+    <button class="key sm" id="qImm">ملء الشاشة</button>
   </div>
   <div class="qsheet" id="qSheet">
     <div id="qBody"></div>
@@ -1135,6 +1166,11 @@ input::placeholder{color:#5c6579}
   </div>
 
   <div id="qMarg"></div>
+  <div id="qImmBar">
+    <button id="qFull" aria-label="خروج من ملء الشاشة">✕</button>
+    <button id="qImmSmaller" aria-label="خطٌّ أصغر">ﻉ−</button>
+    <button id="qImmBigger" aria-label="خطٌّ أكبر">ﻉ+</button>
+  </div>
   <audio id="qAudio" preload="none"></audio>
 </section>
 
@@ -2346,6 +2382,11 @@ function show(id){
   if (id === "dev-router" && window.__router) window.__router();
   if (id === "dev-islam"   && window.__islamHub)    window.__islamHub();
   if (id === "islam-quran" && window.__islamQuran)  window.__islamQuran();
+  // ملء الشاشة للمصحف وحده: لو تبع صاحبَه إلى شاشة الأجهزة لاختفى
+  // رأسُ الصفحة وما فيه من أزرار
+  if (id !== "islam-quran") document.documentElement.setAttribute("data-imm", "0");
+  else if (window.__quranImm && window.__quranImm())
+    document.documentElement.setAttribute("data-imm", "1");
   // الخروج من المصحف يُسكت التلاوة: صوتٌ يتبعك إلى شاشةٍ أخرى بلا
   // زرٍّ يوقفه إزعاجٌ لا ميزة
   if (id !== "islam-quran" && window.__islamHush)   window.__islamHush();
@@ -3316,6 +3357,15 @@ function wakeTv(btn){
     m.appendChild(box);
   }
 
+  /* رفعُ الورقة إلى أعلى وعائها. و«scrollIntoView» كانت تزحزح الوثيقة
+     كلَّها فينزلق التطبيقُ تحت رأسه: قِستُ فوجدتُ زرَّ «ملء الشاشة»
+     يقع في موضع زرّ الرجوع، فتُصيب الإصبعُ غيرَ ما قصدت. */
+  function toTop(){
+    const sc = document.getElementById("islam-quran");
+    if (sc) sc.scrollTop = 0;
+    if (window.scrollY) window.scrollTo(0, 0);
+  }
+
   function paintPage(p){
     p = Math.max(1, Math.min(D.pages.length, Math.round(p) || 1));
     page = p;
@@ -3385,7 +3435,7 @@ function wakeTv(btn){
     $("qSura").value = String(suras[0] || 1);
     store.set("quran_page", String(p));
     screenSub("islam-quran", names + " · صفحة " + AD(p) + " · " + NAMES[which]);
-    $("qSheet").scrollIntoView({ block: "start" });
+    toTop();
   }
 
   window.__islamQuran = async () => {
@@ -3440,6 +3490,30 @@ function wakeTv(btn){
   };
   $("qBigger").onclick = () => resize(2);
   $("qSmaller").onclick = () => resize(-2);
+
+  /* ---------- ملء الشاشة ----------
+     ولا يُترك المرءُ في شاشةٍ لا بابَ لها: زرُّ الخروج ظاهرٌ دائماً،
+     وزرُّ الرجوع يخرج منها أوّلاً ثمّ يرجع، فلا يقفز إلى شاشةٍ أخرى
+     وقد نسي أنّه فيها. */
+  let imm = store.get("quran_full") === "1";
+  function setImm(on){
+    imm = !!on;
+    store.set("quran_full", imm ? "1" : "0");
+    $("qImm").textContent = imm ? "أخرج" : "ملء الشاشة";
+    // الرغبةُ محفوظة، والطيُّ لا يقع إلا والمصحفُ معروض. ولولا هذا
+    // لفُتح التطبيقُ على الرئيسية بلا رأسٍ ولا أزرار، فبدا معطوباً
+    const here = (typeof currentScreen !== "undefined") && currentScreen === "islam-quran";
+    document.documentElement.setAttribute("data-imm", (imm && here) ? "1" : "0");
+  }
+  function clearImm(){ if (imm) setImm(false); }
+  window.__quranImm = () => imm;
+  window.__quranExitImm = clearImm;
+  $("qImm").onclick = () => { setImm(!imm); toTop(); };
+  $("qFull").onclick = () => setImm(false);
+  // والحجم يبقى في متناوله وهو في ملء الشاشة — وإلا لخرج ليكبّر ثمّ عاد
+  $("qImmBigger").onclick  = () => resize(2);
+  $("qImmSmaller").onclick = () => resize(-2);
+  setImm(imm);
 
   /* ---------- المظهر ----------
      اللوحةُ تُبدَّل للتطبيق كلّه لا للمصحف وحده: من اختار الورقيّ
