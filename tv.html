@@ -4465,6 +4465,19 @@ if (window.__checkVersion) window.__checkVersion();
 
 if (onServer){
   diag("وضع الخادم: الأوامر تمر عبر " + location.host + " بأذونات كاملة");
+  // النسخةُ في أوّل السجلّ.
+  //
+  // **ولماذا؟** أضعنا ثلاثة أيام نطارد أعراضاً، والعلّة أنّ الخادم
+  // كان يعمل بنسخةٍ قديمة ولا أحد يعرف. وكلُّ سجلٍّ أُرسل كان صامتاً
+  // عن أهمّ ما فيه. فلا يُرسَل سجلٌّ بعد اليوم إلا وفيه ما يعمل.
+  fetch("/version", { cache:"no-store" }).then(r => r.json()).then(v => {
+    diag("النسخة: " + (v.installed ? v.installed.slice(0, 7) : "غير معروفة") +
+         (v.branch && v.branch !== "main" ? " · فرع " + v.branch : "") +
+         (v.installedAt ? " · ثُبّتت " + new Date(v.installedAt)
+            .toLocaleString("ar", { day:"numeric", month:"long", hour:"2-digit", minute:"2-digit" }) : "") +
+         (v.updateAvailable ? "  ← يوجد أحدث" : ""));
+    if (v.last && !v.last.ok) diag("آخر تحديث تعثّر: " + v.last.why);
+  }).catch(() => diag("النسخة: تعذّر سؤال الخادم"));
   const fromServer = window.__TV_PROXY__;
   if (fromServer && fromServer !== "auto"){
     $("ipInput").value = fromServer;

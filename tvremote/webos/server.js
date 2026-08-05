@@ -718,6 +718,7 @@ const server = http.createServer((req, res) => {
       updateAvailable: !!(latest && inst.sha && latest !== inst.sha),
       updating,
       autoUpdate,
+      branch: CFG.branch || "main",
       lastCheck: lastCheck.at,
       // سببُ تعثّر آخر محاولة يُعرض في الصفحة نفسها — لا يُبحث عنه
       // في سجلّ على اللابتوب
