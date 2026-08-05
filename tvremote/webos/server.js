@@ -1627,6 +1627,14 @@ server.listen(PORT, "0.0.0.0", () => {
 
   startSecure();
 
+  // حارسُ النفق: خادمُنا أثبتُ ما في البيت، فليحرس ما هو أهشّ منه.
+  // أوّلُ تفقّدٍ بعد دقيقة، ثم كل خمس — ولا يفعل شيئاً ما دام قائماً
+  if (!process.env.NO_TAILNET_WATCH) {
+    const watch = () => tls.keepUp(log).catch(() => {});
+    setTimeout(watch, 60000).unref();
+    setInterval(watch, 300000).unref();
+  }
+
   // نتحقّق من العنوان المحفوظ فور الإقلاع، فيكون جاهزاً قبل أول ضغطة زر
   if (!process.env.TV_URL) ensureTv();
 

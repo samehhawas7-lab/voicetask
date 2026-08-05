@@ -251,7 +251,10 @@ $LID_ACT = "5ca83367-6e45-459f-a27b-476b1d01c936"   # إجراء إغلاق ال
 & powercfg /change hibernate-timeout-ac 0   2>&1 | Out-Null
 & powercfg /change disk-timeout-ac 0        2>&1 | Out-Null
 & powercfg /change monitor-timeout-ac 10    2>&1 | Out-Null   # الشاشة وحدها تنطفئ
-& powercfg /change standby-timeout-dc 30    2>&1 | Out-Null   # على البطارية: نصف ساعة ثم ينام
+# ولا على البطارية: انقطاعُ كهرباءٍ دقيقةً كان يُنيمه بعد نصف ساعة،
+# فينقطع البيت عن صاحبه وهو في عمله ولا يدري لماذا
+& powercfg /change standby-timeout-dc 0     2>&1 | Out-Null
+& powercfg /change hibernate-timeout-dc 0   2>&1 | Out-Null
 & powercfg /change monitor-timeout-dc 3     2>&1 | Out-Null
 & powercfg /setacvalueindex SCHEME_CURRENT $LID_SUB $LID_ACT 0 2>&1 | Out-Null
 & powercfg /setdcvalueindex SCHEME_CURRENT $LID_SUB $LID_ACT 0 2>&1 | Out-Null

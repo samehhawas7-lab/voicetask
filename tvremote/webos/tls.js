@@ -126,4 +126,66 @@ async function issue(log = () => {}) {
   return { ok: true, name: d.name };
 }
 
-module.exports = { issue, load, current, dnsName, DIR, KEY, CRT, tailscaleExe };
+
+// ============================================================
+// حارسُ النفق
+//
+// **لماذا؟** توقّف Tailscale على اللابتوب مرّتين في يومٍ واحد، فانقطع
+// البيتُ كلّه عن صاحبه وهو في عمله — وظنّها عطباً في التطبيق. ولا
+// أحد كان يراقبه: الخدمة تبدأ مع ويندوز، لكنّها إن سقطت بعدها بقيت
+// ساقطة إلى أن يُقام إلى اللابتوب.
+//
+// وخادمُنا يعمل دائماً و run.cmd يعيده إن مات — فهو أثبتُ ما في
+// البيت. فليحرس ما هو أهشّ منه.
+//
+// ولا يُلحّ: لا يفعل شيئاً إلا إذا قال Tailscale بنفسه إنه متوقّف.
+// ============================================================
+
+/**
+ * يقرأ حال النفق من جواب `tailscale status --json`.
+ * دالّةٌ خالصة — تُقاس بلا شبكة ولا جهاز.
+ *
+ * @returns {"ok"|"up"|"login"|"unknown"}
+ *   ok      — يعمل، فلا يُمَسّ
+ *   up      — متوقّف ويكفيه `tailscale up`
+ *   login   — يحتاج تسجيل دخول، ولا يُفعل ذلك بلا صاحبه
+ *   unknown — لم نفهم الجواب، فلا نتصرّف على جهل
+ */
+function tailnetState(raw) {
+  let j;
+  try { j = typeof raw === "string" ? JSON.parse(raw) : raw; } catch { return "unknown"; }
+  if (!j || typeof j !== "object") return "unknown";
+  const s = String(j.BackendState || "");
+  if (s === "Running") return "ok";
+  if (s === "Stopped") return "up";
+  if (s === "NeedsLogin" || s === "NoState") return "login";
+  if (s === "Starting") return "ok";       // في طريقه — لا نعجّل عليه
+  return "unknown";
+}
+
+/**
+ * يتفقّد النفق، ويُنهضه إن كان متوقّفاً. يردّ ما فعل.
+ * ولا يُسجّل شيئاً حين يكون سليماً — فالسجلّ لِما يقع لا لِما لا يقع.
+ */
+async function keepUp(log = () => {}) {
+  const exe = tailscaleExe();
+  const st = await run(exe, ["status", "--json"], 20000);
+  if (!st.ok && !st.out) return { state: "unknown", acted: false, why: st.err.trim().slice(0, 120) };
+  const state = tailnetState(st.out);
+  if (state === "ok") return { state, acted: false };
+  if (state === "login") {
+    log("tailscale needs login - run windows\\tailscale.ps1 once");
+    return { state, acted: false };
+  }
+  if (state === "unknown") return { state, acted: false };
+
+  log("tailscale is down - bringing it up");
+  const up = await run(exe, ["up", "--unattended"], 60000);
+  const after = await run(exe, ["status", "--json"], 20000);
+  const now = tailnetState(after.out);
+  log("tailscale after up: " + now + (up.ok ? "" : " (" + up.err.trim().slice(0, 100) + ")"));
+  return { state: now, acted: true, ok: now === "ok" };
+}
+
+module.exports = { issue, load, current, dnsName, DIR, KEY, CRT, tailscaleExe,
+                   tailnetState, keepUp };
