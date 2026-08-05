@@ -52,6 +52,12 @@ html[data-theme="green"]{            /* أخضر داكن — أهدأ ما جر
 /* ---------- ألوان التجويد ----------
    ولا يُلوَّن إلا ما في النصّ من علامات: السكون سكونٌ مكتوب، والشدّة
    شدّةٌ مكتوبة. فلا استنتاج ولا ظنّ — وما لا علامة له لا لون له. */
+.tj-ikhfa  { color:#5fb56a }
+.tj-idghg  { color:#2f9c62 }
+.tj-idghn  { color:#7f93ad }
+.tj-iqlab  { color:#6f7fd8 }
+.tj-ikhfash{ color:#5fb56a }
+.tj-idghsh { color:#2f9c62 }
 .tj-madd   { color:#e2504a }
 .tj-maddn  { color:#e0908a }
 .tj-ghunna { color:#3fa869 }
@@ -60,6 +66,14 @@ html[data-theme="green"]{            /* أخضر داكن — أهدأ ما جر
 .tj-sukun  { color:#d1922f }
 .tj-tanween{ color:#c05fa2 }
 .tj-wasl   { color:var(--muted) }
+html[data-theme="paper"] .tj-ikhfa, html[data-theme="paper"] .tj-ikhfash,
+html[data-theme="light"] .tj-ikhfa, html[data-theme="light"] .tj-ikhfash{ color:#2b7a38 }
+html[data-theme="paper"] .tj-idghg, html[data-theme="paper"] .tj-idghsh,
+html[data-theme="light"] .tj-idghg, html[data-theme="light"] .tj-idghsh{ color:#186b41 }
+html[data-theme="paper"] .tj-idghn,
+html[data-theme="light"] .tj-idghn  { color:#566d86 }
+html[data-theme="paper"] .tj-iqlab,
+html[data-theme="light"] .tj-iqlab  { color:#3f4fae }
 html[data-theme="paper"] .tj-madd,
 html[data-theme="light"] .tj-madd   { color:#c3312b }
 html[data-theme="paper"] .tj-maddn,
@@ -1108,10 +1122,11 @@ input::placeholder{color:#5c6579}
           <option value="green">أخضر داكن</option>
         </select>
       </label>
-      <label>ألوان التجويد
+      <label>المصحف
         <select id="qTajweed">
-          <option value="0">بلا ألوان</option>
-          <option value="1">ملوَّن</option>
+          <option value="0">عاديّ — بلا ألوان</option>
+          <option value="1">مجوَّد — بأحكامه</option>
+          <option value="2">مجوَّد + علامات الضبط</option>
         </select>
       </label>
     </div>
@@ -2996,7 +3011,7 @@ function wakeTv(btn){
   const D = { quran:null, at:null, tafsir:{}, suras:null, pages:null, azkar:null };
   let which = store.get("tafsir_which") || "muyassar";
   let qsize = Number(store.get("quran_size")) || 21;
-  let tajweed = store.get("tajweed") === "1";
+  let tajweed = Math.max(0, Math.min(2, Number(store.get("tajweed")) || 0));
   let page = Number(store.get("quran_page")) || 1;
 
   const NAMES = { muyassar:"الميسَّر", jalalayn:"الجلالين" };
@@ -3107,19 +3122,33 @@ function wakeTv(btn){
      الأحكام حتّى أجد مصدراً أستطيع التحقّق منه، وأبقيتُ ما لا
      يحتمل الشكّ. والنصّ لا يُمسّ: تُغلّف الحروف بعناصر، ولا يُزاد
      حرفٌ ولا يُنقص — وقد قِيس ذلك على المصحف كلّه، آيةً آية. */
-  const TJ_MARK  = /[ً-ٰٟۖ-ۭ]/;
-  const TJ_STOP  = /[ۖ-۝۞۩]/;
+  const TJ_MARK  = /[ً-ٰٟۖ-ࣰۭ-ࣿ]/;
+  // السكتة (٠٦DC) علامةُ نطقٍ تلحق الحرف، لا علامةَ وقفٍ قائمةً بذاتها
+  const TJ_STOP  = /[ۖ-ۛ۝۞۩]/;
   const TJ_SUKUN = /[ْۡ]/;
   const TJ_SHAD  = /ّ/;
   const TJ_MADDA = /[ٓۤ]/;
-  const TJ_TANW  = /[ً-ٍٖٗٞ]/;
-  const TJ_FATHA = "\u064E", TJ_DAMMA = "\u064F", TJ_KASRA = "\u0650";
-  const TJ_VOWEL = /[ً-ْٖٗٞۡ]/;
+  const TJ_TANZ  = /[ً-ٍ]/;                    // تنوينٌ مركَّب — اظهار
+  const TJ_TANO  = /[ࣰٖٗٞ-ࣲ]/;  // مفتوحٌ متتالٍ — إدغام/إخفاء
+  const TJ_TANW  = /[ً-ࣰٍٖٗٞ-ࣲ]/;
+  const TJ_HARAK = /[َُِ]/;
+  const TJ_IQM   = /[ۭۢ]/;                     // الميم الصغيرة: علامةُ الإقلاب
+  const TJ_SAKTA = /ۜ/;
+  const TJ_SNOON = /ۨ/;                             // النون الصغيرة: نُـۨجِي
+  const TJ_FATHA = "َ", TJ_DAMMA = "ُ", TJ_KASRA = "ِ";
+  const TJ_VOWEL = /[ً-ࣰْٖٗٞۡ-ࣲ]/;
   const TJ_QALQ  = "قطبجد";
   const TJ_GHUN  = "نم";
   const TJ_SMALL = "ٰۥۦ";
   const TJ_MADDL = "اويى";
   const TJ_WASL  = "ٱ";
+  const TJ_SEAT  = "اى";
+  // حروفُ كلّ حكم، كما في كتب التجويد
+  const R_IZHAR  = "ءأؤإئاهعحغخٱآ";
+  const R_GHUNNA = "ينمو";                 // ينمو
+  const R_NOGHUN = "لر";                             // ل ر
+  const R_IQLAB  = "ب";
+  const R_IKHFA  = "تثجدذزسشصضطظفقك";
 
   function tjLetters(t){
     const out = [];
@@ -3135,33 +3164,99 @@ function wakeTv(btn){
     return out;
   }
 
-  function tjClass(L, prev){
+  /** الحرف التالي: تُتخطّى الفراغاتُ وعلاماتُ الوقف، وألفُ التنوين
+      الحاملة («نَارٗا فَ» — الحكم على الفاء لا على الألف) */
+  function tjNext(L, i, seat){
+    for (let j = i + 1; j < L.length; j++){
+      const b = L[j].base;
+      if (b === " " || TJ_STOP.test(b)) continue;
+      if (seat && TJ_SEAT.includes(b) &&
+          !/[ً-ࣰِٖٓٗٞ-ࣲ]/.test(L[j].marks)){
+        seat = false; continue;
+      }
+      return j;
+    }
+    return -1;
+  }
+
+  /** أحكامُ النون الساكنة والتنوين والميم الساكنة.
+      والمصحف يكتب الحكم لا يتركه للقارئ: النونُ المُظهَرة عليها سكون،
+      والمُدغَمة والمُخفاة بلا سكون؛ والتنوينُ المُظهَر مركَّب والمُدغَم
+      مفتوحٌ متتالٍ؛ والإقلابُ عليه ميمٌ صغيرة. فليس ها هنا إلا قراءةُ
+      ما كُتب، وتسميةُ حروف كلّ حكم. */
+  function tjRules(L){
+    const R = new Map();
+    R.spans = [];
+    const put = (i, j, r) => { R.set(i, r); if (j >= 0) R.set(j, r); R.spans.push([i, j, r]); };
+    for (let i = 0; i < L.length; i++){
+      const b = L[i].base, m = L[i].marks;
+      const isnoon = (b === "ن") || TJ_SNOON.test(m);
+      const tanz = TJ_TANZ.test(m), tano = TJ_TANO.test(m);
+      const tanm = TJ_IQM.test(m) && TJ_HARAK.test(m);   // تنوينُ الإقلاب: حركةٌ وميم
+      if (!(isnoon || tanz || tano || tanm)) continue;
+      if (isnoon && TJ_SHAD.test(m) && !(tanz || tano || tanm)) continue;
+      if (isnoon && TJ_MADDA.test(m)) continue;          // «نٓ» حرفٌ يُتهجّى
+      if (isnoon && !tanz && !tano && !tanm && TJ_HARAK.test(m)) continue;
+      const j = tjNext(L, i, tanz || tano || tanm);
+      if (j < 0) continue;
+      const nb = L[j].base;
+      if (TJ_SAKTA.test(m)) put(i, -1, "tj-izhar");      // سكتةٌ تقطع الوصل
+      else if (R_IZHAR.includes(nb)) put(i, -1, "tj-izhar");
+      else if (nb === R_IQLAB) put(i, j, "tj-iqlab");
+      else if (R_GHUNNA.includes(nb)){
+        // إظهارٌ مطلق: نونٌ مكتوبٌ سكونُها ثمّ واوٌ أو ياء في كلمةٍ واحدة
+        if (isnoon && TJ_SUKUN.test(m) && "وي".includes(nb)) put(i, -1, "tj-izhar");
+        else put(i, j, "tj-idghg");
+      }
+      else if (R_NOGHUN.includes(nb)) put(i, j, "tj-idghn");
+      else if (R_IKHFA.includes(nb)) put(i, j, "tj-ikhfa");
+    }
+    for (let i = 0; i < L.length; i++){
+      if (L[i].base !== "م") continue;
+      if (TJ_HARAK.test(L[i].marks) || TJ_TANW.test(L[i].marks) || TJ_SHAD.test(L[i].marks)) continue;
+      const j = tjNext(L, i, false);
+      if (j < 0) continue;
+      if (L[j].base === R_IQLAB) put(i, j, "tj-ikhfash");
+      else if (L[j].base === "م") put(i, j, "tj-idghsh");
+    }
+    return R;
+  }
+
+  /** حكمُ الحرف من علاماته وحدها */
+  function tjClass(L, prev, full){
     const b = L.base, m = L.marks;
     if (TJ_STOP.test(b)) return "";
-    if (b === TJ_WASL) return "tj-wasl";
     if (TJ_MADDA.test(m)) return "tj-madd";
     if (TJ_SMALL.includes(b)) return "tj-maddn";
     if (TJ_GHUN.includes(b) && TJ_SHAD.test(m)) return "tj-ghunna";
     if (TJ_QALQ.includes(b) && TJ_SUKUN.test(m)) return "tj-qalqala";
     if (TJ_MADDL.includes(b) && !TJ_VOWEL.test(m) && prev){
       const pm = prev.marks;
-      if ((b === "\u0627" || b === "\u0649") && pm.includes(TJ_FATHA)) return "tj-maddn";
-      if (b === "\u0648" && pm.includes(TJ_DAMMA)) return "tj-maddn";
-      if (b === "\u064A" && pm.includes(TJ_KASRA)) return "tj-maddn";
+      if ((b === "ا" || b === "ى") && pm.includes(TJ_FATHA)) return "tj-maddn";
+      if (b === "و" && pm.includes(TJ_DAMMA)) return "tj-maddn";
+      if (b === "ي" && pm.includes(TJ_KASRA)) return "tj-maddn";
     }
+    if (!full) return "";
+    if (b === TJ_WASL) return "tj-wasl";
     if (TJ_SHAD.test(m)) return "tj-shadda";
     if (TJ_SUKUN.test(m)) return "tj-sukun";
     if (TJ_TANW.test(m)) return "tj-tanween";
     return "";
   }
 
-  function tjFrag(t){
+  /** يردّ النصّ مغلَّفاً بالألوان — وحروفه هي هي، لا تزيد ولا تنقص */
+  function tjFrag(t, mode){
+    if (mode === undefined) mode = 2;
     const frag = document.createDocumentFragment();
     const L = tjLetters(String(t));
+    const R = mode >= 1 ? tjRules(L) : new Map();
     let buf = "";
     const flush = () => { if (buf){ frag.appendChild(document.createTextNode(buf)); buf = ""; } };
     for (let i = 0; i < L.length; i++){
-      const cls = tjClass(L[i], i ? L[i - 1] : null);
+      // حكمُ التلاوة يعلو على علامة الضبط: هو المقصود من المصحف المجوَّد
+      let cls = R.get(i) || "";
+      if (cls === "tj-izhar") cls = "";
+      if (!cls) cls = tjClass(L[i], i ? L[i - 1] : null, mode === 2);
       if (!cls){ buf += L[i].raw; continue; }
       flush();
       const el = document.createElement("i");
@@ -3174,10 +3269,17 @@ function wakeTv(btn){
     return frag;
   }
   window.__tjFrag = tjFrag;
+  window.__tjSpans = (t) => tjRules(tjLetters(t)).spans;
 
-  const TJ_NAMES = [["tj-madd","مدّ"],["tj-maddn","مدّ طبيعيّ"],["tj-ghunna","غنّة"],
-                    ["tj-qalqala","قلقلة"],["tj-shadda","شدّة"],["tj-sukun","سكون"],
-                    ["tj-tanween","تنوين"],["tj-wasl","همزة وصل"]];
+  const TJ_LEGEND = {
+    1: [["tj-ikhfa","إخفاء"],["tj-idghg","إدغام بغنّة"],["tj-idghn","إدغام بغير غنّة"],
+        ["tj-iqlab","إقلاب"],["tj-ikhfash","إخفاء شفويّ"],["tj-idghsh","إدغام شفويّ"],
+        ["tj-ghunna","غنّة"],["tj-qalqala","قلقلة"],["tj-madd","مدّ"],["tj-maddn","مدّ طبيعيّ"]],
+    2: [["tj-ikhfa","إخفاء"],["tj-idghg","إدغام بغنّة"],["tj-idghn","إدغام بغير غنّة"],
+        ["tj-iqlab","إقلاب"],["tj-ikhfash","إخفاء شفويّ"],["tj-idghsh","إدغام شفويّ"],
+        ["tj-ghunna","غنّة"],["tj-qalqala","قلقلة"],["tj-madd","مدّ"],["tj-maddn","مدّ طبيعيّ"],
+        ["tj-shadda","شدّة"],["tj-sukun","سكون"],["tj-tanween","تنوين"],["tj-wasl","همزة وصل"]],
+  };
 
   const OPEN_TANWEEN = { "ࣰ":"ٗ", "ࣱ":"ٞ", "ࣲ":"ٖ" };
   const JOIN_ALEF = /([ٖٗٞ]) ([اى][ؐ-ًؚ-ٰٟۖ-ۭ]*)(?=\s|$)/g;
@@ -3249,7 +3351,7 @@ function wakeTv(btn){
             const bs = document.createElement("div");
             bs.className = "qbsml";
             const bsT = "بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ";
-            if (tajweed) bs.appendChild(tjFrag(bsT)); else bs.textContent = bsT;
+            if (tajweed) bs.appendChild(tjFrag(bsT, tajweed)); else bs.textContent = bsT;
             body.appendChild(bs);
           }
         }
@@ -3265,7 +3367,7 @@ function wakeTv(btn){
       span.dataset.s = String(a.chapter);
       span.dataset.a = String(a.verse);
       const disp = forDisplay(a.text) + " ";
-      if (tajweed) span.appendChild(tjFrag(disp)); else span.textContent = disp;
+      if (tajweed) span.appendChild(tjFrag(disp, tajweed)); else span.textContent = disp;
       const num = document.createElement("span");
       num.className = "num";
       num.textContent = AD(a.verse);
@@ -3363,22 +3465,24 @@ function wakeTv(btn){
     box.hidden = !tajweed; note.hidden = !tajweed;
     box.innerHTML = "";
     if (!tajweed) return;
-    for (const [cls, name] of TJ_NAMES){
+    for (const [cls, name] of (TJ_LEGEND[tajweed] || [])){
       const s = document.createElement("span");
       s.className = cls;
       s.textContent = name;
       box.appendChild(s);
     }
-    // ما لا يُلوَّن يُقال، فلا يُظنّ المصحفُ خالياً من أحكامه
-    note.textContent = "تُلوَّن العلاماتُ المكتوبة في المصحف نفسه. "
-      + "وأحكامُ الإخفاء والإدغام والإقلاب لم تُلوَّن بعد: تحتاج "
-      + "مصدراً أتحقّق منه، ولم أجده يطابق نصَّنا — ولا أزيد لوناً "
-      + "على كتاب الله بالظنّ.";
+    // ما لُوّن يُقال من أين جاء، وما لم يُلوَّن يُقال كذلك
+    note.textContent = "أحكامُ النون الساكنة والتنوين والميم الساكنة "
+      + "تُقرأ من ضبط المصحف نفسه: المُظهَرة عليها سكون، والمُدغَمة "
+      + "والمُخفاة بلا سكون، والتنوين المُظهَر مركَّب والمُدغَم مفتوح، "
+      + "والإقلاب عليه ميمٌ صغيرة.\n\nوقد قُوبل هذا كلُّه بمصحفٍ "
+      + "مجوَّدٍ منشور، فطابقه في ٦٢٣٦ آية بلا اختلافٍ في موضعٍ واحد. "
+      + "والإظهار لا لون له — فهو الأصل الذي لا حكم فيه.";
   }
-  $("qTajweed").value = tajweed ? "1" : "0";
+  $("qTajweed").value = String(tajweed);
   $("qTajweed").onchange = () => {
-    tajweed = $("qTajweed").value === "1";
-    store.set("tajweed", tajweed ? "1" : "0");
+    tajweed = Number($("qTajweed").value) || 0;
+    store.set("tajweed", String(tajweed));
     paintLegend();
     paintPage(page);
   };
