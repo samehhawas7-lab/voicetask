@@ -35,6 +35,15 @@ const SURA_AYAHS = [
 ];
 const TOTAL_AYAHS = SURA_AYAHS.reduce((a, b) => a + b, 0);   // ٦٢٣٦
 
+// صفحاتُ بدء الأجزاء الثلاثين في مصحف المدينة — جدولٌ مستقلٌّ نقيس به
+// ما يُنزَّل، كما نقيس المصحف بجدول آيات السور. فإن طابقها الملفُّ في
+// الثلاثين جميعاً فهو تخطيطُ مصحف المدينة لا غيره.
+const JUZ_PAGES = [
+  1, 22, 42, 62, 82, 102, 121, 142, 162, 182, 201, 222, 242, 262, 282,
+  302, 322, 342, 362, 382, 402, 422, 442, 462, 482, 502, 522, 542, 562, 582,
+];
+const TOTAL_PAGES = 604;
+
 const BASE = "https://raw.githubusercontent.com/fawazahmed0/quran-api/1";
 
 const SOURCES = {
@@ -61,6 +70,12 @@ const SOURCES = {
     file: "suras.json",
     label: "فهرس السور",
     credit: "quran-api",
+  },
+  pages: {
+    url: BASE + "/info.json",
+    file: "pages.json",
+    label: "تخطيط صفحات مصحف المدينة",
+    credit: "quran-api — وقِيس ببدايات الأجزاء الثلاثين",
   },
   azkar: {
     url: "https://raw.githubusercontent.com/osamayy/azkar-db/master/azkar.json",
@@ -152,6 +167,55 @@ function shrinkMeta(obj) {
   }));
 }
 
+/**
+ * تخطيط صفحات مصحف المدينة: لكلّ صفحةٍ أوّلُ آيةٍ فيها وآخرُها وجزؤها.
+ *
+ * ولا يُقبل الملف حتى يجتاز أربعة قياسات: أن تكون الصفحات ٦٠٤، وأن
+ * تُغطّي ٦٢٣٦ آية بلا نقصٍ ولا تكرار، وألّا يتراجع ترقيمها ولا يقفز،
+ * وأن تقع بداياتُ الأجزاء الثلاثين على الصفحات المعتمدة. فما طابق
+ * الأربعة فهو المصحف المدنيّ الذي بين يديه، لا تخطيطاً آخر.
+ */
+function shrinkPages(obj) {
+  const ch = obj && obj.chapters;
+  if (!Array.isArray(ch) || ch.length !== 114) throw new Error("الفهرس ناقص");
+
+  const flat = [];
+  for (const c of ch) {
+    for (const v of c.verses || []) {
+      flat.push({ s: c.chapter, a: v.verse, p: v.page, j: v.juz });
+    }
+  }
+  if (flat.length !== TOTAL_AYAHS) {
+    throw new Error("عدد الآيات " + flat.length + " والمنتظر " + TOTAL_AYAHS);
+  }
+
+  const pages = [];
+  let prev = 0;
+  for (const r of flat) {
+    if (!(r.p >= 1 && r.p <= TOTAL_PAGES)) throw new Error("رقم صفحة خارج المدى: " + r.p);
+    if (r.p < prev || r.p > prev + 1) {
+      throw new Error("ترقيم الصفحات غير متّصل عند " + r.s + ":" + r.a);
+    }
+    if (r.p !== prev) { pages.push([r.s, r.a, r.s, r.a, r.j]); prev = r.p; }
+    else { const last = pages[pages.length - 1]; last[2] = r.s; last[3] = r.a; }
+  }
+  if (pages.length !== TOTAL_PAGES) {
+    throw new Error("عدد الصفحات " + pages.length + " والمنتظر " + TOTAL_PAGES);
+  }
+  // والجزء قد يبدأ في وسط صفحة، فصفحتُه هي صفحةُ أوّل آيةٍ منه —
+  // لا أوّلُ صفحةٍ تبدأ به
+  const juzPage = {};
+  for (const r of flat) if (juzPage[r.j] === undefined) juzPage[r.j] = r.p;
+  for (let z = 0; z < 30; z++) {
+    const at = juzPage[z + 1];
+    if (at !== JUZ_PAGES[z]) {
+      throw new Error("الجزء " + (z + 1) + " يبدأ في صفحة " + at +
+                      " والمعتمد " + JUZ_PAGES[z]);
+    }
+  }
+  return pages;
+}
+
 /** الأذكار: تُحوَّل من صيغة الجدول إلى قائمة مفهومة، بمراجعها */
 function shrinkAzkar(obj) {
   const rows = obj && obj.rows;
@@ -161,6 +225,150 @@ function shrinkAzkar(obj) {
   })).filter((z) => z.text && z.cat);
   if (out.length < 100) throw new Error("الأذكار أقلّ مما ينبغي: " + out.length);
   return out;
+}
+
+// ============================================================
+// التلاوة
+//
+// **لا أدّعي أنّي جرّبتُ هذه العناوين.** مضيفو التلاوات محجوبون عن
+// المكان الذي كُتبت فيه هذه الشيفرة، فلم أستطع قياسها بنفسي. ولو
+// كتبتُ عنواناً واحداً وقلت «هذا هو» لكان ظنّاً يُعرض على صاحب البيت
+// كأنه علم.
+//
+// فلكلّ قارئٍ **عناوينُ مرشَّحة**، ويقيسها الخادم في البيت: يطلب أوّل
+// آيةٍ من كلٍّ ويأخذ أوّل من يردّ، ويحفظ ما نجح. وما لم يردّ منها
+// يُقال صراحةً في الصفحة: «هذا القارئ لم يُجب».
+//
+// والقياس يقع حيث يُنتفع به — على شبكته لا على شبكتي.
+// ============================================================
+
+const AUDIO = path.join(DATA, "audio");
+
+const RECITERS = [
+  {
+    key: "husary", name: "محمود خليل الحصري", note: "مرتَّل",
+    urls: [
+      "https://everyayah.com/data/Husary_128kbps/{sss}{aaa}.mp3",
+      "https://cdn.islamic.network/quran/audio/128/ar.husary/{n}.mp3",
+      "https://everyayah.com/data/Husary_64kbps/{sss}{aaa}.mp3",
+    ],
+  },
+  {
+    key: "minshawi", name: "محمد صدّيق المنشاوي", note: "مرتَّل",
+    urls: [
+      "https://everyayah.com/data/Minshawy_Murattal_128kbps/{sss}{aaa}.mp3",
+      "https://cdn.islamic.network/quran/audio/128/ar.minshawi/{n}.mp3",
+      "https://everyayah.com/data/Minshawy_Mujawwad_192kbps/{sss}{aaa}.mp3",
+    ],
+  },
+  {
+    key: "ajamy", name: "أحمد بن علي العجمي", note: "مرتَّل",
+    urls: [
+      "https://everyayah.com/data/ahmed_ibn_ali_al_ajamy_128kbps/{sss}{aaa}.mp3",
+      "https://cdn.islamic.network/quran/audio/128/ar.ahmedajamy/{n}.mp3",
+      "https://everyayah.com/data/Ahmed_ibn_Ali_al_Ajamy_64kbps_QuranExplorer.Com/{sss}{aaa}.mp3",
+    ],
+  },
+  {
+    key: "hudhaify", name: "علي بن عبدالرحمن الحذيفي", note: "مرتَّل",
+    urls: [
+      "https://everyayah.com/data/Hudhaify_128kbps/{sss}{aaa}.mp3",
+      "https://cdn.islamic.network/quran/audio/128/ar.hudhaify/{n}.mp3",
+      "https://everyayah.com/data/Hudhaify_64kbps/{sss}{aaa}.mp3",
+    ],
+  },
+];
+
+/** رقم الآية في المصحف كلّه (١…٦٢٣٦) — تحتاجه بعض المصادر */
+function globalAyah(sura, ayah) {
+  if (!(sura >= 1 && sura <= 114)) throw new Error("رقم سورة خارج المدى");
+  if (!(ayah >= 1 && ayah <= SURA_AYAHS[sura - 1])) throw new Error("رقم آية خارج المدى");
+  let n = ayah;
+  for (let s = 1; s < sura; s++) n += SURA_AYAHS[s - 1];
+  return n;
+}
+
+const pad = (n, w) => String(n).padStart(w, "0");
+
+function audioUrl(tpl, sura, ayah) {
+  return tpl
+    .replace("{sss}", pad(sura, 3))
+    .replace("{aaa}", pad(ayah, 3))
+    .replace("{n}", String(globalAyah(sura, ayah)));
+}
+
+/**
+ * يطلب أوّل كيلوبايت فقط: يكفي ليُعرف أالعنوان حيٌّ أم لا، ولا
+ * يُحمِّل شبكته ملفاً كاملاً في القياس.
+ */
+function probeUrl(url, ms = 12000) {
+  return new Promise((resolve) => {
+    const req = https.get(url, { timeout: ms, headers: { Range: "bytes=0-1023" } }, (res) => {
+      const code = res.statusCode;
+      if (code >= 300 && code < 400 && res.headers.location) {
+        res.resume();
+        return resolve(probeUrl(res.headers.location, ms));
+      }
+      const type = String(res.headers["content-type"] || "");
+      let got = 0;
+      res.on("data", (c) => { got += c.length; if (got > 512) req.destroy(); });
+      res.on("end", () => resolve({ ok: (code === 200 || code === 206) && got > 0, code, type }));
+      res.on("close", () => resolve({ ok: (code === 200 || code === 206) && got > 0, code, type }));
+      res.on("error", () => resolve({ ok: false, why: "انقطع" }));
+    });
+    req.on("timeout", () => { req.destroy(); resolve({ ok: false, why: "انتهت المهلة" }); });
+    req.on("error", (e) => resolve({ ok: false, why: e.message }));
+  });
+}
+
+/** يقيس القرّاء واحداً واحداً، ويردّ ما نجح وما لم ينجح بصراحة */
+async function probeReciters(log = () => {}, only = null) {
+  const out = {};
+  for (const r of RECITERS) {
+    if (only && r.key !== only) continue;
+    out[r.key] = { name: r.name, url: null, tried: [] };
+    for (const tpl of r.urls) {
+      const u = audioUrl(tpl, 1, 1);
+      const res = await probeUrl(u);
+      out[r.key].tried.push({ url: tpl, ok: res.ok, code: res.code || 0, why: res.why || "" });
+      log("audio: " + r.key + " " + (res.ok ? "OK" : "no") + " <- " + u +
+          (res.ok ? "" : " (" + (res.why || res.code) + ")"));
+      if (res.ok) { out[r.key].url = tpl; break; }
+    }
+  }
+  return out;
+}
+
+/** مسار الآية على القرص — وهو ما يجعلها تعمل بلا إنترنت بعد حفظها */
+function ayahFile(reciter, sura, ayah) {
+  if (!/^[a-z0-9_]{1,24}$/.test(String(reciter))) throw new Error("قارئ غير معروف");
+  return path.join(AUDIO, reciter, pad(sura, 3) + pad(ayah, 3) + ".mp3");
+}
+
+function haveAyah(reciter, sura, ayah) {
+  try { return fs.statSync(ayahFile(reciter, sura, ayah)).size > 0; } catch { return false; }
+}
+
+/** يجلب آيةً ويحفظها. والمحفوظ لا يُجلب ثانيةً أبداً */
+async function fetchAyah(reciter, tpl, sura, ayah) {
+  const file = ayahFile(reciter, sura, ayah);
+  if (haveAyah(reciter, sura, ayah)) return file;
+  const buf = await get(audioUrl(tpl, sura, ayah), true);
+  // ملفٌّ أصغر من كيلوبايتين ليس تلاوة — غالباً صفحةُ خطأ بصيغة HTML
+  if (buf.length < 2048) throw new Error("ما جاء صوتٌ (" + buf.length + " بايت)");
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const tmp = file + ".part";
+  fs.writeFileSync(tmp, buf);
+  fs.renameSync(tmp, file);
+  return file;
+}
+
+/** كم من سورةٍ محفوظٌ عندنا؟ */
+function suraSaved(reciter, sura) {
+  const total = SURA_AYAHS[sura - 1];
+  let n = 0;
+  for (let a = 1; a <= total; a++) if (haveAyah(reciter, sura, a)) n++;
+  return { have: n, total };
 }
 
 function have(name) { return fs.existsSync(path.join(DATA, name)); }
@@ -176,13 +384,17 @@ function readJson(name) {
 async function ensureData(log = () => {}, onStep = () => {}) {
   fs.mkdirSync(DATA, { recursive: true });
   const done = [], failed = [];
+  // الفهرس وتخطيط الصفحات يُستخرجان من ملفٍ واحد وزنه ميغابايتان —
+  // فلا يُجلب مرّتين على شبكةٍ قد تكون بطيئة
+  const fetched = new Map();
 
   for (const [key, src] of Object.entries(SOURCES)) {
     if (have(src.file)) { done.push(key); continue; }
     onStep({ key, label: src.label, state: "downloading" });
     log("islam: fetching " + src.file);
     try {
-      const buf = await get(src.url, src.binary);
+      let buf = fetched.get(src.url);
+      if (!buf) { buf = await get(src.url, src.binary); fetched.set(src.url, buf); }
       let toWrite = buf;
 
       if (!src.binary) {
@@ -191,6 +403,7 @@ async function ensureData(log = () => {}, onStep = () => {}) {
         else if (key === "muyassar" || key === "jalalayn") {
           verifyTafsir(obj); toWrite = Buffer.from(JSON.stringify(obj));
         } else if (key === "meta") toWrite = Buffer.from(JSON.stringify(shrinkMeta(obj)));
+        else if (key === "pages") toWrite = Buffer.from(JSON.stringify(shrinkPages(obj)));
         else if (key === "azkar") toWrite = Buffer.from(JSON.stringify(shrinkAzkar(obj)));
       }
 
@@ -330,7 +543,9 @@ function hhmm(t) {
 }
 
 module.exports = {
-  SOURCES, SURA_AYAHS, TOTAL_AYAHS, DATA,
-  ensureData, verifyQuran, verifyTafsir, shrinkMeta, shrinkAzkar,
+  SOURCES, SURA_AYAHS, TOTAL_AYAHS, JUZ_PAGES, TOTAL_PAGES, DATA, AUDIO,
+  RECITERS, globalAyah, audioUrl, probeUrl, probeReciters,
+  ayahFile, haveAyah, fetchAyah, suraSaved,
+  ensureData, verifyQuran, verifyTafsir, shrinkMeta, shrinkAzkar, shrinkPages,
   have, readJson, qibla, distanceToKaaba, prayerTimes, hhmm, METHODS,
 };

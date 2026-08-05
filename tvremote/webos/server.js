@@ -29,6 +29,9 @@ const survey = require("./survey");
 const { HuaweiRouter, probe: routerProbe, find: routerFind } = require("./router");
 const { harden } = require("./secure");
 const islam = require("./islam");
+const selfupdate = require("./selfupdate");
+const tls = require("./tls");
+const tuyaScan = require("./tuya-scan");
 const { spawn } = require("child_process");
 
 // حين يعمل الخادم خدمةً في الخلفية لا سبيل لتمرير متغيّرات البيئة إليه،
@@ -106,40 +109,50 @@ async function powerOn() {
       return { ok: false, why: "ما أعرف عنوان بطاقة التلفزيون بعد — شغّله مرة واحدة يدوياً وأنا أحفظه" };
     }
   }
-  let info;
-  try {
-    info = await wake(tvMacs, { ip: tvIp });
-    log("wake: " + info.sent + " packets to " + info.targets.join(", ") +
-        " for " + info.macs.join(", ") + (info.pinned ? " (neighbour pinned)" : ""));
-  } catch (e) {
-    return { ok: false, why: "تعذّر إرسال حزمة الإيقاظ: " + e.message };
-  }
-  // ننتظر: webOS يأخذ نحو عشر ثوانٍ ليفتح منفذه بعد الإقلاع.
-  // ونبحث عنه في الشبكة كل حين — فقد يعود بعنوانٍ غير الذي كان،
-  // فنحسبه نائماً وهو مستيقظ على عنوانٍ آخر
-  for (let i = 0; i < 30; i++) {
-    if (tvIp && await verify(tvIp)) {
-      log("OK  TV is awake at " + tvIp);
-      return { ok: true, tv: tvIp, mac: tvMac, macs: info.macs };
+  // جولةٌ واحدة قد تُخطئ الموعد: بطاقةُ التلفزيون النائم تصغي متقطّعةً،
+  // وإن كان قد أُطفئ لتوّه فهو ما يزال يهبط إلى السبات فيُهمل ما يصله.
+  // رأينا في السجلّ ليلةً واحدة: جولتان نجحتا وثالثةٌ لم تنجح. فتُعاد
+  // الجولة مرّةً قبل أن نُعلن الفشل — وهي أقلُّ كلفةً من إعلانٍ كاذب.
+  let info = null, total = 0;
+  for (let round = 0; round < 2; round++) {
+    try {
+      info = await wake(tvMacs, { ip: tvIp, bursts: round ? 8 : 12 });
+      total += info.sent;
+      log("wake" + (round ? " (again)" : "") + ": " + info.sent + " packets to " +
+          info.targets.join(", ") + " for " + info.macs.join(", ") +
+          (info.pinned ? " (neighbour pinned)" : ""));
+    } catch (e) {
+      if (round) break;
+      return { ok: false, why: "تعذّر إرسال حزمة الإيقاظ: " + e.message };
     }
-    if (i === 9 || i === 19) {
-      const found = await discover(log, tvIp).catch(() => null);
-      if (found) {
-        if (found !== tvIp) { log("TV came back at " + found); tvIp = found; saveConfig(); }
-        return { ok: true, tv: found, mac: tvMac, macs: info.macs };
+    // ننتظر: webOS يأخذ نحو عشر ثوانٍ ليفتح منفذه بعد الإقلاع.
+    // ونبحث عنه في الشبكة كل حين — فقد يعود بعنوانٍ غير الذي كان،
+    // فنحسبه نائماً وهو مستيقظ على عنوانٍ آخر
+    const waits = round ? 20 : 30;
+    for (let i = 0; i < waits; i++) {
+      if (tvIp && await verify(tvIp)) {
+        log("OK  TV is awake at " + tvIp);
+        return { ok: true, tv: tvIp, mac: tvMac, macs: info.macs, sent: total };
       }
+      if (i === 9 || i === 19) {
+        const found = await discover(log, tvIp).catch(() => null);
+        if (found) {
+          if (found !== tvIp) { log("TV came back at " + found); tvIp = found; saveConfig(); }
+          return { ok: true, tv: found, mac: tvMac, macs: info.macs, sent: total };
+        }
+      }
+      await new Promise((r) => setTimeout(r, 2000));
     }
-    await new Promise((r) => setTimeout(r, 2000));
   }
   return {
     ok: false,
     mac: tvMac,
-    macs: info.macs,
-    sent: info.sent,
-    targets: info.targets,
-    pinned: info.pinned,
-    why: "أُرسلت " + info.sent + " حزمة إلى " + info.targets.length + " وجهة، ولـ" +
-         info.macs.length + " بطاقة، والتلفزيون ما استجاب. " +
+    macs: info ? info.macs : tvMacs,
+    sent: total,
+    targets: info ? info.targets : [],
+    pinned: info ? info.pinned : false,
+    why: "أُرسلت " + total + " حزمة في جولتين، ولـ" +
+         (info ? info.macs.length : tvMacs.length) + " بطاقة، والتلفزيون ما استجاب. " +
          "وقد بحثتُ عنه في الشبكة فما وجدته.",
   };
 }
@@ -431,7 +444,7 @@ function latestSha() {
   return new Promise((resolve) => {
     const req = https.get({
       host: "api.github.com",
-      path: "/repos/" + REPO + "/commits/main",
+      path: "/repos/" + REPO + "/commits/" + encodeURIComponent(CFG.branch || "main"),
       headers: { "User-Agent": "kmc-remote", "Accept": "application/vnd.github.sha" },
       timeout: 6000,
     }, (r) => {
@@ -454,24 +467,25 @@ const LATCH_MS = Number(process.env.UPDATE_LATCH_MS) || 6 * 60 * 1000;
 let updateLatch = null;
 let waking = null;          // حال آخر إيقاظ، يُسأل عنه بدل أن يُنتظر
 let islamFetching = false;
+let audioProbing = false;
+let saving = null;          // حفظُ سورةٍ جارٍ — تقدّمه يُسأل عنه
 let surveyCache = { at: 0, data: null };
 let surveyRunning = false;
 let autoUpdate = CFG.autoUpdate !== false;      // مفعّل ما لم يُطفأ صراحةً
 let lastCheck = { at: null, found: false };
+// نتيجةُ آخر تحديث — تُقرأ من الصفحة، فيُعرف سببُ التعثّر بلا سجلّ
+let lastUpdateResult = null;
+let httpsBusy = false;
+let tuyaSniffing = false;
 
 function startUpdate() {
-  if (process.platform !== "win32" && !process.env.UPDATE_CMD) {
-    return { ok: false, code: 501, why: "التحديث الذاتي لويندوز وحده" };
-  }
   if (updating) return { ok: false, code: 409, why: "التحديث جارٍ بالفعل" };
   updating = true;
 
-  const logFile = path.join(__dirname, "..", "windows", "update.log");
+  const logFile = selfupdate.LOG_FILE;
 
-  // المنصّب يقتل هذا الخادم في أثناء عمله، فالعلَم يموت بموت العملية.
-  // لكنّه إن سقط قبل أن يبلغ ذلك — تنزيلٌ فاشل، أو صلاحية ناقصة —
-  // بقي العلَم مرفوعاً أبداً، فيُقفل التحديثُ اليدويُّ والتلقائيُّ
-  // معاً، ولا سبيل إلى فكّه من التطبيق. فيُفَكّ بعد مهلة.
+  // العلَم يُفَكّ بمهلة: لو تعثّر التحديث في مكانٍ لم نتوقّعه بقي
+  // مرفوعاً أبداً فأقفل التحديث اليدويّ والتلقائيّ معاً
   clearTimeout(updateLatch);
   updateLatch = setTimeout(() => {
     if (!updating) return;
@@ -479,55 +493,33 @@ function startUpdate() {
     log("update did not finish in " + (LATCH_MS / 60000) + " min - unlatched; see " + logFile);
   }, LATCH_MS);
   if (updateLatch.unref) updateLatch.unref();
-  // نكتب ترويسةً قبل الإطلاق، ونجعل بوويرشيل يُلحق لا يستبدل (`*>>`).
-  // فإن بقي السجلّ ترويسةً وحدها عرفنا أن بوويرشيل لم يكتب حرفاً —
-  // وذلك خبرٌ في نفسه. وكان السجلّ يغيب فلا يُعرف أوقع الإطلاق أصلاً.
-  try {
-    fs.appendFileSync(logFile,
-      "\r\n==== " + new Date().toISOString() + " update requested ====\r\n");
-  } catch { /* القرص للقراءة أحياناً — لا يمنع المحاولة */ }
 
-  const cmd = process.env.UPDATE_CMD || "powershell.exe";
-  const args = process.env.UPDATE_CMD ? [] : [
-    "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command",
-    // `Start-Transcript` لا `*>>`: المنصّب يكتب بـ Write-Host، وهذا
-    // لا يلتقطه التوجيه حين يُطلق الأمر بلا نافذة — فكان السجلّ يبقى
-    // ترويسةً وحدها ولا نعرف أين وقف.
-    // و TLS يُضبط صراحةً: بوويرشيل ٥ يبدأ أحياناً ببروتوكول قديم
-    // ترفضه GitHub فيسقط الجلب صامتاً.
-    "$ErrorActionPreference='Continue'; " +
-    "try { Start-Transcript -Path '" + logFile + "' -Append -Force | Out-Null } catch {}; " +
-    "[Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12; " +
-    "try { irm '" + INSTALLER + "' | iex } catch { Write-Output ('INSTALLER FAILED: ' + $_.Exception.Message) }; " +
-    "try { Stop-Transcript | Out-Null } catch {}",
-  ];
-
-  try {
-    // منفصلاً وجوباً: المنصّب يقتل عمليات node التابعة للمشروع، وهذا
-    // الخادم منها. ولولا الفصل لمات المنصّب مع من أطلقه قبل أن يُتمّ.
-    const child = spawn(cmd, args, {
-      detached: true,
-      stdio: "ignore",
-      windowsHide: true,
-      shell: !!process.env.UPDATE_CMD,
-      // لا سؤال حين لا أحد أمام الشاشة: المنصّب يقتل هذا الخادم قبل
-      // أن يُتمّ، فلو وقف عند سؤالٍ لا مجيب له لَبقي البيت بلا خادم
-      env: Object.assign({}, process.env, { KMC_NO_PROMPT: "1" }),
-    });
-    // فشلُ الإطلاق يقع بعد العودة لا فيها (ENOENT مثلاً)، فبلا هذا
-    // المعالج يبقى الخطأ مكتوماً ويظنّ صاحبُ البيت أن التنصيب يمضي
-    child.on("error", (e) => {
+  // node يحدّث نفسه: يجلب ويقيس ثم يستبدل دفعةً ثم يخرج، و run.cmd
+  // يعيده. ولا بوويرشيل في الطريق — وكان هو موضع الانكسار الصامت
+  selfupdate.selfUpdate({ repo: REPO, branch: CFG.branch || "main", log })
+    .then((r) => {
       updating = false;
-      log("update failed to start: " + e.message);
-      try { fs.appendFileSync(logFile, "spawn failed: " + e.message + "\r\n"); } catch {}
+      clearTimeout(updateLatch);
+      if (!r.ok) {
+        log("update failed: " + r.why);
+        lastUpdateResult = { ok: false, why: r.why, at: Date.now(),
+                             needsInstaller: !!r.needsInstaller };
+        return;
+      }
+      lastUpdateResult = { ok: true, sha: r.sha, at: Date.now() };
+      log("update done (" + r.sha.slice(0, 7) + ") - restarting in 2s");
+      // مهلةٌ قصيرة ليصل الجواب إلى الصفحة قبل أن ينقطع الخادم
+      setTimeout(() => process.exit(0), 2000);
+    })
+    .catch((e) => {
+      updating = false;
+      clearTimeout(updateLatch);
+      log("update crashed: " + e.message);
+      lastUpdateResult = { ok: false, why: e.message, at: Date.now() };
     });
-    child.unref();
-    log("update started -> " + logFile);
-    return { ok: true, log: logFile };
-  } catch (e) {
-    updating = false;
-    return { ok: false, code: 500, why: e.message };
-  }
+
+  log("update started -> " + logFile);
+  return { ok: true, log: logFile };
 }
 
 
@@ -583,9 +575,23 @@ function servePage(res) {
   // الصفحةُ ختمَها بما عند الخادم وتُعيد تحميل نفسها إن تخلّفت.
   let stamp = "";
   try { stamp = String(fs.statSync(PAGE).mtimeMs | 0); } catch {}
+  // وفاهمُ الأمر المنطوق يُحقن مع الصفحة لا يُطلب بعدها.
+  //
+  // **ولماذا؟** كان `<script src="/voice.js">` وسمَ تحميلٍ حاجزاً:
+  // المتصفّح يقف عنده فلا يرسم شيئاً حتى يصله الملف. فإن تعثّر الطلب
+  // — والخادم يُعاد تشغيله، والشبكة تتقلّب — بقيت الشاشة سوداء وقد
+  // نزلت الصفحة كاملة. **فالصفحة لا يجوز أن تحتاج طلباً ثانياً
+  // لتُرسم** (القاعدة الخامسة عشرة). وهو ملفٌّ واحد ما زال، يُقاس في
+  // node ويُحقن هنا — لا نسختان تفترقان.
+  let voiceSrc = "";
+  try { voiceSrc = fs.readFileSync(path.join(__dirname, "voice.js"), "utf8"); } catch {}
   const flag = `<script>window.__TV_PROXY__=${JSON.stringify(tvIp || "auto")};` +
-               `window.__BUILD__=${JSON.stringify(stamp)};</script>\n`;
-  html = html.replace("<script>", flag + "<script>");
+               `window.__BUILD__=${JSON.stringify(stamp)};</script>\n` +
+               (voiceSrc ? "<script>\n" + voiceSrc + "\n</script>\n" : "");
+  // بدالةٍ لا بنصّ: `String.replace` تُفسّر `$&` و`` $` `` في نصّ
+  // البديل، فيوم يدخل أحدها في voice.js تنسخ الصفحةُ نفسها في نفسها
+  // وتخرج مسخاً صامتاً. والدالّة لا تُفسّر شيئاً.
+  html = html.replace("<script>", () => flag + "<script>");
   res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" });
   res.end(html);
 }
@@ -608,7 +614,9 @@ const server = http.createServer((req, res) => {
                     "/proj/find", "/proj/key", "/proj/app", "/proj/wake", "/proj/sleep",
                     "/router/link", "/router/find", "/router/block", "/router/wifi",
                     "/router/reboot", "/restart", "/static-ip", "/ssh/enable",
-                    "/islam/fetch", "/islam/place"];
+                    "/islam/fetch", "/islam/place",
+                    "/islam/audio/probe", "/islam/audio/save", "/islam/audio/stop",
+                    "/https/enable"];
   if (CHANGING.includes(url.pathname)) {
     if (req.method !== "POST") {
       return json(405, { ok: false, why: "هذه النقطة تُطلب بـ POST" });
@@ -671,6 +679,35 @@ const server = http.createServer((req, res) => {
       .finally(() => { surveyRunning = false; });
   }
 
+  // ---------- الشهادة ----------
+  // زرٌّ في الجوّال يستصدرها، فلا يُقام إلى اللابتوب لأجلها
+  if (url.pathname === "/https") {
+    const c = tls.current();
+    return tls.dnsName().then((d) => json(200, {
+      ok: true,
+      have: !!c, name: (c && c.name) || d.name || null,
+      at: (c && c.at) || null,
+      port: HTTPS_PORT,
+      serving: !!secureServer,
+      why: d.name ? "" : d.why,
+      url: (c && c.name) ? "https://" + c.name + ":" + HTTPS_PORT : null,
+    }));
+  }
+
+  if (url.pathname === "/https/enable") {
+    if (httpsBusy) return json(200, { ok: true, running: true });
+    httpsBusy = true;
+    return tls.issue(log)
+      .then((r) => {
+        if (r.ok && !secureServer) startSecure();
+        return json(r.ok ? 200 : 502, Object.assign(r, {
+          url: r.ok ? "https://" + r.name + ":" + HTTPS_PORT : null,
+        }));
+      })
+      .catch((e) => json(500, { ok: false, why: e.message }))
+      .finally(() => { httpsBusy = false; });
+  }
+
   if (url.pathname === "/version") {
     const inst = installedVersion();
     return latestSha().then((latest) => json(200, {
@@ -682,6 +719,9 @@ const server = http.createServer((req, res) => {
       updating,
       autoUpdate,
       lastCheck: lastCheck.at,
+      // سببُ تعثّر آخر محاولة يُعرض في الصفحة نفسها — لا يُبحث عنه
+      // في سجلّ على اللابتوب
+      last: lastUpdateResult,
     }));
   }
 
@@ -786,6 +826,96 @@ const server = http.createServer((req, res) => {
       const type = src.binary ? "font/woff2" : "application/json; charset=utf-8";
       res.writeHead(200, { "Content-Type": type, "Cache-Control": "public, max-age=604800" });
       return fs.createReadStream(p).pipe(res);
+    }
+
+    // ---------- التلاوة ----------
+    // القرّاء ومصادرهم: ما قِيس منها في هذا البيت، لا ما ظننتُه أنا
+    if (rest === "audio/reciters") {
+      const picked = CFG.reciters || {};
+      const list = islam.RECITERS.map((r) => ({
+        key: r.key, name: r.name, note: r.note,
+        ready: !!picked[r.key], saved: 0,
+      }));
+      return json(200, { ok: true, reciters: list, probed: !!CFG.recitersProbedAt,
+                         at: CFG.recitersProbedAt || null });
+    }
+
+    if (rest === "audio/probe") {
+      if (audioProbing) return json(200, { ok: true, running: true });
+      audioProbing = true;
+      const only = url.searchParams.get("r") || null;
+      return islam.probeReciters(log, only)
+        .then((r) => {
+          const picked = Object.assign({}, CFG.reciters || {});
+          for (const [k, v] of Object.entries(r)) {
+            if (v.url) picked[k] = v.url; else delete picked[k];
+          }
+          CFG.reciters = picked;
+          CFG.recitersProbedAt = new Date().toISOString();
+          saveConfig();
+          return json(200, { ok: true, result: r, picked });
+        })
+        .catch((e) => json(500, { ok: false, why: e.message }))
+        .finally(() => { audioProbing = false; });
+    }
+
+    // آيةٌ واحدة: من القرص إن كانت محفوظة، وإلا تُجلب وتُحفظ ثم تُقدَّم.
+    // فالاستماع نفسه يبني المكتبة شيئاً فشيئاً
+    if (rest === "audio/ayah") {
+      const r = String(url.searchParams.get("r") || "");
+      const s = Number(url.searchParams.get("s")), a = Number(url.searchParams.get("a"));
+      const tpl = (CFG.reciters || {})[r];
+      if (!tpl) return json(404, { ok: false, why: "هذا القارئ لم يُقَس بعد", need: "probe" });
+      let file;
+      try { file = islam.ayahFile(r, s, a); } catch (e) { return json(400, { ok: false, why: e.message }); }
+      const send = () => {
+        const st = fs.statSync(file);
+        res.writeHead(200, {
+          "Content-Type": "audio/mpeg", "Content-Length": st.size,
+          "Cache-Control": "public, max-age=31536000",
+        });
+        fs.createReadStream(file).pipe(res);
+      };
+      if (islam.haveAyah(r, s, a)) return send();
+      return islam.fetchAyah(r, tpl, s, a).then(send)
+        .catch((e) => json(502, { ok: false, why: e.message }));
+    }
+
+    // حفظُ سورةٍ كاملة للاستماع بلا إنترنت
+    if (rest === "audio/save") {
+      const r = String(url.searchParams.get("r") || "");
+      const s = Number(url.searchParams.get("s"));
+      const tpl = (CFG.reciters || {})[r];
+      if (!tpl) return json(404, { ok: false, why: "هذا القارئ لم يُقَس بعد", need: "probe" });
+      if (!(s >= 1 && s <= 114)) return json(400, { ok: false, why: "رقم سورة خارج المدى" });
+      if (saving && !saving.done) return json(200, { ok: true, running: true, at: saving });
+      const total = islam.SURA_AYAHS[s - 1];
+      saving = { r, s, done: false, n: 0, total, failed: 0, why: "" };
+      const mine = saving;
+      (async () => {
+        for (let a = 1; a <= total; a++) {
+          try { await islam.fetchAyah(r, tpl, s, a); } catch { mine.failed++; }
+          mine.n = a;
+          if (mine.stop) break;
+        }
+        mine.done = true;
+        log("audio: saved sura " + s + " for " + r + " — " +
+            (total - mine.failed) + "/" + total);
+      })();
+      return json(200, { ok: true, started: true, total });
+    }
+
+    if (rest === "audio/stop") {
+      if (saving && !saving.done) { saving.stop = true; log("audio: save cancelled"); }
+      return json(200, { ok: true });
+    }
+
+    if (rest === "audio/status") {
+      const r = String(url.searchParams.get("r") || "");
+      const s = Number(url.searchParams.get("s"));
+      const out = { ok: true, saving: saving && !saving.done ? saving : null };
+      if ((CFG.reciters || {})[r] && s >= 1 && s <= 114) out.sura = islam.suraSaved(r, s);
+      return json(200, out);
     }
 
     if (rest === "times") {
@@ -908,6 +1038,45 @@ const server = http.createServer((req, res) => {
     return json(r.ok ? 200 : (r.code || 500), r);
   }
 
+  // فاهمُ الأمر المنطوق — ملفٌّ واحد يعمل هنا وفي المتصفّح، فما
+  // قِيس في node هو نفسه ما يفهم في الجوّال
+  // كشفُ أجهزة Tuya: نُنصت لما تعلنه الأجهزة عن نفسها، فلا يُدَّعى
+  // على جهازٍ أنه Tuya حتى يقولها هو
+  if (url.pathname === "/tuya/sniff") {
+    if (tuyaSniffing) return json(200, { ok: true, running: true });
+    tuyaSniffing = true;
+    const secs = Math.min(30, Math.max(5, Number(url.searchParams.get("s")) || 15));
+    return tuyaScan.sniff(secs * 1000, log)
+      .then((r) => {
+        // ما نعرفه منها سلفاً يُعلَّم، فيُعرف الجديد من القديم
+        const known = new Set(Object.values(acSecrets.rooms || {}).filter(Boolean));
+        const named = new Map((acSecrets.devices || []).map((d) => [d.id, d.name || ""]));
+        r.devices = r.devices.map((d) => Object.assign({}, d, {
+          known: known.has(d.id),
+          name: named.get(d.id) || "",
+        }));
+        return json(200, r);
+      })
+      .catch((e) => json(500, { ok: false, why: e.message }))
+      .finally(() => { tuyaSniffing = false; });
+  }
+
+  // يبقى للتوافق — والصفحة لم تعد تحتاجه. ويُقرأ دفعةً لا بمجرى:
+  // المجرى إن أخطأ بعد إرسال الترويسة بقي الطلب معلّقاً إلى الأبد،
+  // وخطؤه بلا معالج يُسقط الخادم كلَّه. وأيُّهما وقع رأى صاحب البيت
+  // شاشةً سوداء لا يعرف سببها.
+  if (url.pathname === "/voice.js") {
+    let src;
+    try { src = fs.readFileSync(path.join(__dirname, "voice.js")); }
+    catch (e) {
+      res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
+      return res.end("// voice.js غير موجود: " + e.message);
+    }
+    res.writeHead(200, { "Content-Type": "application/javascript; charset=utf-8",
+                         "Content-Length": src.length, "Cache-Control": "no-store" });
+    return res.end(src);
+  }
+
   if (url.pathname === "/health") {
     let stamp = "";
     try { stamp = String(fs.statSync(PAGE).mtimeMs | 0); } catch {}
@@ -982,8 +1151,18 @@ const server = http.createServer((req, res) => {
     if (what === "app") {
       const pkg = url.searchParams.get("pkg") || "";
       if (!PKGNAME.test(pkg)) return json(400, { ok: false, why: "اسم حزمة غير صالح" });
-      return projShell("monkey -p " + pkg + " -c android.intent.category.LAUNCHER 1")
-        .then(() => json(200, { ok: true })).catch(fail);
+      // `am start` لا `monkey`: الأخير مولّدُ ضغطاتٍ عشوائية لا مُشغّل
+      // تطبيقات — وإن لم يجد ما يفتحه ضغط أزراراً من عنده، فيقفز
+      // الجهاز إلى شاشته الرئيسية. وهو تفسيرُ ما كان يقع.
+      return projShell("am start -a android.intent.action.MAIN " +
+                       "-c android.intent.category.LAUNCHER -p " + pkg)
+        .then((out) => {
+          // `am` يكتب سببَ الفشل ولا يرفع خطأ — فيُقرأ ما كتب
+          if (/Error|Exception|does not exist|no activity/i.test(out || "")) {
+            return json(502, { ok: false, why: "لم يُفتح: " + String(out).split("\n")[0].slice(0, 120) });
+          }
+          return json(200, { ok: true, out: out || "" });
+        }).catch(fail);
     }
     // الإيقاظ: WAKEUP يوقظ ولا يُطفئ، بخلاف POWER الذي يقلب الحالة
     if (what === "wake") {
@@ -1394,6 +1573,42 @@ function onFatal(e) {
 server.on("error", onFatal);
 wss.on("error", onFatal);
 
+/**
+ * خادمٌ مشفَّر بجوار العادي — لا بدلاً منه.
+ *
+ * سفاري يمنع الميكروفون والحافظة ومستشعر الاتجاه على http. فبلا هذا
+ * لا أوامرَ صوتية ولا بوصلةٌ تدور، مهما أُتقنت الشيفرة.
+ *
+ * والعادي يبقى: هو طريق النجاة إن انتهت الشهادة أو تعطّل Tailscale
+ * (القاعدة الخامسة عشرة — ما يُنقذ لا يمرّ بما قد ينكسر).
+ */
+const HTTPS_PORT = Number(process.env.HTTPS_PORT || CFG.httpsPort || 8443);
+let secureServer = null;
+
+function startSecure() {
+  if (process.env.NO_HTTPS) return;
+  const cert = tls.load();
+  if (!cert) return;
+  try {
+    secureServer = https.createServer({ key: cert.key, cert: cert.cert }, server.listeners("request")[0]);
+    // المقابس تُرقّى على الخادمين معاً، وإلا عمل الريموت على العادي وحده
+    secureServer.on("upgrade", (req, sock, head) => {
+      wss.handleUpgrade(req, sock, head, (ws) => wss.emit("connection", ws, req));
+    });
+    secureServer.on("error", (e) => {
+      log("https listen failed: " + e.message);
+      secureServer = null;
+    });
+    secureServer.listen(HTTPS_PORT, "0.0.0.0", () => {
+      console.log("  secure: https://" + cert.name + ":" + HTTPS_PORT + "   <- الصوت والبوصلة يعملان هنا");
+      log("https ready on " + HTTPS_PORT + " for " + cert.name);
+    });
+  } catch (e) {
+    log("https could not start: " + e.message);
+    secureServer = null;
+  }
+}
+
 server.listen(PORT, "0.0.0.0", () => {
   const addrs = localAddresses();
   console.log("──────────────────────────────────────────");
@@ -1409,6 +1624,8 @@ server.listen(PORT, "0.0.0.0", () => {
   console.log("");
   console.log("  TV: " + (tvIp ? tvIp + ":" + TV_PORT : "searching..."));
   console.log("──────────────────────────────────────────");
+
+  startSecure();
 
   // نتحقّق من العنوان المحفوظ فور الإقلاع، فيكون جاهزاً قبل أول ضغطة زر
   if (!process.env.TV_URL) ensureTv();

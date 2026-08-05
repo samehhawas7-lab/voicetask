@@ -245,22 +245,61 @@ input::placeholder{color:#5c6579}
 .qbar select{flex:1;min-width:130px;background:var(--surface-2);color:var(--text);
   border:1px solid var(--line);border-radius:12px;height:40px;padding:0 10px;
   font-family:inherit;font-size:13px}
-.qhead{text-align:center;background:var(--surface-2);border:1px solid var(--accent-dim);
-  border-radius:16px;padding:12px;margin-bottom:14px}
-.qhead b{display:block;font-size:17px;font-weight:700}
-.qhead small{color:var(--muted);font-size:11.5px}
-.qbody{display:grid;gap:2px}
-.ayah{padding:11px 13px;border-radius:12px;cursor:pointer;transition:background .12s}
-.ayah:active{background:var(--surface-2)}
-.ayah.open{background:var(--surface-2)}
-.ayah .txt{font-family:"Uthmani","SF Arabic","Noto Naskh Arabic",serif;
-  font-size:var(--qsize,21px);line-height:2.5;text-align:justify;text-align-last:right}
+/* الصفحة تُعرض كصفحة المصحف: نصٌّ متّصلٌ مضبوط الطرفين، لا آيةٌ في
+   كلّ سطر. وحدودُ الصفحات هي حدودُ مصحف المدينة نفسها */
+.qsheet{background:var(--surface-2);border:1px solid var(--line);border-radius:18px;
+  padding:16px 15px 8px;overflow:hidden}
+.qtext{font-family:"Uthmani","SF Arabic","Noto Naskh Arabic",serif;
+  font-size:var(--qsize,21px);line-height:2.55;text-align:justify;text-align-last:center;
+  word-spacing:.02em}
+.qtext .ay{cursor:pointer;border-radius:7px;transition:background .12s}
+.qtext .ay.sel{background:var(--accent-dim)}
 /* رقم الآية بخطّ الواجهة لا بخطّ المصحف: الخطّ العثمانيّ لا أرقام
    فيه، فكانت تُرسم مسوخاً صغيرة داخل الدائرة */
-.ayah .num{display:inline-block;min-width:27px;height:27px;line-height:25px;
+.qtext .num{display:inline-block;min-width:25px;height:25px;line-height:23px;
   border:1px solid var(--accent-dim);border-radius:50%;text-align:center;
-  font-size:12px;color:var(--accent);margin:0 6px;vertical-align:middle;
+  font-size:11px;color:var(--accent);margin:0 5px;vertical-align:middle;
   font-family:"SF Arabic","Noto Kufi Arabic",-apple-system,sans-serif}
+/* عنوان السورة يقع في وسط الصفحة كما في المصحف، لا في رأسها وحده */
+.qsura{text-align:center;background:var(--surface);border:1px solid var(--accent-dim);
+  border-radius:12px;padding:8px 10px;margin:14px 2px 10px}
+.qsura b{display:block;font-size:15.5px;font-weight:700}
+.qsura small{color:var(--muted);font-size:11px}
+.qbsml{text-align:center;font-family:"Uthmani","SF Arabic",serif;font-size:calc(var(--qsize,21px) * .86);
+  color:var(--accent);margin:6px 0 10px;line-height:2.1}
+.qfoot{display:flex;justify-content:space-between;align-items:center;gap:8px;
+  margin-top:14px;padding-top:9px;border-top:1px solid var(--line);
+  font-size:11px;color:var(--muted)}
+.qpg{border:1px solid var(--accent-dim);border-radius:999px;padding:3px 13px;
+  color:var(--accent);font-weight:700;font-size:12px}
+.qnav{display:flex;gap:8px;align-items:center;margin-top:12px}
+.qnav .key{flex:1}
+.qjump{width:74px;height:40px;text-align:center;background:var(--surface-2);
+  color:var(--text);border:1px solid var(--line);border-radius:12px;
+  font-family:inherit;font-size:14px;font-weight:600}
+/* ---------- الأمر الصوتيّ ---------- */
+.mic-row{display:flex;align-items:center;gap:14px;background:var(--surface-2);
+  border:1px solid var(--line);border-radius:18px;padding:12px 14px;margin-bottom:14px}
+.mic{width:54px;height:54px;flex:0 0 54px;border-radius:50%;border:1px solid var(--accent-dim);
+  background:var(--surface);color:var(--accent);display:grid;place-items:center;
+  cursor:pointer;transition:transform .12s,background .12s}
+.mic:active{transform:scale(.94)}
+.mic[disabled]{opacity:.45;color:var(--muted);border-color:var(--line)}
+/* النبض يقول «أنا أسمع الآن» — ولا ينبض إلا وهو يسمع فعلاً */
+.mic.on{background:var(--accent-dim);color:var(--text);animation:micpulse 1.2s ease-in-out infinite}
+@keyframes micpulse{0%,100%{box-shadow:0 0 0 0 var(--accent-dim)}50%{box-shadow:0 0 0 10px transparent}}
+.mic-txt{min-width:0;flex:1}
+.mic-txt b{display:block;font-size:14px}
+.mic-txt small{display:block;color:var(--muted);font-size:11.5px;line-height:1.7;
+  overflow:hidden;text-overflow:ellipsis}
+.qplay{margin-top:12px}
+.qopts{display:flex;gap:10px;flex-wrap:wrap}
+.qopts label{flex:1;min-width:120px;font-size:11.5px;color:var(--muted);
+  display:flex;flex-direction:column;gap:5px}
+.qopts select{background:var(--surface-2);color:var(--text);border:1px solid var(--line);
+  border-radius:10px;height:36px;padding:0 8px;font-family:inherit;font-size:13px}
+/* الآية التي تُتلى الآن: تُميَّز عن الملموسة، فإحداهما للتفسير والأخرى للسمع */
+.qtext .ay.now{background:var(--accent-dim);box-shadow:inset 0 0 0 1px var(--accent)}
 /* الهامش: يُفصل بحدٍّ جانبيّ وخطٍّ أصغر، فيُقرأ حاشيةً لا متناً */
 .marg{margin:9px 4px 2px;padding:9px 12px;border-inline-start:2px solid var(--accent-dim);
   background:var(--surface);border-radius:0 10px 10px 0;font-size:13px;line-height:2.05;
@@ -423,6 +462,18 @@ input::placeholder{color:#5c6579}
       <button class="key sm" id="addrTipHide">لا تُذكّرني</button>
     </div>
   </div>
+  <!-- الأمر بالصوت: زرٌّ واحد، ويقول ما فهم قبل أن ينفّذ -->
+  <div class="mic-row">
+    <button class="mic" id="micBtn" aria-label="أمرٌ صوتيّ">
+      <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor"
+           stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/>
+        <path d="M19 10v2a7 7 0 0 1-14 0v-2"/><path d="M12 19v3"/>
+      </svg>
+    </button>
+    <div class="mic-txt"><b id="micState">قل أمرك</b><small id="micHeard"></small></div>
+  </div>
+
   <div class="tiles">
     <button class="tile" data-go="dev-tv">
       <i class="pip" id="pipTv"></i>
@@ -907,17 +958,18 @@ input::placeholder{color:#5c6579}
 <section class="screen" id="dev-islam" data-title="إسلامي" data-sub="المصحف والأذكار والمواقيت">
   <div class="card" id="islamNeed" hidden>
     <h3>تنزيل النصوص</h3>
-    <p>المصحف والتفسيران والأذكار — نحو خمسة ميغابايت، تُنزَّل مرّة على
-       اللابتوب ثم يعمل القسم بلا إنترنت أبداً.</p>
+    <p>المصحف والتفسيران والأذكار وتخطيط الصفحات — نحو خمسة ميغابايت،
+       تُنزَّل مرّة على اللابتوب ثم يعمل القسم بلا إنترنت أبداً.</p>
     <p style="color:var(--warn)">ولا يُحفظ نصٌّ حتى تُعدّ آياته وتُطابَق
-       الجدول المعتمد — فما لم يجتز القياس لا يُعرض منه حرف.</p>
+       الجدول المعتمد، ولا تُقبل الصفحات حتى تقع بدايات الأجزاء الثلاثين
+       في مواضعها — فما لم يجتز القياس لا يُعرض منه حرف.</p>
     <button class="key sm" id="islamGet" style="width:100%">نزّلها الآن</button>
     <div id="islamGetMsg" class="hint"></div>
   </div>
 
   <div class="tiles" id="islamTiles" hidden style="margin-top:0">
     <button class="tile" data-go="islam-quran" style="grid-column:1/-1">
-      <svg><use href="#i-islam"></use></svg><b>المصحف</b><small>بالتفسير في الهامش</small>
+      <svg><use href="#i-islam"></use></svg><b>المصحف</b><small>بصفحات مصحف المدينة ٦٠٤</small>
     </button>
     <button class="tile" data-go="islam-azkar"><b>الأذكار</b><small>بالمراجع</small></button>
     <button class="tile" data-go="islam-times"><b>المواقيت</b><small>أمّ القرى</small></button>
@@ -938,8 +990,51 @@ input::placeholder{color:#5c6579}
     <button class="key sm" id="qSmaller">ﻉ−</button>
     <button class="key sm" id="qBigger">ﻉ+</button>
   </div>
-  <div class="qhead" id="qHead" hidden></div>
-  <div id="qBody" class="qbody"></div>
+  <div class="qsheet" id="qSheet">
+    <div id="qBody"></div>
+    <div class="qfoot" id="qFoot" hidden>
+      <span id="qFootSura"></span>
+      <span class="qpg" id="qFootPage"></span>
+      <span id="qFootJuz"></span>
+    </div>
+  </div>
+  <div class="qnav">
+    <button class="key sm" id="qPrev">السابقة ›</button>
+    <input id="qGo" class="qjump" inputmode="numeric" pattern="[0-9]*" aria-label="رقم الصفحة">
+    <button class="key sm" id="qNext">‹ التالية</button>
+  </div>
+
+  <div class="card qplay">
+    <div class="qbar" style="margin-bottom:10px">
+      <select id="qReciter"></select>
+      <button class="key sm" id="qPlay">▶ استمع</button>
+    </div>
+    <div class="qopts">
+      <label>التكرار
+        <select id="qRepeat">
+          <option value="1">مرّة</option><option value="2">مرّتين</option>
+          <option value="3">٣</option><option value="5">٥</option>
+          <option value="7">٧</option><option value="10">١٠</option>
+          <option value="0">بلا نهاية</option>
+        </select>
+      </label>
+      <label>المدى
+        <select id="qScope">
+          <option value="page">الصفحة</option>
+          <option value="ayah">الآية وحدها</option>
+          <option value="sura">السورة</option>
+        </select>
+      </label>
+    </div>
+    <div id="qPlayMsg" class="hint"></div>
+    <div class="act-row" style="margin:10px 0 0">
+      <button class="key sm" id="qSave">احفظ السورة للاستماع بلا إنترنت</button>
+    </div>
+    <div id="qSaveMsg" class="hint"></div>
+  </div>
+
+  <div id="qMarg"></div>
+  <audio id="qAudio" preload="none"></audio>
 </section>
 
 <!-- الأذكار -->
@@ -1052,6 +1147,18 @@ input::placeholder{color:#5c6579}
       <button class="key sm" id="svFresh">مسح جديد</button>
     </div>
   </div>
+
+  <!-- أجهزة Tuya تُعلن عن نفسها كل بضع ثوان. فمن أعلن فهو منها
+       يقيناً، ومن سكت لم يُدَّعَ عليه شيء -->
+  <div class="card">
+    <h3>أجهزة Tuya القابلة للتحكّم</h3>
+    <p>تطبيقات «ماندو» و«TSmartLife» و«Smart Life» كلّها واجهةٌ واحدة
+       تحتها. وأجهزتها تُعلن عن نفسها في الشبكة — فنُنصت خمس عشرة ثانية
+       ونرى من نادى.</p>
+    <button class="key sm" id="tuScan" style="width:100%">أنصِت الآن</button>
+    <div id="tuMsg" class="hint"></div>
+    <div id="tuList" style="display:grid;gap:8px;margin-top:10px"></div>
+  </div>
   <div id="svMsg" class="empty" hidden></div>
   <div id="svList" style="display:grid;gap:11px"></div>
 </section>
@@ -1081,6 +1188,19 @@ input::placeholder{color:#5c6579}
     <button class="key sm" id="cmdStatic">تثبيت عنوان اللابتوب</button>
   </div>
   <div id="updLog" class="code" style="max-height:260px;overflow:auto;white-space:pre-wrap" hidden></div>
+
+  <!-- الاتصال المشفَّر: بدونه لا ميكروفون ولا بوصلة، وهو قيدُ سفاري -->
+  <div class="card" id="tlsCard">
+    <h3>اتصالٌ مشفَّر <span class="chip" id="tlsChip" hidden>يعمل</span></h3>
+    <p id="tlsNote" class="hint" style="margin-top:0">
+      سفاري يمنع الميكروفون والحافظة والبوصلة على العنوان غير المشفَّر.
+      وTailscale يمنح شهادةً حقيقية لجهازك، فتعمل الثلاثة.
+    </p>
+    <button class="key sm" id="tlsBtn" style="width:100%">استصدر الشهادة</button>
+    <div id="tlsMsg" class="hint"></div>
+    <div class="code" id="tlsUrl" data-copy hidden></div>
+    <button class="key sm" id="tlsCopy" data-copy-for="prev" hidden style="width:100%">نسخ العنوان</button>
+  </div>
 
   <div class="card">
     <h3>تحديث الخادم <span class="chip" id="updChip" hidden>يوجد تحديث</span></h3>
@@ -1148,6 +1268,9 @@ input::placeholder{color:#5c6579}
 
 </main>
 <div class="toast" id="toast" hidden></div>
+<!-- فاهمُ الأمر المنطوق يحقنه الخادم فوق هذا السطر — ملفٌّ واحد
+     يعمل في node وفي المتصفّح. ولا يُطلب بوسمٍ حاجز: الصفحة لا يجوز
+     أن تحتاج طلباً ثانياً لتُرسم -->
 <script>
 "use strict";
 /* ============================================================
@@ -2111,7 +2234,8 @@ function show(id){
     const ip = $("ipInput").value.trim() || store.get("webos_ip");
     if (ip && store.get("webos_key_" + ip)) tv.connect(ip);
   }
-  if (id === "dev-maint"){ paintInfo(); if (window.__checkVersion) window.__checkVersion(); }
+  if (id === "dev-maint"){ paintInfo(); if (window.__checkVersion) window.__checkVersion();
+                           if (window.__tlsCheck) window.__tlsCheck(); }
   if (id === "dev-proj" && window.__projCheck) window.__projCheck();
   if (id === "dev-ac-hall" && window.__acCheck) window.__acCheck("hall");
   if (id === "dev-ac-bed"  && window.__acCheck) window.__acCheck("bed");
@@ -2119,6 +2243,9 @@ function show(id){
   if (id === "dev-router" && window.__router) window.__router();
   if (id === "dev-islam"   && window.__islamHub)    window.__islamHub();
   if (id === "islam-quran" && window.__islamQuran)  window.__islamQuran();
+  // الخروج من المصحف يُسكت التلاوة: صوتٌ يتبعك إلى شاشةٍ أخرى بلا
+  // زرٍّ يوقفه إزعاجٌ لا ميزة
+  if (id !== "islam-quran" && window.__islamHush)   window.__islamHush();
   if (id === "islam-azkar" && window.__islamAzkar)  window.__islamAzkar();
   if (id === "islam-times" && window.__islamTimes)  window.__islamTimes();
   if (id === "islam-qibla" && window.__islamQibla)  window.__islamQibla();
@@ -2458,15 +2585,39 @@ try { localStorage.setItem("__t","1"); localStorage.removeItem("__t"); diag("ا�
 catch { diag("التخزين المحلي: محظور ← بيطلب الإقران كل مرة"); }
 diag("المتصفح: " + navigator.userAgent);
 
-$("copyDiagBtn").onclick = () => {
-  const text = diagLines.join("\n");
-  const done = () => toast("تم النسخ — الصقها في المحادثة");
+/**
+ * نسخٌ يعمل على http.
+ *
+ * `navigator.clipboard` **غير موجودة أصلاً** على عنوانٍ غير مشفَّر —
+ * لا تفشل بل تكون undefined. وصفحتنا على http://100.x. فكانت كلّ
+ * أزرار النسخ تسقط إلى «انسخه يدوياً» ولا تنسخ شيئاً.
+ *
+ * والبديل القديم `execCommand("copy")` لا يشترط أصلاً مشفَّراً، فهو
+ * يعمل حيث تعجز الجديدة. فتُجرَّب الجديدة إن وُجدت، وإلا فالقديمة.
+ */
+function copyText(text, okMsg){
+  const done = () => toast(okMsg || "نُسخ");
+  const legacy = () => {
+    const t = document.createElement("textarea");
+    t.value = text;
+    t.setAttribute("readonly", "");
+    t.style.cssText = "position:fixed;top:0;left:0;opacity:0;pointer-events:none";
+    document.body.appendChild(t);
+    // سفاري لا ينسخ من حقلٍ لم يُحدَّد مداه صراحةً
+    t.select();
+    t.setSelectionRange(0, text.length);
+    let ok = false;
+    try { ok = document.execCommand("copy"); } catch {}
+    document.body.removeChild(t);
+    ok ? done() : toast("تعذّر النسخ — اضغط مطوّلاً على النصّ وانسخه", true);
+  };
   if (navigator.clipboard && navigator.clipboard.writeText){
-    navigator.clipboard.writeText(text).then(done, () => toast("انسخها يدوياً من فوق", true));
-  } else {
-    toast("انسخها يدوياً من فوق", true);
-  }
-};
+    navigator.clipboard.writeText(text).then(done).catch(legacy);
+  } else legacy();
+}
+
+$("copyDiagBtn").onclick = () =>
+  copyText(diagLines.join("\n"), "تم النسخ — الصقها في المحادثة");
 
 /* ============================================================
    الإيقاظ وصفحة الأوامر — لا تعملان إلا خلف الخادم
@@ -2497,14 +2648,18 @@ function wakeTv(btn){
     .then(() => new Promise((resolve) => {
       const began = Date.now();
       const tick = () => {
-        if (Date.now() - began > 210000){
+        // جولتان في الخادم: دفعاتٌ وانتظار، ثم دفعاتٌ وانتظار. وقستُ
+        // الحدّ الأعلى فكان ٢٢٣ ثانية على شبكةٍ لا تلفزيون فيها — فلا
+        // يُقطع الانتظار قبل ذلك وإلا أعلنّا فشلاً لم يقع.
+        if (Date.now() - began > 330000){
           diag("طال الانتظار — راجع «سجلّ الخادم»");
           stop("طال الانتظار بلا استجابة", true);
           return resolve(false);
         }
         fetch("/power-on/status", { cache:"no-store" }).then(r => r.json()).then(s => {
           if (!s.done){
-            if (btn) btn.textContent = "جاري الإيقاظ… " + (s.seconds || 0) + "ث";
+            const sec = s.seconds || 0;
+            if (btn) btn.textContent = (sec > 130 ? "جولة ثانية… " : "جاري الإيقاظ… ") + sec + "ث";
             return setTimeout(tick, 3000);
           }
           if (s.woke){
@@ -2633,18 +2788,53 @@ function wakeTv(btn){
   // زر نسخ لكل كتلة أمر — النسخ من الشاشة على الجوال متعب
   document.querySelectorAll("[data-copy-for]").forEach(btn => {
     const code = btn.previousElementSibling;
-    btn.onclick = () => {
-      const text = code ? code.textContent : "";
-      if (navigator.clipboard && navigator.clipboard.writeText){
-        navigator.clipboard.writeText(text)
-          .then(() => toast("نُسخ — الصقه في PowerShell"),
-                () => toast("انسخه يدوياً من فوق", true));
-      } else toast("انسخه يدوياً من فوق", true);
-    };
+    btn.onclick = () => copyText(code ? code.textContent.trim() : "",
+                                 "نُسخ — الصقه في PowerShell");
   });
 
   const cd = $("cmdCopyDiag");
   if (cd) cd.onclick = () => $("copyDiagBtn").click();
+
+  /* ---------- الاتصال المشفَّر ----------
+     ليس ترفاً: الميكروفون والحافظة ومستشعر الاتجاه محجوبةٌ كلّها على
+     http في سفاري. وهذه الشهادة تفتحها جميعاً بضغطةٍ من الجوّال. */
+  const tlsBtn = $("tlsBtn");
+  if (tlsBtn){
+    const show = (s) => {
+      const chip = $("tlsChip"), msg = $("tlsMsg"), box = $("tlsUrl"), cp = $("tlsCopy");
+      chip.hidden = !s.serving;
+      if (s.url){
+        box.textContent = s.url; box.hidden = false; cp.hidden = false;
+        msg.textContent = s.serving
+          ? "افتح هذا العنوان في سفاري وأضفه للشاشة الرئيسية — ومنه تعمل الأوامر الصوتية"
+          : "الشهادة محفوظة، وتعمل بعد إعادة تشغيل الخادم";
+        tlsBtn.textContent = "جدّد الشهادة";
+      } else {
+        box.hidden = true; cp.hidden = true;
+        msg.textContent = s.why || "لم تُستصدر بعد";
+        tlsBtn.textContent = "استصدر الشهادة";
+      }
+    };
+    window.__tlsCheck = () => fetch("/https", { cache:"no-store" })
+      .then(r => r.json()).then(show).catch(() => {});
+    tlsBtn.onclick = async () => {
+      tlsBtn.disabled = true; tlsBtn.textContent = "يُستصدر… قد يأخذ دقيقة";
+      $("tlsMsg").textContent = "";
+      try {
+        const r = await post("/https/enable");
+        if (r.running){ $("tlsMsg").textContent = "جارٍ — انتظر قليلاً"; return; }
+        if (!r.ok){
+          $("tlsMsg").style.color = "var(--danger)";
+          $("tlsMsg").textContent = r.why || "تعذّر";
+        } else {
+          $("tlsMsg").style.color = "";
+          toast("صدرت الشهادة");
+        }
+        await window.__tlsCheck();
+      } catch (e) { $("tlsMsg").textContent = "تعذّر الوصول للخادم"; }
+      finally { tlsBtn.disabled = false; }
+    };
+  }
 })();
 
 
@@ -2675,23 +2865,8 @@ function wakeTv(btn){
     $("addrTipUrl").textContent = url;
     box.hidden = false;
 
-    $("addrTipCopy").onclick = () => {
-      const done = () => toast("نُسخ — الصقه في سفاري ثم أضفه للشاشة الرئيسية");
-      // سفاري لا يمنح الحافظة على http أحياناً، فله بديلٌ لا يسقط
-      const fallback = () => {
-        const t = document.createElement("textarea");
-        t.value = url;
-        t.style.position = "fixed"; t.style.opacity = "0";
-        document.body.appendChild(t);
-        t.select();
-        try { document.execCommand("copy"); done(); }
-        catch { toast("انسخه يدوياً من الصندوق", true); }
-        document.body.removeChild(t);
-      };
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(url).then(done).catch(fallback);
-      } else fallback();
-    };
+    $("addrTipCopy").onclick = () =>
+      copyText(url, "نُسخ — الصقه في سفاري ثم أضفه للشاشة الرئيسية");
 
     // نصيحةٌ لا إلحاح: الأمر يبقى بيده (القاعدة العاشرة)
     $("addrTipHide").onclick = () => {
@@ -2708,9 +2883,10 @@ function wakeTv(btn){
    ============================================================ */
 (function setupIslam(){
   if (!$("dev-islam")) return;
-  const D = { quran:null, tafsir:{}, suras:null, azkar:null };
+  const D = { quran:null, at:null, tafsir:{}, suras:null, pages:null, azkar:null };
   let which = store.get("tafsir_which") || "muyassar";
   let qsize = Number(store.get("quran_size")) || 21;
+  let page = Number(store.get("quran_page")) || 1;
 
   const NAMES = { muyassar:"الميسَّر", jalalayn:"الجلالين" };
 
@@ -2762,8 +2938,14 @@ function wakeTv(btn){
 
   // ---------- المصحف ----------
   async function loadQuran(){
-    if (!D.quran) D.quran = (await getJson("quran.json")).quran;
+    if (!D.quran){
+      D.quran = (await getJson("quran.json")).quran;
+      // فهرسٌ للوصول إلى الآية بسورتها ورقمها بلا مسحٍ للستّة آلاف
+      D.at = new Map();
+      D.quran.forEach((a, i) => D.at.set(a.chapter * 1000 + a.verse, i));
+    }
     if (!D.suras) D.suras = await getJson("suras.json");
+    if (!D.pages) D.pages = await getJson("pages.json");
     if (!D.tafsir[which]) {
       D.tafsir[which] = (await getJson(which === "muyassar"
         ? "tafsir-muyassar.json" : "tafsir-jalalayn.json")).quran;
@@ -2781,60 +2963,122 @@ function wakeTv(btn){
     });
   }
 
-  function paintSura(n){
-    const s = D.suras[n - 1];
-    const head = $("qHead");
-    head.hidden = false;
-    head.innerHTML = "";
-    const b = document.createElement("b");
-    b.textContent = "سورة " + bare(s.name);
-    const sm = document.createElement("small");
-    sm.textContent = s.place + " · " + ayahWord(s.ayahs) + " · الجزء " + AD(s.juz) + " · صفحة " + AD(s.page);
-    head.append(b, sm);
-    // البسملة عنوانٌ لا آية — إلا الفاتحة فهي آيةٌ منها، والتوبة بلا بسملة
-    if (n !== 1 && n !== 9){
-      const bs = document.createElement("div");
-      bs.className = "txt";
-      bs.style.cssText = "font-family:Uthmani,serif;font-size:19px;margin-top:9px;color:var(--accent)";
-      bs.textContent = "بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ";
-      head.appendChild(bs);
-    }
+  /* ---- التنوين المفتوح: تسويةٌ للعرض لا تعديلٌ في النصّ ----
+     ناشرُ النسخة يذكر صراحةً أنه استبدل علامات التنوين المفتوح التي
+     تعرفها خطوطُ المجمّع (٠٦٥٦ و٠٦٥٧ و٠٦٥E) بعلاماتٍ أخرى (٠٨F٢
+     و٠٨F٠ و٠٨F١). وخطُّنا — خطُّ المجمّع — لا يرسم الثانية، فتسقط
+     العلامة من الشاشة. فنعيدها إلى ما يعرفه الخطّ عند الرسم.
 
+     وفي النصّ مسافةٌ بين العلامة وألفها: «قَوۡمࣰ ا». فتنفصل الميم عن
+     الألف وتبدو الألف رقماً قائماً بذاته. فتُوصل — ولا تُوصل إلا إذا
+     كان التالي ألفاً وحدها. وقِستُ ذلك على المصحف كلّه: ٢٤١٨ موضعاً
+     ألفٌ وحدها فتُوصل، و٣٠٠١ موضعاً كلمةٌ تالية فتبقى منفصلة.
+
+     ولا يُمسّ الملفُّ المحفوظ: هو كما نزل وكما قيس، والتسوية هنا
+     في الرسم وحده. */
+  const OPEN_TANWEEN = { "ࣰ":"ٗ", "ࣱ":"ٞ", "ࣲ":"ٖ" };
+  const JOIN_ALEF = /([ٖٗٞ]) ([اى][ؐ-ًؚ-ٰٟۖ-ۭ]*)(?=\s|$)/g;
+  const forDisplay = (t) => String(t)
+    .replace(/[ࣰ-ࣲ]/g, (c) => OPEN_TANWEEN[c])
+    .replace(JOIN_ALEF, "$1$2");
+
+  /** آياتُ صفحةٍ من ٦٠٤، بحدود مصحف المدينة كما نُزّلت وقيست */
+  function ayahsOfPage(p){
+    const [s1, a1, s2, a2] = D.pages[p - 1];
+    const from = D.at.get(s1 * 1000 + a1);
+    const to   = D.at.get(s2 * 1000 + a2);
+    return (from == null || to == null) ? [] : D.quran.slice(from, to + 1);
+  }
+
+  let selected = null;
+
+  /** الهامش: تفسيرُ الآية الملموسة، تحت الصفحة لا داخل النصّ —
+      إذ لو حُشر داخلها لتقطّعت الصفحة ولم تعد صفحة */
+  function showTafsir(a, span){
+    if (selected) selected.classList.remove("sel");
+    selected = span;
+    span.classList.add("sel");
+    const note = D.tafsir[which].find(x => x.chapter === a.chapter && x.verse === a.verse);
+    const m = $("qMarg");
+    m.innerHTML = "";
+    const box = document.createElement("div");
+    box.className = "marg";
+    const lab = document.createElement("b");
+    lab.textContent = NAMES[which] + " — " + bare(D.suras[a.chapter - 1].name) + " " + AD(a.verse);
+    const t = document.createElement("span");
+    t.textContent = note ? note.text : "—";
+    box.append(lab, t);
+    m.appendChild(box);
+  }
+
+  function paintPage(p){
+    p = Math.max(1, Math.min(D.pages.length, Math.round(p) || 1));
+    page = p;
     const body = $("qBody");
     body.innerHTML = "";
     body.style.setProperty("--qsize", qsize + "px");
-    const ayat = D.quran.filter(a => a.chapter === n);
-    const tf = D.tafsir[which];
-    ayat.forEach(a => {
-      const div = document.createElement("div");
-      div.className = "ayah";
-      const t = document.createElement("div");
-      t.className = "txt";
-      t.textContent = a.text + " ";
+    $("qMarg").innerHTML = "";
+    selected = null;
+
+    const rows = ayahsOfPage(p);
+    const suras = [];
+    let block = null, lastSura = 0;
+
+    for (const a of rows){
+      if (a.chapter !== lastSura){
+        lastSura = a.chapter;
+        suras.push(a.chapter);
+        // عنوانُ السورة لا يُكتب إلا حيث تبدأ فعلاً — فإن انسابت من
+        // الصفحة السابقة فلا عنوان لها هنا، كما في المصحف
+        if (a.verse === 1){
+          const s = D.suras[a.chapter - 1];
+          const h = document.createElement("div");
+          h.className = "qsura";
+          const b = document.createElement("b");
+          b.textContent = "سورة " + bare(s.name);
+          const sm = document.createElement("small");
+          sm.textContent = s.place + " · " + ayahWord(s.ayahs);
+          h.append(b, sm);
+          body.appendChild(h);
+          // البسملة عنوانٌ لا آية — إلا الفاتحة فهي آيةٌ منها،
+          // وبراءةُ بلا بسملة
+          if (a.chapter !== 1 && a.chapter !== 9){
+            const bs = document.createElement("div");
+            bs.className = "qbsml";
+            bs.textContent = "بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ";
+            body.appendChild(bs);
+          }
+        }
+        block = null;
+      }
+      if (!block){
+        block = document.createElement("div");
+        block.className = "qtext";
+        body.appendChild(block);
+      }
+      const span = document.createElement("span");
+      span.className = "ay";
+      span.dataset.s = String(a.chapter);
+      span.dataset.a = String(a.verse);
+      span.textContent = forDisplay(a.text) + " ";
       const num = document.createElement("span");
       num.className = "num";
       num.textContent = AD(a.verse);
-      t.appendChild(num);
-      div.appendChild(t);
+      span.appendChild(num);
+      span.onclick = () => showTafsir(a, span);
+      block.append(span, document.createTextNode(" "));
+    }
 
-      div.onclick = () => {
-        const open = div.querySelector(".marg");
-        if (open){ open.remove(); div.classList.remove("open"); return; }
-        const note = tf.find(x => x.chapter === n && x.verse === a.verse);
-        const m = document.createElement("div");
-        m.className = "marg";
-        const lab = document.createElement("b");
-        lab.textContent = NAMES[which];
-        const p = document.createElement("span");
-        p.textContent = note ? note.text : "—";
-        m.append(lab, p);
-        div.appendChild(m);
-        div.classList.add("open");
-      };
-      body.appendChild(div);
-    });
-    store.set("quran_sura", String(n));
-    screenSub("islam-quran", bare(s.name) + " · " + NAMES[which]);
+    const names = suras.map(n => bare(D.suras[n - 1].name)).join(" · ");
+    $("qFoot").hidden = false;
+    $("qFootSura").textContent = names;
+    $("qFootPage").textContent = "صفحة " + AD(p);
+    $("qFootJuz").textContent = "الجزء " + AD(D.pages[p - 1][4]);
+    $("qGo").value = AD(p);
+    $("qSura").value = String(suras[0] || 1);
+    store.set("quran_page", String(p));
+    screenSub("islam-quran", names + " · صفحة " + AD(p) + " · " + NAMES[which]);
+    $("qSheet").scrollIntoView({ block: "start" });
   }
 
   window.__islamQuran = async () => {
@@ -2843,19 +3087,44 @@ function wakeTv(btn){
     try {
       await loadQuran();
       fillSuras();
-      const n = Number(store.get("quran_sura")) || 1;
-      $("qSura").value = String(n);
-      paintSura(n);
+      paintPage(Number(store.get("quran_page")) || 1);
+      await loadReciters().catch(() => {});
+      saveTick().catch(() => {});
     } catch (e) { body.textContent = "النصوص لم تُنزَّل بعد — ارجع ونزّلها"; }
   };
 
-  $("qSura").onchange = () => paintSura(Number($("qSura").value));
+  // اختيار السورة ينقل إلى صفحتها الأولى، لا إلى قائمةٍ منفصلة
+  $("qSura").onchange = () => paintPage(D.suras[Number($("qSura").value) - 1].page || 1);
+  $("qPrev").onclick = () => paintPage(page - 1);
+  $("qNext").onclick = () => paintPage(page + 1);
+  // الرقم يُكتب هندياً في الخانة، فيُقبل بالوجهين
+  $("qGo").onchange = () => {
+    const v = $("qGo").value.replace(/[٠-٩]/g, d => "٠١٢٣٤٥٦٧٨٩".indexOf(d));
+    paintPage(Number(v.replace(/\D/g, "")) || page);
+  };
+
+  // وتُقلَّب بالإصبع كما تُقلَّب الورقة: سحبٌ نحو اليسار يُقدّم
+  (() => {
+    const sheet = $("qSheet");
+    let x0 = 0, y0 = 0;
+    sheet.addEventListener("touchstart", (e) => {
+      x0 = e.touches[0].clientX; y0 = e.touches[0].clientY;
+    }, { passive: true });
+    sheet.addEventListener("touchend", (e) => {
+      const t = e.changedTouches[0];
+      const dx = t.clientX - x0, dy = t.clientY - y0;
+      // سحبٌ أفقيٌّ واضح، وإلا فهو تمريرٌ رأسيّ أو لمسةٌ على آية
+      if (Math.abs(dx) < 55 || Math.abs(dx) < Math.abs(dy) * 1.6) return;
+      paintPage(page + (dx < 0 ? 1 : -1));
+    }, { passive: true });
+  })();
+
   $("qTafsirWhich").onclick = async () => {
     which = which === "muyassar" ? "jalalayn" : "muyassar";
     store.set("tafsir_which", which);
     $("qTafsirWhich").textContent = NAMES[which];
     await loadQuran();
-    paintSura(Number($("qSura").value));
+    paintPage(page);
   };
   const resize = (d) => {
     qsize = Math.max(16, Math.min(34, qsize + d));
@@ -2864,6 +3133,184 @@ function wakeTv(btn){
   };
   $("qBigger").onclick = () => resize(2);
   $("qSmaller").onclick = () => resize(-2);
+
+  /* ---------- التلاوة ----------
+     الآيات تُطلب من خادمنا لا من المصدر البعيد مباشرة: فهو يحفظ ما
+     يمرّ به، فيصير الاستماعُ نفسه بانياً للمكتبة. وما حُفظ مرّةً
+     يُسمع بعدها بلا إنترنت. */
+  const player = {
+    list: [],        // آياتُ المدى الحاليّ
+    i: 0,            // أين نحن منها
+    left: 1,         // كم بقي من تكرار هذه الآية
+    on: false,
+  };
+  const audio = $("qAudio");
+
+  const spanOf = (a) => [...document.querySelectorAll("#qBody .ay")]
+    .find(s => s.dataset.s === String(a.chapter) && s.dataset.a === String(a.verse));
+
+  function markNow(a){
+    document.querySelectorAll("#qBody .ay.now").forEach(s => s.classList.remove("now"));
+    if (!a) return;
+    const s = spanOf(a);
+    if (s) s.scrollIntoView({ block: "center", behavior: "smooth" });
+    if (s) s.classList.add("now");
+  }
+
+  function stopPlay(msg){
+    player.on = false;
+    audio.pause();
+    audio.removeAttribute("src");
+    markNow(null);
+    $("qPlay").textContent = "▶ استمع";
+    $("qPlayMsg").textContent = msg || "";
+  }
+
+  function scopeAyahs(from){
+    const scope = $("qScope").value;
+    if (scope === "ayah") return [from];
+    if (scope === "sura"){
+      const all = D.quran.filter(x => x.chapter === from.chapter);
+      return all.slice(all.findIndex(x => x.verse === from.verse));
+    }
+    const pg = ayahsOfPage(page);
+    return pg.slice(pg.findIndex(x => x.chapter === from.chapter && x.verse === from.verse));
+  }
+
+  function playCurrent(){
+    const a = player.list[player.i];
+    if (!a) return stopPlay("تمّ");
+    markNow(a);
+    const r = $("qReciter").value;
+    audio.src = "/islam/audio/ayah?r=" + encodeURIComponent(r) +
+                "&s=" + a.chapter + "&a=" + a.verse;
+    audio.play().catch((e) => stopPlay("تعذّر التشغيل: " + e.message));
+    const rep = Number($("qRepeat").value);
+    $("qPlayMsg").textContent = bare(D.suras[a.chapter - 1].name) + " " + AD(a.verse) +
+      (rep === 0 ? " · تكرارٌ بلا نهاية"
+                 : rep > 1 ? " · التكرار " + AD(rep - player.left + 1) + "/" + AD(rep) : "");
+  }
+
+  audio.onended = () => {
+    if (!player.on) return;
+    const rep = Number($("qRepeat").value);
+    if (rep === 0) return playCurrent();          // بلا نهاية: الآية نفسها
+    if (--player.left > 0) return playCurrent();
+    player.i++;
+    player.left = rep || 1;
+    if (player.i >= player.list.length){
+      // المدى انتهى — وإن كان مدى الصفحة انتقلنا إلى التي بعدها
+      if ($("qScope").value === "page" && page < D.pages.length){
+        paintPage(page + 1);
+        const first = ayahsOfPage(page)[0];
+        player.list = scopeAyahs(first);
+        player.i = 0;
+        return playCurrent();
+      }
+      return stopPlay("تمّت التلاوة");
+    }
+    playCurrent();
+  };
+  audio.onerror = () => { if (player.on) stopPlay("تعذّر جلب هذه الآية"); };
+
+  function startFrom(a){
+    const r = $("qReciter").value;
+    if (!r) return void ($("qPlayMsg").textContent = "لا قارئ مُتاح — اضغط «اقرأ القرّاء» أوّلاً");
+    player.list = scopeAyahs(a);
+    player.i = 0;
+    player.left = Number($("qRepeat").value) || 1;
+    player.on = true;
+    $("qPlay").textContent = "❚❚ إيقاف";
+    playCurrent();
+  }
+
+  window.__islamHush = () => { if (player.on) stopPlay(""); };
+
+  $("qPlay").onclick = () => {
+    if (player.on) return stopPlay("");
+    // يبدأ من الآية الملموسة إن كانت في هذه الصفحة، وإلا من أوّلها
+    const rows = ayahsOfPage(page);
+    let from = rows[0];
+    if (selected){
+      const s = Number(selected.dataset.s), v = Number(selected.dataset.a);
+      const hit = rows.find(x => x.chapter === s && x.verse === v);
+      if (hit) from = hit;
+    }
+    startFrom(from);
+  };
+
+  async function loadReciters(){
+    const sel = $("qReciter");
+    const r = await fetch("/islam/audio/reciters", { cache: "no-store" }).then(x => x.json());
+    sel.innerHTML = "";
+    const ready = r.reciters.filter(x => x.ready);
+    for (const x of ready){
+      const o = document.createElement("option");
+      o.value = x.key; o.textContent = x.name;
+      sel.appendChild(o);
+    }
+    const saved = store.get("reciter");
+    if (saved && ready.some(x => x.key === saved)) sel.value = saved;
+    sel.onchange = () => store.set("reciter", sel.value);
+
+    if (!ready.length){
+      const o = document.createElement("option");
+      o.value = ""; o.textContent = r.probed ? "لم يُجب أحد" : "لم يُقَس بعد";
+      sel.appendChild(o);
+      $("qPlayMsg").innerHTML = "";
+      const b = document.createElement("button");
+      b.className = "key sm"; b.style.width = "100%"; b.textContent = "اقرأ القرّاء الآن";
+      b.onclick = async () => {
+        b.disabled = true; b.textContent = "يُقاس… قد يأخذ دقيقة";
+        try {
+          const out = await post("/islam/audio/probe");
+          if (out.running) { $("qPlayMsg").textContent = "قياسٌ جارٍ — انتظر"; return; }
+          const bad = Object.entries(out.result || {}).filter(([, v]) => !v.url);
+          await loadReciters();
+          $("qPlayMsg").textContent = bad.length
+            ? "لم يُجب: " + bad.map(([, v]) => v.name).join("، ")
+            : "أجاب القرّاء الأربعة";
+        } catch (e) { $("qPlayMsg").textContent = "تعذّر القياس: " + e.message; }
+        finally { b.disabled = false; b.textContent = "اقرأ القرّاء الآن"; }
+      };
+      $("qPlayMsg").appendChild(b);
+    }
+  }
+
+  // ---------- الحفظ للاستماع بلا إنترنت ----------
+  let saveTimer = null;
+  async function saveTick(){
+    const r = $("qReciter").value, s = Number($("qSura").value) || 1;
+    const st = await fetch("/islam/audio/status?r=" + encodeURIComponent(r) + "&s=" + s,
+                           { cache: "no-store" }).then(x => x.json()).catch(() => null);
+    if (!st) return;
+    if (st.saving){
+      $("qSaveMsg").textContent = "يُحفظ… " + AD(st.saving.n) + "/" + AD(st.saving.total) +
+        (st.saving.failed ? " (تعذّر " + AD(st.saving.failed) + ")" : "");
+      $("qSave").textContent = "أوقف الحفظ";
+      return;
+    }
+    clearInterval(saveTimer); saveTimer = null;
+    $("qSave").textContent = "احفظ السورة للاستماع بلا إنترنت";
+    if (st.sura){
+      $("qSaveMsg").textContent = st.sura.have >= st.sura.total
+        ? "محفوظةٌ كاملة — تعمل بلا إنترنت"
+        : "المحفوظ " + AD(st.sura.have) + " من " + AD(st.sura.total) + " آية";
+    }
+  }
+
+  $("qSave").onclick = async () => {
+    const r = $("qReciter").value;
+    if (!r) return void ($("qSaveMsg").textContent = "اختر قارئاً أوّلاً");
+    if (saveTimer){ await post("/islam/audio/stop"); return; }
+    const s = Number($("qSura").value) || 1;
+    $("qSaveMsg").textContent = "يبدأ…";
+    try {
+      await post("/islam/audio/save?r=" + encodeURIComponent(r) + "&s=" + s);
+      saveTimer = setInterval(saveTick, 1500);
+      saveTick();
+    } catch (e) { $("qSaveMsg").textContent = "تعذّر: " + e.message; }
+  };
 
   // ---------- الأذكار ----------
   window.__islamAzkar = async () => {
@@ -3211,6 +3658,171 @@ setupWakeCheck("proj", "projWakeCheck", "projWakeMsg");
    متوقَّع لا خطأ. نستطلع /health حتى يردّ، ثم نعيد تحميل الصفحة
    لتُحمَّل الواجهة الجديدة معه.
    ============================================================ */
+/* ============================================================
+   الأمر الصوتيّ بالعربية
+
+   سفاري يتعرّف على الكلام، و`voice.js` يفهمه — وهو الملفّ نفسه الذي
+   قِيس بـ٨٥ جملةً في node قبل أن يصل إلى هنا.
+
+   **ولا يُنفَّذ ما لم يُفهم يقيناً.** إن قصُر الفهم عن العتبة قيل
+   «ما فهمت» مع ما سُمع — فأمرٌ خاطئ يُطفئ تلفزيوناً أسوأ من أمرٍ لم
+   يقع. والمفهوم يُعرض بالعربية قبل تنفيذه، فيُرى ما وقع.
+   ============================================================ */
+(function setupVoice(){
+  const btn = $("micBtn"), stateEl = $("micState"), heardEl = $("micHeard");
+  if (!btn) return;
+
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const say = (s, h) => { stateEl.textContent = s; if (h !== undefined) heardEl.textContent = h; };
+
+  // القيدُ يُقال ولا يُخفى: الميكروفون محجوبٌ على http في سفاري
+  if (!SR || !window.isSecureContext){
+    btn.disabled = true;
+    say("الأمر الصوتيّ يحتاج اتصالاً مشفَّراً",
+        !SR ? "متصفّحك لا يدعم التعرّف على الكلام"
+            : "افتح «الصيانة ← اتصالٌ مشفَّر» واستصدر الشهادة، ثم افتح العنوان الذي تراه هناك");
+    return;
+  }
+
+  let rec = null, listening = false;
+
+  function stop(){
+    listening = false;
+    btn.classList.remove("on");
+    try { rec && rec.stop(); } catch {}
+  }
+
+  btn.onclick = () => {
+    if (listening) return stop();
+    if (!window.Voice){ say("لم يُحمَّل فاهمُ الأوامر", "أعد تحميل الصفحة"); return; }
+    try {
+      rec = new SR();
+    } catch (e) { say("تعذّر فتح الميكروفون", e.message); return; }
+    rec.lang = "ar-SA";
+    rec.interimResults = true;
+    rec.maxAlternatives = 3;
+    rec.continuous = false;
+
+    let finalText = "", alts = [];
+    rec.onstart = () => { listening = true; btn.classList.add("on"); say("أسمعك…", ""); };
+    rec.onresult = (e) => {
+      let interim = "";
+      for (let i = e.resultIndex; i < e.results.length; i++){
+        const r = e.results[i];
+        if (r.isFinal){
+          finalText = r[0].transcript;
+          // البدائل تُجرَّب أيضاً: قد يخطئ الأوّل ويصيب الثاني
+          alts = [];
+          for (let k = 0; k < r.length; k++) alts.push(r[k].transcript);
+        } else interim += r[0].transcript;
+      }
+      if (interim) say("أسمعك…", interim);
+    };
+    rec.onerror = (e) => {
+      stop();
+      const m = { "not-allowed": "لم تُؤذن للميكروفون — اسمح به من إعدادات سفاري",
+                  "no-speech": "ما سمعت شيئاً", "network": "التعرّف يحتاج إنترنت",
+                  "audio-capture": "لا ميكروفون" }[e.error];
+      say(m || "تعذّر السماع", e.error || "");
+    };
+    rec.onend = () => {
+      stop();
+      if (!finalText) { if (stateEl.textContent === "أسمعك…") say("ما سمعت شيئاً", ""); return; }
+      // نأخذ أوّل بديلٍ يُفهم يقيناً
+      let best = null;
+      for (const a of (alts.length ? alts : [finalText])){
+        const r = window.Voice.parse(a);
+        if (r.intent && r.sure >= window.Voice.THRESHOLD){ best = r; break; }
+        if (!best) best = r;
+      }
+      heardEl.textContent = "سمعت: " + finalText;
+      if (!best.intent || best.sure < window.Voice.THRESHOLD){
+        stateEl.textContent = best.why || "ما فهمت";
+        buzz(30);
+        return;
+      }
+      stateEl.textContent = window.Voice.describe(best);
+      buzz(15);
+      run(best);
+    };
+
+    try { rec.start(); } catch (e) { say("تعذّر البدء", e.message); }
+  };
+
+  /** ينفّذ ما فُهم — بالطرق نفسها التي تعمل بها الأزرار، لا بطريقٍ آخر */
+  async function run(r){
+    const go = (id) => show(id);
+    try {
+      switch (r.intent){
+        case "power":
+          if (r.device === "tv"){
+            go("dev-tv");
+            const res = await post("/power-on");
+            toast(res.ok ? "يُوقَظ التلفزيون…" : (res.why || "تعذّر"), !res.ok);
+          } else if (r.device === "proj"){
+            go("dev-proj");
+            await post("/proj/wake"); toast("أُرسلت إشارة التشغيل");
+          } else go("dev-" + r.device);
+          return;
+
+        case "powerOff":
+          if (r.device === "tv"){ go("dev-tv"); await tv.request(SSAP.power); toast("أُطفئ التلفزيون"); }
+          else if (r.device === "proj"){ go("dev-proj"); await post("/proj/sleep"); toast("أُطفئ البروجكتر"); }
+          return;
+
+        case "volUp":   go("dev-tv"); await runCmd("volUp"); return;
+        case "volDown": go("dev-tv"); await runCmd("volDown"); return;
+        case "mute":    go("dev-tv"); await runCmd("mute"); return;
+
+        case "app":
+          if (r.device === "proj"){ go("dev-proj"); await post("/proj/app", { app: r.app }); }
+          else { go("dev-tv"); await runCmd(r.app); }
+          toast("يُفتح " + r.app);
+          return;
+
+        case "acPower": {
+          const room = r.room || "hall";
+          go("dev-ac-" + room);
+          await post("/ac/" + room + "/set", { power: r.value === "on" });
+          toast((r.value === "on" ? "شُغّل" : "أُطفئ") + " المكيف");
+          return;
+        }
+        case "acTemp": {
+          const room = r.room || "hall";
+          go("dev-ac-" + room);
+          await post("/ac/" + room + "/set", { temp: r.value });
+          toast("المكيف على " + r.value + "°");
+          return;
+        }
+        case "acMode": {
+          const room = r.room || "hall";
+          go("dev-ac-" + room);
+          await post("/ac/" + room + "/set", { mode: r.value });
+          return;
+        }
+
+        case "routerReboot":
+          go("dev-router");
+          toast("اضغط «إعادة تشغيل الراوتر» للتأكيد");
+          return;
+        case "wifi":
+          go("dev-router");
+          toast("افتح الشبكة التي تريدها من هنا");
+          return;
+
+        case "islam":
+          go("dev-islam");
+          setTimeout(() => go("islam-" + r.value), 250);
+          return;
+
+        case "open": go("dev-" + (r.device === "ac" ? "ac-hall" : r.device)); return;
+        case "home": go("home"); return;
+        case "back": { const b = $("backBtn"); if (b) b.click(); return; }
+      }
+    } catch (e) { toast("تعذّر التنفيذ: " + e.message, true); }
+  }
+})();
+
 function post(path, body){
   const opt = { method: "POST", cache: "no-store" };
   if (body !== undefined){
@@ -3756,6 +4368,43 @@ const AC_MODE_NAMES = { cold:"تبريد", hot:"تدفئة", wind:"مروحة", 
 
   $("svScan").onclick = () => run(false);
   $("svFresh").onclick = () => run(true);
+
+  /* ---------- الإنصات لأجهزة Tuya ----------
+     لا نمسح ولا نطرق الأبواب: نُنصت لما تعلنه الأجهزة عن نفسها.
+     فمن أعلن فهو Tuya يقيناً، ومن سكت لم يُدَّعَ عليه شيء. */
+  const tuBtn = $("tuScan");
+  if (tuBtn) tuBtn.onclick = async () => {
+    if (!onServer) return void ($("tuMsg").textContent = "يحتاج الخادم");
+    const msg = $("tuMsg"), box = $("tuList");
+    tuBtn.disabled = true; tuBtn.textContent = "أُنصِت… خمس عشرة ثانية";
+    msg.textContent = ""; box.innerHTML = "";
+    try {
+      const r = await fetch("/tuya/sniff?s=15", { cache:"no-store" }).then(x => x.json());
+      if (r.running){ msg.textContent = "إنصاتٌ جارٍ — انتظر"; return; }
+      if (!r.ok){ msg.textContent = r.why || "تعذّر"; return; }
+      if (!r.devices.length){
+        msg.textContent = "لم يُعلن أحد. إن كان المكيّف أو الغسّالة موصولاً " +
+          "بالواي‑فاي فجرّب مرّةً أخرى — بعضها يبثّ كل نصف دقيقة. " +
+          "وإن تكرّر السكوت فليست من Tuya، وسأبحث عن طريقٍ آخر.";
+        return;
+      }
+      msg.textContent = "أعلن " + r.devices.length + " جهازاً:";
+      for (const d of r.devices){
+        const row = document.createElement("div");
+        row.className = "zekr";
+        row.style.cssText = "padding:10px 12px";
+        const t = document.createElement("div");
+        t.style.cssText = "font-size:13px;font-weight:600";
+        t.textContent = (d.name || "جهاز Tuya") + (d.known ? " · مربوطٌ عندنا" : "");
+        const s = document.createElement("div");
+        s.style.cssText = "font-size:11.5px;color:var(--muted);direction:ltr;text-align:right";
+        s.textContent = d.ip + "  ·  " + d.id + "  ·  v" + (d.version || "?");
+        row.append(t, s);
+        box.appendChild(row);
+      }
+    } catch (e) { msg.textContent = "تعذّر الوصول للخادم"; }
+    finally { tuBtn.disabled = false; tuBtn.textContent = "أنصِت الآن"; }
+  };
   window.__survey = () => { if (!list.children.length) run(false); };
 })();
 
@@ -3791,13 +4440,7 @@ function paintInfo(){
         away.style.direction = "ltr";
         away.style.textAlign = "right";
         // نسخُ عنوانٍ من شاشة جوال متعب، فالضغط عليه ينسخه
-        away.onclick = h.away ? () => {
-          const url = away.textContent;
-          const done = () => toast("نُسخ العنوان");
-          if (navigator.clipboard && navigator.clipboard.writeText) {
-            navigator.clipboard.writeText(url).then(done).catch(() => toast("انسخه يدوياً", true));
-          } else toast("انسخه يدوياً", true);
-        } : null;
+        away.onclick = h.away ? () => copyText(away.textContent, "نُسخ العنوان") : null;
       }
       watchBuild(h);
     })
