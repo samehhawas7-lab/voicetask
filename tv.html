@@ -1069,6 +1069,8 @@ input::placeholder{color:#5c6579}
     <div id="qibDial" class="qibdial"><div class="qibneedle" id="qibNeedle"></div><span>ﻙ</span></div>
     <div id="qibDeg" style="font-size:30px;font-weight:750;margin-top:14px">—</div>
     <div id="qibWord" class="hint" style="font-size:13px"></div>
+    <button class="btn ghost" id="qibStart" hidden style="margin-top:14px">شغّل البوصلة</button>
+    <div id="qibLive" class="hint" style="font-size:12px;margin-top:9px;white-space:pre-wrap"></div>
   </div>
   <div class="card">
     <h3>كيف تستعمله</h3>
@@ -2253,6 +2255,9 @@ function show(id){
   if (id === "islam-azkar" && window.__islamAzkar)  window.__islamAzkar();
   if (id === "islam-times" && window.__islamTimes)  window.__islamTimes();
   if (id === "islam-qibla" && window.__islamQibla)  window.__islamQibla();
+  // ومستشعر الاتجاه يُطفأ بالخروج: قراءةٌ مستمرّة لشاشةٍ لا تُرى
+  // استنزافٌ للبطارية بلا فائدة
+  if (id !== "islam-qibla" && window.__qiblaHush)   window.__qiblaHush();
 }
 
 
@@ -3487,29 +3492,126 @@ function wakeTv(btn){
   };
 
   // ---------- القبلة ----------
-  // سفاري يمنع مستشعر الاتجاه على العناوين غير المشفّرة، فلا نُدير
-  // قرصاً ونوهم بأنه يتتبّع. يُعرض الاتجاه رقماً، فإن توفّر المستشعر
-  // يوماً دار من نفسه بلا تعديل (القاعدة الثانية عشرة)
+  // الاتجاه يُحسب في الخادم يقيناً. وأمّا القرص فلا يدور إلا إذا كان
+  // ثمّة مستشعرٌ يقرأ فعلاً — والقاعدة الثانية عشرة تمنعني أن أُديره
+  // إيهاماً. فإن غاب المستشعر عُرض الرقم وحده وقيل لماذا.
   const DIRS = [["شمالاً",0],["شمالاً شرقيّاً",45],["شرقاً",90],["جنوباً شرقيّاً",135],
                 ["جنوباً",180],["جنوباً غربيّاً",225],["غرباً",270],["شمالاً غربيّاً",315]];
+
+  let qibla = null;          // الاتجاه من الشمال، كما حسبه الخادم
+  let heading = null;        // ما يقرؤه المستشعر الآن
+  let sensing = false;       // أنُصغي إليه؟
+  let sawReading = false;    // أوصلت قراءةٌ واحدة على الأقلّ؟
+
+  // سفاري يعطي webkitCompassHeading: درجاتٌ من الشمال المغناطيسيّ مع
+  // عقارب الساعة. وغيره يعطي alpha، وهي تدور عكسها — فتُقلب
+  function readingOf(e){
+    if (typeof e.webkitCompassHeading === "number" && !isNaN(e.webkitCompassHeading))
+      return e.webkitCompassHeading;
+    if (e.absolute === true && typeof e.alpha === "number" && !isNaN(e.alpha))
+      return (360 - e.alpha) % 360;
+    return null;
+  }
+
+  function paintDial(){
+    // حين لا مستشعر: المؤشّر على الاتجاه من الشمال، والقرص خريطةٌ ساكنة.
+    // وحين يقرأ: المؤشّر على القبلة **من حيث يتّجه الجهاز الآن**
+    const at = heading === null ? qibla : (qibla - heading + 360) % 360;
+    $("qibDial").style.setProperty("--qib", at + "deg");
+    if (heading === null) return;
+    const off = Math.abs(((at + 540) % 360) - 180);
+    $("qibLive").style.color = off <= 5 ? "var(--ok)" : "var(--muted)";
+    $("qibLive").textContent = off <= 5
+      ? "القبلة أمامك الآن — استقبِلها."
+      : "استدر حتى ينطبق المؤشّر على أعلى القرص (باقٍ " + AD(off.toFixed(0)) + "°).";
+  }
+
+  function onOrient(e){
+    const h = readingOf(e);
+    if (h === null) return;
+    sawReading = true;
+    heading = h;
+    paintDial();
+  }
+
+  function stopSensing(){
+    if (!sensing) return;
+    sensing = false;
+    window.removeEventListener("deviceorientationabsolute", onOrient, true);
+    window.removeEventListener("deviceorientation", onOrient, true);
+    heading = null;
+  }
+  window.__qiblaHush = stopSensing;
+
+  async function startSensing(){
+    const btn = $("qibStart"), live = $("qibLive");
+    btn.disabled = true;
+    live.style.color = "var(--muted)";
+    live.textContent = "أسأل المستشعر…";
+    try {
+      // إذنُ سفاري لا يُطلب إلا من لمسةٍ مباشرة — ولذلك هذا زرّ
+      if (typeof DeviceOrientationEvent.requestPermission === "function"){
+        const ans = await DeviceOrientationEvent.requestPermission();
+        if (ans !== "granted"){
+          live.style.color = "var(--warn)";
+          live.textContent = "لم يُؤذَن للبوصلة. والإذن يُعاد من: إعدادات "
+            + "سفاري ← الحركة واتجاه الجهاز.";
+          btn.disabled = false;
+          return;
+        }
+      }
+    } catch (err){
+      live.style.color = "var(--warn)";
+      live.textContent = "تعذّر طلب الإذن: " + err.message;
+      btn.disabled = false;
+      return;
+    }
+
+    sawReading = false;
+    sensing = true;
+    window.addEventListener("deviceorientationabsolute", onOrient, true);
+    window.addEventListener("deviceorientation", onOrient, true);
+    btn.hidden = true;
+
+    // وقد يُؤذَن ولا يصل شيء — فلا نترك قرصاً ساكناً يُظنّ حيّاً
+    setTimeout(() => {
+      if (sawReading || !sensing) return;
+      stopSensing();
+      btn.hidden = false; btn.disabled = false;
+      btn.textContent = "أعد المحاولة";
+      live.style.color = "var(--warn)";
+      live.textContent = "أُذِن للبوصلة ولم تصل منها قراءة — فجهازك لا "
+        + "يعطي اتجاهاً هنا. استعمل تطبيق البوصلة كما في الأسفل.";
+      paintDial();
+    }, 4000);
+  }
+  $("qibStart").onclick = startSensing;
+
   window.__islamQibla = () => {
     fetch("/islam/qibla", { cache:"no-store" }).then(r => r.json()).then(r => {
       if (!r.ok) return;
-      $("qibDeg").textContent = r.bearing.toFixed(1) + "°";
+      qibla = r.bearing;
+      $("qibDeg").textContent = AD(r.bearing.toFixed(1)) + "°";
       const near = DIRS.reduce((a, b) =>
         Math.abs(((r.bearing - b[1] + 540) % 360) - 180) > Math.abs(((r.bearing - a[1] + 540) % 360) - 180) ? a : b);
       $("qibWord").textContent = near[0] + " تقريباً · الكعبة على بُعد " + r.km + " كم";
-      $("qibDial").style.setProperty("--qib", r.bearing + "deg");
-      screenSub("islam-qibla", r.bearing.toFixed(1) + "°");
+      paintDial();
+      screenSub("islam-qibla", AD(r.bearing.toFixed(1)) + "°");
 
-      const secure = window.isSecureContext &&
+      const can = window.isSecureContext &&
         typeof DeviceOrientationEvent !== "undefined";
-      $("qibHow").textContent = secure
-        ? "وجّه أعلى الجهاز نحو الشمال، ثم استدر حتى ينطبق المؤشّر على الخطّ."
+      $("qibStart").hidden = !can || sensing;
+      $("qibHow").textContent = can
+        ? "اضغط «شغّل البوصلة»، فيُطلب إذنُ الحركة والاتجاه مرّةً — ثم "
+          + "استدر بالجهاز حتى ينطبق المؤشّر على أعلى القرص.\n\n"
+          + "وهي بوصلةٌ مغناطيسية: أبعِد الجهاز عن الحديد والمكبّرات، "
+          + "فإن شككتَ فالرقم أعلاه (" + AD(r.bearing.toFixed(0)) + "° من الشمال) "
+          + "هو الأصل، وأيُّ تطبيق بوصلةٍ يكفي معه."
         : "ضع بوصلةً (تطبيق البوصلة في جوّالك) واستدر حتى تقرأ "
-          + r.bearing.toFixed(0) + "° — تلك جهة القبلة.\n\n"
+          + AD(r.bearing.toFixed(0)) + "° — تلك جهة القبلة.\n\n"
           + "والقرص هنا لا يدور: سفاري يمنع مستشعر الاتجاه على العناوين "
-          + "غير المشفّرة، ولن أُدير قرصاً يوهم بأنه يتتبّع وهو لا يفعل.";
+          + "غير المشفّرة، ولن أُدير قرصاً يوهم بأنه يتتبّع وهو لا يفعل.\n\n"
+          + "وافتحه بالعنوان المشفَّر (https) تعمل البوصلة.";
       $("qibHow").style.whiteSpace = "pre-wrap";
     }).catch(() => {});
   };
