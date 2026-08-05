@@ -906,6 +906,60 @@ const server = http.createServer((req, res) => {
       return json(200, { ok: true, started: true, total });
     }
 
+    // سورةٌ في ملفٍّ واحد يُنزَّل إلى الجوّال.
+    //
+    // **ولماذا ملفٌّ لا تخزينٌ في المتصفّح؟** تخزينُ سفاري محدودُ
+    // المساحة، ويُمحى حين تضيق الذاكرة أو يطول تركُ التطبيق — فيفتح
+    // صاحبُه المصحف يوماً فيجده فارغاً بلا سبب. والملفُّ ملكُه: لا
+    // يمسحه أحد، ويعمل في السيّارة ومن أيّ مشغّل.
+    //
+    // ولا يُجمع إلا ما هو محفوظٌ كاملاً — فلا يُقدَّم نصفُ سورة.
+    if (rest === "audio/sura") {
+      const r = String(url.searchParams.get("r") || "");
+      const s = Number(url.searchParams.get("s"));
+      if (!(CFG.reciters || {})[r]) return json(404, { ok: false, why: "هذا القارئ لم يُقَس بعد" });
+      if (!(s >= 1 && s <= 114)) return json(400, { ok: false, why: "رقم سورة خارج المدى" });
+      const st = islam.suraSaved(r, s);
+      if (st.have < st.total) {
+        return json(409, { ok: false, why: "احفظ السورة أوّلاً", have: st.have, total: st.total });
+      }
+      const files = [];
+      let bytes = 0;
+      for (let a = 1; a <= st.total; a++) {
+        const f = islam.ayahFile(r, s, a);
+        files.push(f);
+        bytes += fs.statSync(f).size;
+      }
+      // الاسم بالعربية يحتاج الصيغة المرمَّزة، وإلا خرج مسوخاً في الجوّال
+      let name = "sura-" + String(s).padStart(3, "0");
+      try {
+        const meta = islam.readJson("suras.json")[s - 1];
+        if (meta && meta.name) {
+          name = String(meta.name).replace(/[ـً-ْٰ]/g, "").replace(/[\\/:*?"<>|]/g, "").trim();
+        }
+      } catch {}
+      const utf8 = encodeURIComponent(name + ".mp3");
+      res.writeHead(200, {
+        "Content-Type": "audio/mpeg",
+        "Content-Length": bytes,
+        "Content-Disposition": "attachment; filename=\"" + "sura-" + s + ".mp3\"; " +
+                               "filename*=UTF-8''" + utf8,
+        "Cache-Control": "no-store",
+      });
+      // واحداً بعد واحد: لا نجمع مئات الميغابايت في الذاكرة
+      let i = 0;
+      const next = () => {
+        if (i >= files.length || res.writableEnded) return res.end();
+        const rs = fs.createReadStream(files[i++]);
+        rs.on("error", () => res.end());
+        rs.on("end", next);
+        rs.pipe(res, { end: false });
+      };
+      log("audio: sending sura " + s + " (" + st.total + " ayahs, " +
+          Math.round(bytes / 1048576) + " MB) for " + r);
+      return next();
+    }
+
     if (rest === "audio/stop") {
       if (saving && !saving.done) { saving.stop = true; log("audio: save cancelled"); }
       return json(200, { ok: true });

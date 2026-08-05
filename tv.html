@@ -1031,7 +1031,8 @@ input::placeholder{color:#5c6579}
     </div>
     <div id="qPlayMsg" class="hint"></div>
     <div class="act-row" style="margin:10px 0 0">
-      <button class="key sm" id="qSave">احفظ السورة للاستماع بلا إنترنت</button>
+      <button class="key sm" id="qSave">احفظ السورة على الخادم</button>
+      <button class="key sm" id="qGet">نزّلها إلى جوّالك</button>
     </div>
     <div id="qSaveMsg" class="hint"></div>
   </div>
@@ -3321,13 +3322,31 @@ function wakeTv(btn){
       return;
     }
     clearInterval(saveTimer); saveTimer = null;
-    $("qSave").textContent = "احفظ السورة للاستماع بلا إنترنت";
+    $("qSave").textContent = "احفظ السورة على الخادم";
     if (st.sura){
       $("qSaveMsg").textContent = st.sura.have >= st.sura.total
         ? "محفوظةٌ كاملة — تعمل بلا إنترنت"
         : "المحفوظ " + AD(st.sura.have) + " من " + AD(st.sura.total) + " آية";
     }
   }
+
+  /* ملفُّ السورة إلى الجوّال — ملكُه لا يمحوه متصفّح، ويعمل في السيّارة */
+  $("qGet").onclick = async () => {
+    const r = $("qReciter").value;
+    if (!r) return void ($("qSaveMsg").textContent = "اختر قارئاً أوّلاً");
+    const s = Number($("qSura").value) || 1;
+    const st = await fetch("/islam/audio/status?r=" + encodeURIComponent(r) + "&s=" + s,
+                           { cache:"no-store" }).then(x => x.json()).catch(() => null);
+    if (!st || !st.sura) return void ($("qSaveMsg").textContent = "تعذّر الوصول للخادم");
+    if (st.sura.have < st.sura.total){
+      // لا يُقدَّم نصفُ سورة — يُقال ما ينقص، ويُبدأ حفظُه
+      $("qSaveMsg").textContent = "المحفوظ " + AD(st.sura.have) + " من " +
+        AD(st.sura.total) + " — أحفظها أوّلاً ثم أنزّلها";
+      return $("qSave").click();
+    }
+    $("qSaveMsg").textContent = "يبدأ التنزيل… احفظه في «الملفات» من زرّ المشاركة";
+    location.href = "/islam/audio/sura?r=" + encodeURIComponent(r) + "&s=" + s;
+  };
 
   $("qSave").onclick = async () => {
     const r = $("qReciter").value;
