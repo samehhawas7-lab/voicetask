@@ -1009,6 +1009,9 @@ input::placeholder{color:#5c6579}
       <select id="qReciter"></select>
       <button class="key sm" id="qPlay">▶ استمع</button>
     </div>
+    <!-- زرُّ القياس ظاهرٌ دائماً: كان يظهر حين لا قارئ، فلم يكن
+         لمن أراد أن يعيد القياس أو يزيد قارئاً بابٌ يدخل منه -->
+    <button class="key sm" id="qProbe" style="width:100%;margin-bottom:8px">اقرأ القرّاء</button>
     <div class="qopts">
       <label>التكرار
         <select id="qRepeat">
@@ -2824,8 +2827,27 @@ function wakeTv(btn){
         const r = await post("/https/enable");
         if (r.running){ $("tlsMsg").textContent = "جارٍ — انتظر قليلاً"; return; }
         if (!r.ok){
-          $("tlsMsg").style.color = "var(--danger)";
-          $("tlsMsg").textContent = r.why || "تعذّر";
+          const m = $("tlsMsg");
+          m.style.color = "var(--danger)";
+          m.innerHTML = "";
+          const w = document.createElement("div");
+          w.textContent = r.why || "تعذّر";
+          m.appendChild(w);
+          // الخطوةُ التالية بيده، ورابطُها يُنسخ — فلا يُكتب باليد
+          if (r.next){
+            const n = document.createElement("div");
+            n.style.cssText = "color:var(--text);margin-top:8px;line-height:1.9";
+            n.textContent = r.next;
+            m.appendChild(n);
+          }
+          if (r.admin){
+            const b = document.createElement("button");
+            b.className = "key sm";
+            b.style.cssText = "width:100%;margin-top:8px";
+            b.textContent = "انسخ رابط لوحة Tailscale";
+            b.onclick = () => copyText(r.admin, "نُسخ — افتحه في المتصفّح");
+            m.appendChild(b);
+          }
         } else {
           $("tlsMsg").style.color = "";
           toast("صدرت الشهادة");
@@ -3215,7 +3237,8 @@ function wakeTv(btn){
 
   function startFrom(a){
     const r = $("qReciter").value;
-    if (!r) return void ($("qPlayMsg").textContent = "لا قارئ مُتاح — اضغط «اقرأ القرّاء» أوّلاً");
+    if (!r) return void ($("qPlayMsg").textContent =
+      "لا قارئ بعد — اضغط «اقرأ القرّاء» مرّةً واحدة، ثم استمع");
     player.list = scopeAyahs(a);
     player.i = 0;
     player.left = Number($("qRepeat").value) || 1;
@@ -3257,25 +3280,32 @@ function wakeTv(btn){
       const o = document.createElement("option");
       o.value = ""; o.textContent = r.probed ? "لم يُجب أحد" : "لم يُقَس بعد";
       sel.appendChild(o);
-      $("qPlayMsg").innerHTML = "";
-      const b = document.createElement("button");
-      b.className = "key sm"; b.style.width = "100%"; b.textContent = "اقرأ القرّاء الآن";
-      b.onclick = async () => {
-        b.disabled = true; b.textContent = "يُقاس… قد يأخذ دقيقة";
-        try {
-          const out = await post("/islam/audio/probe");
-          if (out.running) { $("qPlayMsg").textContent = "قياسٌ جارٍ — انتظر"; return; }
-          const bad = Object.entries(out.result || {}).filter(([, v]) => !v.url);
-          await loadReciters();
-          $("qPlayMsg").textContent = bad.length
-            ? "لم يُجب: " + bad.map(([, v]) => v.name).join("، ")
-            : "أجاب القرّاء الأربعة";
-        } catch (e) { $("qPlayMsg").textContent = "تعذّر القياس: " + e.message; }
-        finally { b.disabled = false; b.textContent = "اقرأ القرّاء الآن"; }
-      };
-      $("qPlayMsg").appendChild(b);
+      // القيدُ يُقال، ولا يُترك زرٌّ يُضغط فلا يقع شيء
+      $("qPlayMsg").textContent = r.probed
+        ? "لم يُجب أيُّ قارئ من شبكتك. اضغط «اقرأ القرّاء» لإعادة المحاولة."
+        : "اضغط «اقرأ القرّاء» مرّةً واحدة — دقيقة، ثم يعمل الصوت دائماً.";
     }
   }
+
+  /** يقيس القرّاء ويقول من أجاب ومن سكت — بلا تجميل */
+  async function probeReciters(){
+    const b = $("qProbe"), msg = $("qPlayMsg");
+    b.disabled = true; b.textContent = "يُقاس… قد يأخذ دقيقة";
+    msg.style.color = ""; msg.textContent = "";
+    try {
+      const out = await post("/islam/audio/probe");
+      if (out.running){ msg.textContent = "قياسٌ جارٍ — انتظر قليلاً"; return; }
+      const bad = Object.entries(out.result || {}).filter(([, v]) => !v.url);
+      const good = Object.entries(out.result || {}).filter(([, v]) => v.url);
+      await loadReciters();
+      msg.textContent = good.length
+        ? "أجاب: " + good.map(([, v]) => v.name).join("، ") +
+          (bad.length ? " · ولم يُجب: " + bad.map(([, v]) => v.name).join("، ") : "")
+        : "لم يُجب أحد — شبكتك تحجب مضيفي التلاوات. قل لي وأبحث عن مصدرٍ آخر.";
+    } catch (e) { msg.textContent = "تعذّر القياس: " + e.message; }
+    finally { b.disabled = false; b.textContent = "اقرأ القرّاء"; }
+  }
+  $("qProbe").onclick = probeReciters;
 
   // ---------- الحفظ للاستماع بلا إنترنت ----------
   let saveTimer = null;

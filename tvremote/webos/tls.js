@@ -83,7 +83,11 @@ function load() {
  */
 async function issue(log = () => {}) {
   const d = await dnsName();
-  if (!d.name) return { ok: false, why: d.why };
+  if (!d.name) {
+    return { ok: false, why: d.why,
+             next: "افتح https://login.tailscale.com/admin/dns وفعّل «MagicDNS».",
+             admin: "https://login.tailscale.com/admin/dns" };
+  }
 
   fs.mkdirSync(DIR, { recursive: true });
   const tmpKey = KEY + ".part", tmpCrt = CRT + ".part";
@@ -98,10 +102,18 @@ async function issue(log = () => {}) {
     cleanup();
     const msg = (r.err || r.out).trim();
     // الرسالة الشائعة حين لا تكون الشهادات مفعّلة في اللوحة
-    const hint = /HTTPS|not enabled|disabled/i.test(msg)
-      ? " — فعّل «HTTPS Certificates» في لوحة Tailscale ثم أعد المحاولة"
-      : "";
-    return { ok: false, why: msg.slice(0, 300) + hint, name: d.name };
+    // الخطوةُ التالية تُقال دائماً، لا حين نتعرّف على نصّ الخطأ وحده.
+    // فرسائل Tailscale تتبدّل بين النسخ، ورسالةٌ لا يفهمها صاحبُ
+    // البيت تساوي عطباً بلا سبب.
+    return {
+      ok: false,
+      name: d.name,
+      why: msg.slice(0, 220),
+      // ما يفعله بيده — وهو ضغطتان في لوحة Tailscale لمرّةٍ واحدة
+      next: "افتح https://login.tailscale.com/admin/dns وفعّل «MagicDNS» " +
+            "ثم «HTTPS Certificates»، ثم اضغط الزرّ هنا مرّة أخرى.",
+      admin: "https://login.tailscale.com/admin/dns",
+    };
   }
 
   let key, crt;
