@@ -1012,6 +1012,10 @@ input::placeholder{color:#5c6579}
     <!-- زرُّ القياس ظاهرٌ دائماً: كان يظهر حين لا قارئ، فلم يكن
          لمن أراد أن يعيد القياس أو يزيد قارئاً بابٌ يدخل منه -->
     <button class="key sm" id="qProbe" style="width:100%;margin-bottom:8px">اقرأ القرّاء</button>
+    <!-- نسخةٌ قديمة لا تعرف قارئاً أضفناه: يُقال ذلك صراحةً، فلا
+         يُطارَد سببٌ في المصدر وعلّتُه أنّ التحديث لم يصل -->
+    <div id="qOld" class="hint" hidden
+         style="color:var(--warn);white-space:pre-wrap;margin-bottom:8px"></div>
     <div class="qopts">
       <label>التكرار
         <select id="qRepeat">
@@ -3292,6 +3296,26 @@ function wakeTv(btn){
     const saved = store.get("reciter");
     if (saved && ready.some(x => x.key === saved)) sel.value = saved;
     sel.onchange = () => store.set("reciter", sel.value);
+
+    // «لم ينزل المصحف المعلّم» له سببان لا واحد: إمّا أنّ الخادم لا
+    // يعرفه أصلاً — فالتحديث لم يصل — وإمّا أنه يعرفه ولم يُجب مصدرُه.
+    // والفرق بينهما هو الفرق بين إصلاحٍ عندك وإصلاحٍ عندي، فيُقال أيّهما
+    const old = $("qOld");
+    if (!r.reciters.some(x => x.teacher)){
+      // التحذير أوّلاً ثم النسخة: ‏/version يسأل GitHub عن آخر ما فيه،
+      // وقد يبطئ أو يسقط — فلا يُعلَّق تحذيرٌ مؤكَّد على جوابٍ محتمل
+      const head = "نسختك لا تعرف «المصحف المعلّم» بعد — التحديث لم يصل "
+        + "بعدُ إلى اللابتوب.\nاذهب إلى الصيانة ← تحديث الآن، ثم عُد "
+        + "واضغط «اقرأ القرّاء».";
+      old.hidden = false;
+      old.textContent = head;
+      fetch("/version", { cache:"no-store" }).then(x => x.json()).then(v => {
+        const when = v && (v.installedAt || (v.installed ? v.installed.slice(0, 7) : ""));
+        old.textContent = head + "\nالمنصَّب عندك: "
+          + (when || "غير مؤرَّخ — وهذا نفسه دليلُ قِدَمه")
+          + (v && v.branch ? " · " + v.branch : "");
+      }).catch(() => {});
+    } else old.hidden = true;
 
     if (!ready.length){
       const o = document.createElement("option");

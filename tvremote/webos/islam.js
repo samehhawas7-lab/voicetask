@@ -270,26 +270,32 @@ const RECITERS = [
     ],
   },
   // ---- المصحف المعلّم: الشيخ يقرأ والأطفال يردّدون خلفه ----
-  // وهذه تسجيلاتٌ أخرى غير المرتَّل، لها مجلّداتها. ولستُ متيقّناً من
-  // أسمائها — مضيفو التلاوات محجوبون عن المكان الذي كُتبت فيه هذه
-  // الشيفرة. فلكلٍّ مرشَّحاتُه، **ويقيسها الخادم في البيت** كما قاس
-  // الأربعة قبلها. ومن لم يُجب قيل اسمه، ولم يُترك زرٌّ يُضغط فلا يقع.
-  {
-    key: "minshawi_teacher", name: "المنشاوي — المصحف المعلّم", note: "مع ترديد الأطفال",
-    teacher: true,
-    urls: [
-      "https://everyayah.com/data/Minshawy_Teacher_128kbps/{sss}{aaa}.mp3",
-      "https://everyayah.com/data/minshawy_teacher_128kbps/{sss}{aaa}.mp3",
-      "https://everyayah.com/data/Minshawy_Mualim_128kbps/{sss}{aaa}.mp3",
-    ],
-  },
+  // مضيفو التلاوات محجوبون عن المكان الذي كُتبت فيه هذه الشيفرة، فلا
+  // أستطيع أن أطرق الباب بنفسي. لكنّ مجلّد الحصري المعلّم مفهرَسٌ
+  // ومنشور: everyayah.com/data/Husary_Muallim_128kbps — وهذا قدرُ ما
+  // أملك من دليل، وليس كالقياس. فيُقدَّم على غيره، **ويقيسه الخادم في
+  // البيت** كما قاس الأربعة قبله.
+  //
+  // وأمّا المنشاوي المعلّم فمشهورٌ مسموع، ولم أجد له مجلّداً آيةً آيةً
+  // عند هذا المضيف — والمنشور منه سُوَرٌ كاملة لا تصلح للترديد آيةً
+  // آيةً. فمرشَّحاتُه ظنٌّ لا أكثر، وإن سكتت قيل ذلك باسمه ولم يُترك
+  // زرٌّ يُضغط فلا يقع.
   {
     key: "husary_teacher", name: "الحصري — المصحف المعلّم", note: "مع ترديد الأطفال",
     teacher: true,
     urls: [
       "https://everyayah.com/data/Husary_Muallim_128kbps/{sss}{aaa}.mp3",
+      "https://www.everyayah.com/data/Husary_Muallim_128kbps/{sss}{aaa}.mp3",
       "https://everyayah.com/data/Husary_128kbps_Muallim/{sss}{aaa}.mp3",
-      "https://everyayah.com/data/husary_teacher_128kbps/{sss}{aaa}.mp3",
+    ],
+  },
+  {
+    key: "minshawi_teacher", name: "المنشاوي — المصحف المعلّم", note: "مع ترديد الأطفال",
+    teacher: true,
+    urls: [
+      "https://everyayah.com/data/Minshawy_Mualim_128kbps/{sss}{aaa}.mp3",
+      "https://everyayah.com/data/Minshawy_Muallim_128kbps/{sss}{aaa}.mp3",
+      "https://everyayah.com/data/Minshawy_Teacher_128kbps/{sss}{aaa}.mp3",
     ],
   },
   {
