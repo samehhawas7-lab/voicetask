@@ -141,6 +141,7 @@ $expect = @("tv.html", "tvremote\webos\server.js", "tvremote\windows\run.cmd",
             "tvremote\webos\selfupdate.js",
             # فاهمُ الأمر المنطوق، والشهادة المشفَّرة
             "tvremote\webos\voice.js",
+            "tvremote\webos\mushaf-sw.js",
             "tvremote\webos\tls.js",
             "tvremote\webos\tuya-scan.js",
             "tvremote\windows\tailscale.ps1", "tvremote\windows\ssh.ps1",

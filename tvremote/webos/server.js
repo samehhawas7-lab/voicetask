@@ -562,7 +562,29 @@ async function autoCheck() {
 
 // ---------- تقديم الواجهة ----------
 // نحقن راية تخبر الصفحة أنها تعمل خلف خادم، فتوجّه اتصالها إليه
-function servePage(res) {
+/* تطبيقُ المصحف: صفحةٌ واحدة، وتطبيقان.
+
+   طلب مصحفاً مستقلّاً عن الريموت. وهو مستقلٌّ فيما يراه: أيقونتُه
+   واسمُه وبدايتُه ومحتواه — لا شاشةَ جهازٍ فيه. وأمّا المحرّك فواحد،
+   وذلك مقصود: نسختان من شيفرةٍ واحدة تفترقان بعد شهر، فتُصلح علّةً
+   في إحداهما وتبقى في الأخرى. */
+const MUSHAF_SCREENS = new Set([
+  "dev-islam", "islam-quran", "islam-azkar", "islam-times", "islam-qibla",
+]);
+
+function mushafShell(html) {
+  // تُنزع شاشاتُ الأجهزة من الصفحة نفسها، فلا تصل الجوّال أصلاً
+  html = html.replace(
+    /<section class="screen[^"]*" id="([a-z0-9-]+)"[\s\S]*?\n<\/section>/g,
+    (m, id) => (MUSHAF_SCREENS.has(id) ? m : "")
+  );
+  // «إسلامي» تصير أولى الشاشات وبيتَ التطبيق
+  html = html.replace('<section class="screen" id="dev-islam" data-title="إسلامي"',
+                      '<section class="screen on" id="dev-islam" data-title="المصحف"');
+  return html;
+}
+
+function servePage(res, app) {
   let html;
   try {
     html = fs.readFileSync(PAGE, "utf8");
@@ -585,9 +607,19 @@ function servePage(res) {
   // node ويُحقن هنا — لا نسختان تفترقان.
   let voiceSrc = "";
   try { voiceSrc = fs.readFileSync(path.join(__dirname, "voice.js"), "utf8"); } catch {}
+  const isMushaf = app === "mushaf";
   const flag = `<script>window.__TV_PROXY__=${JSON.stringify(tvIp || "auto")};` +
-               `window.__BUILD__=${JSON.stringify(stamp)};</script>\n` +
+               `window.__BUILD__=${JSON.stringify(stamp)};` +
+               `window.__APP__=${JSON.stringify(isMushaf ? "mushaf" : "remote")};</script>\n` +
+               (isMushaf
+                 ? '<link rel="manifest" href="/mushaf/manifest.webmanifest">\n' +
+                   '<script>if("serviceWorker" in navigator)' +
+                   'addEventListener("load",function(){' +
+                   'navigator.serviceWorker.register("/mushaf-sw.js",{scope:"/"})' +
+                   '.catch(function(){});});</script>\n'
+                 : "") +
                (voiceSrc ? "<script>\n" + voiceSrc + "\n</script>\n" : "");
+  if (isMushaf) html = mushafShell(html);
   // بدالةٍ لا بنصّ: `String.replace` تُفسّر `$&` و`` $` `` في نصّ
   // البديل، فيوم يدخل أحدها في voice.js تنسخ الصفحةُ نفسها في نفسها
   // وتخرج مسخاً صامتاً. والدالّة لا تُفسّر شيئاً.
@@ -1404,6 +1436,45 @@ const server = http.createServer((req, res) => {
       });
     }
     return json(404, { ok: false, why: "غير معروف" });
+  }
+
+  // ---------- تطبيق المصحف ----------
+  if (url.pathname === "/mushaf-sw.js") {
+    let sw = "";
+    try { sw = fs.readFileSync(path.join(__dirname, "mushaf-sw.js"), "utf8"); }
+    catch { return json(404, { ok: false, why: "ما لقيت عامل الخدمة" }); }
+    res.writeHead(200, {
+      "Content-Type": "application/javascript; charset=utf-8",
+      // بلا هذه الترويسة لا يتجاوز نطاقُ العامل مجلّده، فلا يحفظ
+      // بيانات المصحف وهي تحت /islam
+      "Service-Worker-Allowed": "/",
+      "Cache-Control": "no-store",
+    });
+    return res.end(sw);
+  }
+  if (url.pathname === "/mushaf/manifest.webmanifest") {
+    res.writeHead(200, { "Content-Type": "application/manifest+json; charset=utf-8" });
+    return res.end(JSON.stringify({
+      name: "المصحف", short_name: "المصحف",
+      start_url: "/mushaf", scope: "/", display: "standalone",
+      dir: "rtl", lang: "ar",
+      background_color: "#12161b", theme_color: "#12161b",
+      icons: [{ src: "/mushaf/icon.png", sizes: "180x180", type: "image/png" }],
+    }));
+  }
+  if (url.pathname === "/mushaf/icon.png") {
+    // الأيقونة في الصفحة نفسها، فلا يُحمل في المستودع ملفٌّ ثانٍ لها
+    let page = "";
+    try { page = fs.readFileSync(PAGE, "utf8"); } catch {}
+    const m = /apple-touch-icon"[^>]*base64,([A-Za-z0-9+/=]+)/.exec(page);
+    if (!m) return json(404, { ok: false, why: "لا أيقونة" });
+    const buf = Buffer.from(m[1], "base64");
+    res.writeHead(200, { "Content-Type": "image/png", "Content-Length": buf.length,
+                         "Cache-Control": "public, max-age=86400" });
+    return res.end(buf);
+  }
+  if (url.pathname === "/mushaf" || url.pathname === "/mushaf/") {
+    return servePage(res, "mushaf");
   }
 
   servePage(res);

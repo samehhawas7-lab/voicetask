@@ -2350,7 +2350,12 @@ function runCmd(cmd){
 // ---------- الموجّه بين الشاشات ----------
 // شاشة رئيسية وصفحة لكل جهاز. لا سحب أفقيّ: كان يصطدم بتمرير الصفحة
 // نفسها فيقع المستخدم بين تنقّلين لا يريد أحدهما.
-let currentScreen = "home";
+/* وضعُ المصحف: التطبيق نفسه، وصفحتان تفترقان فيما يُعرض.
+   شاشاتُ الأجهزة نُزعت في الخادم، وما بقي هنا تسميةٌ وبداية. */
+const MUSHAF_APP = window.__APP__ === "mushaf";
+const HOME = MUSHAF_APP ? "dev-islam" : "home";
+
+let currentScreen = HOME;
 
 function screenSub(id, text){
   const el = document.getElementById(id);
@@ -2365,7 +2370,7 @@ function show(id){
   currentScreen = id;
   $("pageTitle").textContent = target.dataset.title || "";
   $("modelName").textContent = target.dataset.sub || "";
-  $("backBtn").hidden = (id === "home");
+  $("backBtn").hidden = (id === HOME);
   $("settingsBtn").hidden = (id !== "dev-tv");   // أمراه للتلفزيون: قطع الاتصال ونسيان الإقران
   $("powerBtn").hidden = (id !== "dev-tv");
   target.scrollTop = 0;
@@ -2393,6 +2398,8 @@ function show(id){
   if (id === "islam-azkar" && window.__islamAzkar)  window.__islamAzkar();
   if (id === "islam-times" && window.__islamTimes)  window.__islamTimes();
   if (id === "islam-qibla" && window.__islamQibla)  window.__islamQibla();
+  // في تطبيق المصحف لا «بيت» يُرجع إليه: أوّلُ الشاشات هي شاشتُه
+
   // ومستشعر الاتجاه يُطفأ بالخروج: قراءةٌ مستمرّة لشاشةٍ لا تُرى
   // استنزافٌ للبطارية بلا فائدة
   if (id !== "islam-qibla" && window.__qiblaHush)   window.__qiblaHush();
@@ -2412,16 +2419,17 @@ function setupRouter(){
   // الشاشة قد تكون متفرّعة عن أخرى، فترجع إليها لا إلى الرئيسية
   const backOf = () => {
     const el = document.getElementById(currentScreen);
-    return (el && el.dataset.back) || "home";
+    return (el && el.dataset.back) || HOME;
   };
   $("backBtn").onclick = () => { buzz(); show(backOf()); };
   // زرّ الرجوع في الجوال يعود خطوة لا يخرج من التطبيق
-  addEventListener("popstate", () => { if (currentScreen !== "home") show(backOf()); });
-  show("home");
+  addEventListener("popstate", () => { if (currentScreen !== HOME) show(backOf()); });
+  show(HOME);
 }
 
 // لوحة اللمس: تحرّك المؤشر على التلفزيون عبر قناة الأزرار
 function setupTouchpad(){
+  if (MUSHAF_APP) return;   // لا لوحةَ لمسٍ بلا تلفزيون
   const pad = $("pad");
   let last = null, moved = 0;
 
@@ -2488,6 +2496,9 @@ function setupTouchpad(){
 
 function bind(){
   setupRouter();
+  // وما بعد الموجّه كلُّه ربطُ أزرارِ أجهزة: لوحةُ اللمس وأزرارُ
+  // التلفزيون وحقلُ عنوانه. وليس منها شيءٌ في تطبيق المصحف
+  if (MUSHAF_APP) return;
   setupTouchpad();
 
   // أزرار قناة الأزرار (التنقل والأرقام)
@@ -2763,7 +2774,8 @@ function copyText(text, okMsg){
   } else legacy();
 }
 
-$("copyDiagBtn").onclick = () =>
+// زرُّ نسخ التشخيص في شاشة الصيانة، وهي ليست في تطبيق المصحف
+if ($("copyDiagBtn")) $("copyDiagBtn").onclick = () =>
   copyText(diagLines.join("\n"), "تم النسخ — الصقها في المحادثة");
 
 /* ============================================================
@@ -2827,6 +2839,7 @@ function wakeTv(btn){
 }
 
 (function setupCommandsPage(){
+  if (MUSHAF_APP) return;   // تطبيق المصحف: لا أجهزة فيه
   const wake = $("wakeBtn");
   if (wake){
     wake.hidden = !onServer;
@@ -3020,6 +3033,7 @@ function wakeTv(btn){
    يعرف العنوانين ويعرف من أيّهما فُتح، فليقلها بدل أن يصمت.
    ============================================================ */
 (function setupAddressTip(){
+  if (MUSHAF_APP) return;   // تطبيق المصحف: لا أجهزة فيه
   const box = $("addrTip");
   if (!box || !onServer) return;
   if (store.get("addrtip_off") === "1") return;
@@ -3072,7 +3086,18 @@ function wakeTv(btn){
   });
 
   async function status(){
-    const s = await fetch("/islam/status", { cache:"no-store" }).then(r => r.json());
+    // بلا شبكة: يُعتمد آخرُ ما عُلم. والنصوص محفوظةٌ في الجوّال، فلا
+    // يصحّ أن يُقال «نزّلها» لمن معه المصحفُ كاملاً بين يديه
+    let s;
+    try {
+      s = await fetch("/islam/status", { cache:"no-store" }).then(r => r.json());
+      store.set("islam_ready", s.ready ? "1" : "0");
+    } catch {
+      const ready = store.get("islam_ready") === "1";
+      $("islamNeed").hidden = ready;
+      $("islamTiles").hidden = !ready;
+      return ready;
+    }
     $("islamNeed").hidden = s.ready;
     $("islamTiles").hidden = !s.ready;
     $("islamCredit").hidden = !s.ready;
@@ -4037,6 +4062,9 @@ function wakeTv(btn){
   };
 
   window.__islamHub = status;
+  // في تطبيق المصحف تُفتح هذه الشاشة قبل أن تُعرَّف دالّتها — فالموجّه
+  // يعمل أوّلاً والقسمُ الإسلاميّ بعده. فتُستدعى هنا إن كانت معروضة
+  if (currentScreen === "dev-islam") status();
 })();
 
 function setupWakeCheck(what, btnId, msgId){
@@ -4076,10 +4104,13 @@ function setupWakeCheck(what, btnId, msgId){
       .finally(() => { btn.disabled = false; btn.textContent = t; });
   };
 }
-setupWakeCheck("tv", "tvWakeCheck", "tvWakeMsg");
-setupWakeCheck("proj", "projWakeCheck", "projWakeMsg");
+if (!MUSHAF_APP){
+  setupWakeCheck("tv", "tvWakeCheck", "tvWakeMsg");
+  setupWakeCheck("proj", "projWakeCheck", "projWakeMsg");
+}
 
 (function setupProjector(){
+  if (MUSHAF_APP) return;   // تطبيق المصحف: لا أجهزة فيه
   const setup = $("projSetup"), remote = $("projRemote");
   if (!setup) return;
 
@@ -4251,6 +4282,7 @@ setupWakeCheck("proj", "projWakeCheck", "projWakeMsg");
    يقع. والمفهوم يُعرض بالعربية قبل تنفيذه، فيُرى ما وقع.
    ============================================================ */
 (function setupVoice(){
+  if (MUSHAF_APP) return;   // تطبيق المصحف: لا أجهزة فيه
   const btn = $("micBtn"), stateEl = $("micState"), heardEl = $("micHeard");
   if (!btn) return;
 
@@ -4398,7 +4430,7 @@ setupWakeCheck("proj", "projWakeCheck", "projWakeMsg");
           return;
 
         case "open": go("dev-" + (r.device === "ac" ? "ac-hall" : r.device)); return;
-        case "home": go("home"); return;
+        case "home": go(HOME); return;
         case "back": { const b = $("backBtn"); if (b) b.click(); return; }
       }
     } catch (e) { toast("تعذّر التنفيذ: " + e.message, true); }
@@ -4415,6 +4447,7 @@ function post(path, body){
 }
 
 (function setupUpdate(){
+  if (MUSHAF_APP) return;   // تطبيق المصحف: لا أجهزة فيه
   const btn = $("updBtn"), box = $("updSteps"), chip = $("updChip"), note = $("updNote");
   if (!btn) return;
 
@@ -4528,6 +4561,7 @@ function post(path, body){
 const AC_MODE_NAMES = { cold:"تبريد", hot:"تدفئة", wind:"مروحة", wet:"تجفيف", auto:"تلقائي" };
 
 (function setupAC(){
+  if (MUSHAF_APP) return;   // تطبيق المصحف: لا أجهزة فيه
   const rooms = ["hall", "bed"];
   const el = (room, sel) => document.querySelector('[data-room="' + room + '"]' + sel) ||
                             document.querySelector('.ac-remote[data-room="' + room + '"] ' + sel);
@@ -4708,6 +4742,7 @@ const AC_MODE_NAMES = { cold:"تبريد", hot:"تدفئة", wind:"مروحة", 
    يمنع الفعل. فما تراه هنا تسهيلٌ لا حمايةٌ يُعتمد عليها.
    ============================================================ */
 (function setupRouter(){
+  if (MUSHAF_APP) return;   // تطبيق المصحف: لا أجهزة فيه
   const msg = $("rtMsg");
   if (!msg) return;
   const cards = ["rtState", "rtWifiCard", "rtHostsCard", "rtTools"];
@@ -4865,6 +4900,7 @@ const AC_MODE_NAMES = { cold:"تبريد", hot:"تدفئة", wind:"مروحة", 
 })();
 
 (function setupSurvey(){
+  if (MUSHAF_APP) return;   // تطبيق المصحف: لا أجهزة فيه
   const list = $("svList"), msg = $("svMsg");
   if (!list) return;
 
@@ -4992,10 +5028,10 @@ const AC_MODE_NAMES = { cold:"تبريد", hot:"تدفئة", wind:"مروحة", 
 
 function paintInfo(){
   const set = (id, v) => { const el = $(id); if (el) el.textContent = v; };
-  const home = document.getElementById("home");
+  const home = document.getElementById(HOME);
   if (home){
     home.dataset.sub = onServer ? "الخادم يعمل · " + location.hostname : "اختر جهازاً";
-    if (currentScreen === "home") $("modelName").textContent = home.dataset.sub;
+    if (home && currentScreen === HOME) $("modelName").textContent = home.dataset.sub;
   }
   set("infoServer", onServer ? location.host : "بلا خادم (اتصال مباشر)");
   set("infoTv", tv.ip || "—");
