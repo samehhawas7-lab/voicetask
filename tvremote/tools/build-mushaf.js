@@ -129,6 +129,39 @@ sw = sw.replace("__CACHE_NAME__", "mushaf-" + stamp)
 fs.writeFileSync(path.join(outDir, "sw.js"), sw);
 fs.writeFileSync(path.join(outDir, ".nojekyll"), "");
 
+// عملُ نشرٍ يفعّل GitHub Pages بنفسه — فلا زرَّ يلزم في الإعدادات
+fs.mkdirSync(path.join(outDir, ".github", "workflows"), { recursive: true });
+fs.writeFileSync(path.join(outDir, ".github", "workflows", "pages.yml"),
+`name: نشر المصحف
+on:
+  push:
+    branches: [gh-pages]
+  workflow_dispatch:
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: true
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: \${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
+      - id: deployment
+        uses: actions/deploy-pages@v4
+`);
+
 let total = 0;
 for (const f of fs.readdirSync(path.join(outDir, "data"))) {
   total += fs.statSync(path.join(outDir, "data", f)).size;
