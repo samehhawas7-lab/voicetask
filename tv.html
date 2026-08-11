@@ -2354,6 +2354,11 @@ function runCmd(cmd){
    شاشاتُ الأجهزة نُزعت في الخادم، وما بقي هنا تسميةٌ وبداية. */
 const MUSHAF_APP = window.__APP__ === "mushaf";
 const HOME = MUSHAF_APP ? "dev-islam" : "home";
+/* مستقلٌّ بلا خادم: الصفحة من استضافةٍ عامّة، والنصوص معها، والحسابُ
+   كلُّه فيها. فلا لابتوب يلزم ولا نفق. */
+const NOSRV = !!window.__STANDALONE__;
+// الموضع: الرياض سلفاً — نفسُ افتراض الخادم حرفاً
+const PLACE = { lat: 24.7136, lon: 46.6753, tz: 3 };
 
 let currentScreen = HOME;
 
@@ -3086,6 +3091,20 @@ function wakeTv(btn){
   });
 
   async function status(){
+    if (NOSRV){
+      // النصوص شُحنت مع التطبيق وقِيست عند البناء — فلا تنزيل ولا سؤال
+      $("islamNeed").hidden = true;
+      $("islamTiles").hidden = false;
+      $("islamCredit").hidden = false;
+      const dl = $("islamCreditList");
+      dl.innerHTML = "";
+      for (const f of (window.__CREDITS__ || [])){
+        const dt = document.createElement("dt"), dd = document.createElement("dd");
+        dt.textContent = f.label; dd.textContent = f.credit;
+        dl.append(dt, dd);
+      }
+      return true;
+    }
     // بلا شبكة: يُعتمد آخرُ ما عُلم. والنصوص محفوظةٌ في الجوّال، فلا
     // يصحّ أن يُقال «نزّلها» لمن معه المصحفُ كاملاً بين يديه
     let s;
@@ -3534,6 +3553,7 @@ function wakeTv(btn){
   window.__quranImm = () => imm;
   window.__quranExitImm = clearImm;
   $("qImm").onclick = () => { setImm(!imm); toTop(); };
+  if (NOSRV) $("qSave").textContent = "احفظ السورة في الجوّال";
   $("qFull").onclick = () => setImm(false);
   // والحجم يبقى في متناوله وهو في ملء الشاشة — وإلا لخرج ليكبّر ثمّ عاد
   $("qImmBigger").onclick  = () => resize(2);
@@ -3635,8 +3655,14 @@ function wakeTv(btn){
     if (!a) return stopPlay("تمّ");
     markNow(a);
     const r = $("qReciter").value;
-    audio.src = "/islam/audio/ayah?r=" + encodeURIComponent(r) +
-                "&s=" + a.chapter + "&a=" + a.verse;
+    if (NOSRV){
+      const tpl = pickedTpls()[r];
+      if (!tpl) return stopPlay("هذا القارئ لم يُقَس بعد — اضغط «اقرأ القرّاء»");
+      audio.src = falak.audioUrl(tpl, a.chapter, a.verse);
+    } else {
+      audio.src = "/islam/audio/ayah?r=" + encodeURIComponent(r) +
+                  "&s=" + a.chapter + "&a=" + a.verse;
+    }
     audio.play().catch((e) => stopPlay("تعذّر التشغيل: " + e.message));
     const rep = Number($("qRepeat").value);
     $("qPlayMsg").textContent = bare(D.suras[a.chapter - 1].name) + " " + AD(a.verse) +
@@ -3693,9 +3719,20 @@ function wakeTv(btn){
     startFrom(from);
   };
 
+  // في المستقلّ: القائمة مشحونةٌ مع التطبيق، والمقيسُ محفوظٌ في الجوّال
+  const pickedTpls = () => { try { return JSON.parse(store.get("reciters") || "{}"); } catch { return {}; } };
+
   async function loadReciters(){
     const sel = $("qReciter");
-    const r = await fetch("/islam/audio/reciters", { cache: "no-store" }).then(x => x.json());
+    const r = NOSRV
+      ? (() => {
+          const picked = pickedTpls();
+          return { ok: true, probed: !!store.get("recitersProbedAt"),
+                   reciters: (window.__RECITERS__ || []).map(x => ({
+                     key: x.key, name: x.name, note: x.note,
+                     teacher: !!x.teacher, ready: !!picked[x.key] })) };
+        })()
+      : await fetch("/islam/audio/reciters", { cache: "no-store" }).then(x => x.json());
     sel.innerHTML = "";
     const ready = r.reciters.filter(x => x.ready);
     // المعلّم يُفصل عن المرتَّل: هما غرضان مختلفان، وخلطُهما في قائمةٍ
@@ -3749,13 +3786,45 @@ function wakeTv(btn){
     }
   }
 
+  /** أيُجيب هذا العنوان؟ يُسأل بعنصر صوتٍ لا بـfetch — فالمتصفّح يشغّل
+      الصوت من مضيفٍ غريب ولا يقرأه، وهذا يكفي للقياس */
+  function probeAudioUrl(u, ms = 8000){
+    return new Promise((res) => {
+      const a = new Audio();
+      let done = false;
+      const end = (ok) => { if (done) return; done = true;
+                            a.onloadedmetadata = a.onerror = null;
+                            a.removeAttribute("src"); res(ok); };
+      const t = setTimeout(() => end(false), ms);
+      a.preload = "metadata";
+      a.onloadedmetadata = () => { clearTimeout(t); end(true); };
+      a.onerror = () => { clearTimeout(t); end(false); };
+      a.src = u;
+    });
+  }
+
+  async function probeStandalone(){
+    const result = {}, picked = {};
+    for (const r of (window.__RECITERS__ || [])){
+      result[r.key] = { name: r.name, url: null };
+      for (const tpl of r.urls){
+        if (await probeAudioUrl(falak.audioUrl(tpl, 1, 1))){
+          result[r.key].url = tpl; picked[r.key] = tpl; break;
+        }
+      }
+    }
+    store.set("reciters", JSON.stringify(picked));
+    store.set("recitersProbedAt", new Date().toISOString());
+    return { ok: true, result };
+  }
+
   /** يقيس القرّاء ويقول من أجاب ومن سكت — بلا تجميل */
   async function probeReciters(){
     const b = $("qProbe"), msg = $("qPlayMsg");
     b.disabled = true; b.textContent = "يُقاس… قد يأخذ دقيقة";
     msg.style.color = ""; msg.textContent = "";
     try {
-      const out = await post("/islam/audio/probe");
+      const out = NOSRV ? await probeStandalone() : await post("/islam/audio/probe");
       if (out.running){ msg.textContent = "قياسٌ جارٍ — انتظر قليلاً"; return; }
       const bad = Object.entries(out.result || {}).filter(([, v]) => !v.url);
       const good = Object.entries(out.result || {}).filter(([, v]) => v.url);
@@ -3770,9 +3839,64 @@ function wakeTv(btn){
   $("qProbe").onclick = probeReciters;
 
   // ---------- الحفظ للاستماع بلا إنترنت ----------
+  /* في المستقلّ يُحفظ في مخزن المتصفّح (Cache) وعاملُ الخدمة يقدّمه.
+     والجلبُ بلا CORS يعطي ردّاً معتماً يصلح للتشغيل ولا يُقرأ محتواه —
+     فزرُّ «ملفٍّ واحد إلى الجوّال» قد يتعذّر عند مضيفٍ لا يسمح بالقراءة،
+     ويُقال ذلك حين يقع لا قبله. */
+  const AUD_CACHE = "mushaf-audio-v1";
+  let saveAbort = false;
+
+  async function savedCountLocal(r, s){
+    const tpl = pickedTpls()[r];
+    if (!tpl || !window.caches) return { have: 0, total: falak.SURA_AYAHS[s - 1] };
+    const c = await caches.open(AUD_CACHE);
+    const total = falak.SURA_AYAHS[s - 1];
+    let have = 0;
+    for (let a = 1; a <= total; a++){
+      if (await c.match(falak.audioUrl(tpl, s, a))) have++;
+    }
+    return { have, total };
+  }
+
+  async function saveStandalone(r, s){
+    const tpl = pickedTpls()[r];
+    if (!tpl) return void ($("qSaveMsg").textContent = "هذا القارئ لم يُقَس بعد");
+    const c = await caches.open(AUD_CACHE);
+    const total = falak.SURA_AYAHS[s - 1];
+    saveAbort = false;
+    $("qSave").textContent = "أوقف الحفظ";
+    let failed = 0;
+    for (let a = 1; a <= total; a++){
+      if (saveAbort) break;
+      const u = falak.audioUrl(tpl, s, a);
+      if (!(await c.match(u))){
+        try {
+          const res = await fetch(u, { mode: "no-cors" });
+          // الردُّ المعتم لا يكشف نجاحه — فيُقاس بتشغيله لا بحالته
+          if (res && (res.ok || res.type === "opaque")) await c.put(u, res);
+          else failed++;
+        } catch { failed++; }
+      }
+      $("qSaveMsg").textContent = "يُحفظ في الجوّال… " + AD(a) + "/" + AD(total) +
+        (failed ? " (تعذّر " + AD(failed) + ")" : "");
+    }
+    $("qSave").textContent = "احفظ السورة في الجوّال";
+    const st = await savedCountLocal(r, s);
+    $("qSaveMsg").textContent = st.have >= st.total
+      ? "محفوظةٌ كاملة في جوّالك — تعمل بلا إنترنت"
+      : "المحفوظ " + AD(st.have) + " من " + AD(st.total) + " آية";
+  }
+
   let saveTimer = null;
   async function saveTick(){
     const r = $("qReciter").value, s = Number($("qSura").value) || 1;
+    if (NOSRV){
+      const st = await savedCountLocal(r, s);
+      $("qSaveMsg").textContent = st.have >= st.total
+        ? "محفوظةٌ كاملة في جوّالك — تعمل بلا إنترنت"
+        : st.have ? "المحفوظ " + AD(st.have) + " من " + AD(st.total) + " آية" : "";
+      return;
+    }
     const st = await fetch("/islam/audio/status?r=" + encodeURIComponent(r) + "&s=" + s,
                            { cache: "no-store" }).then(x => x.json()).catch(() => null);
     if (!st) return;
@@ -3796,6 +3920,34 @@ function wakeTv(btn){
     const r = $("qReciter").value;
     if (!r) return void ($("qSaveMsg").textContent = "اختر قارئاً أوّلاً");
     const s = Number($("qSura").value) || 1;
+    if (NOSRV){
+      const tpl = pickedTpls()[r];
+      if (!tpl) return void ($("qSaveMsg").textContent = "هذا القارئ لم يُقَس بعد");
+      const total = falak.SURA_AYAHS[s - 1];
+      $("qSaveMsg").textContent = "أجمعها ملفاً واحداً…";
+      try {
+        const parts = [];
+        for (let a = 1; a <= total; a++){
+          const res = await fetch(falak.audioUrl(tpl, s, a));   // بلا no-cors: نحتاج القراءة
+          if (!res.ok) throw new Error("آية " + a + " ردّت " + res.status);
+          parts.push(await res.blob());
+          $("qSaveMsg").textContent = "أجمعها… " + AD(a) + "/" + AD(total);
+        }
+        const blob = new Blob(parts, { type: "audio/mpeg" });
+        const aEl = document.createElement("a");
+        aEl.href = URL.createObjectURL(blob);
+        aEl.download = "sura-" + s + ".mp3";
+        document.body.appendChild(aEl); aEl.click(); aEl.remove();
+        setTimeout(() => URL.revokeObjectURL(aEl.href), 60000);
+        $("qSaveMsg").textContent = "نزلت — احفظها في «الملفات» من نافذة التنزيل";
+      } catch (e) {
+        // مضيفٌ لا يسمح بالقراءة من متصفّحٍ غريب: يُقال، ويبقى الحفظُ
+        // داخل التطبيق طريقاً يعمل
+        $("qSaveMsg").textContent = "تعذّر جمعُها ملفاً (" + e.message + "). " +
+          "استعمل «احفظ السورة في الجوّال» — تعمل داخل التطبيق بلا إنترنت.";
+      }
+      return;
+    }
     const st = await fetch("/islam/audio/status?r=" + encodeURIComponent(r) + "&s=" + s,
                            { cache:"no-store" }).then(x => x.json()).catch(() => null);
     if (!st || !st.sura) return void ($("qSaveMsg").textContent = "تعذّر الوصول للخادم");
@@ -3812,6 +3964,10 @@ function wakeTv(btn){
   $("qSave").onclick = async () => {
     const r = $("qReciter").value;
     if (!r) return void ($("qSaveMsg").textContent = "اختر قارئاً أوّلاً");
+    if (NOSRV){
+      if ($("qSave").textContent === "أوقف الحفظ"){ saveAbort = true; return; }
+      return saveStandalone(r, Number($("qSura").value) || 1);
+    }
     if (saveTimer){ await post("/islam/audio/stop"); return; }
     const s = Number($("qSura").value) || 1;
     $("qSaveMsg").textContent = "يبدأ…";
@@ -3888,8 +4044,18 @@ function wakeTv(btn){
 
   window.__islamTimes = () => {
     $("tHanafi").textContent = "العصر: " + (hanafi ? "الحنفيّ" : "الجمهور");
-    fetch("/islam/times?hanafi=" + (hanafi ? "1" : "0"), { cache:"no-store" })
-      .then(r => r.json()).then(r => {
+    // في المستقلّ يُحسب هنا — بوحدة falak نفسها التي يحسب بها الخادم،
+    // فلا يريك الجوّالُ فجراً غير فجر اللابتوب
+    const src = NOSRV
+      ? Promise.resolve().then(() => {
+          const t = falak.prayerTimes(new Date(), PLACE.lat, PLACE.lon, PLACE.tz, { hanafi });
+          const out = {};
+          for (const k of ["fajr","sunrise","dhuhr","asr","maghrib","isha"]) out[k] = falak.hhmm(t[k]);
+          return { ok: true, times: out, method: t.method, lat: PLACE.lat, lon: PLACE.lon };
+        })
+      : fetch("/islam/times?hanafi=" + (hanafi ? "1" : "0"), { cache:"no-store" })
+          .then(r => r.json());
+    src.then(r => {
         if (!r.ok) return;
         const dl = $("tList");
         dl.innerHTML = "";
@@ -4033,7 +4199,11 @@ function wakeTv(btn){
   $("qibStart").onclick = startSensing;
 
   window.__islamQibla = () => {
-    fetch("/islam/qibla", { cache:"no-store" }).then(r => r.json()).then(r => {
+    const qsrc = NOSRV
+      ? Promise.resolve({ ok: true, bearing: Number(falak.qibla(PLACE.lat, PLACE.lon).toFixed(2)),
+                          km: falak.distanceToKaaba(PLACE.lat, PLACE.lon) })
+      : fetch("/islam/qibla", { cache:"no-store" }).then(r => r.json());
+    qsrc.then(r => {
       if (!r.ok) return;
       qibla = r.bearing;
       $("qibDeg").textContent = AD(r.bearing.toFixed(1)) + "°";
