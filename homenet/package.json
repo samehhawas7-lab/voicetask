@@ -1,0 +1,16 @@
+{
+  "name": "homenet",
+  "version": "1.0.0",
+  "private": true,
+  "description": "شبكة البيت — إدارة إنترنت المنزل: يرى أي جهاز فتح أي موقع، ويحجب ويجدول بلا مكتبات خارجية",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "HOMENET_DNS_PORT=5335 HOMENET_DATA=./data-dev node server.js",
+    "test": "node test/selftest.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {}
+}
