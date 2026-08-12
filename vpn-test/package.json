@@ -1,0 +1,15 @@
+{
+  "name": "vpn-test",
+  "private": true,
+  "description": "اختبارات مصر VPN — المشروع نفسه بلا حزم، وهذه للمقابلة بمراجع مستقلّة",
+  "scripts": {
+    "test": "./run.sh",
+    "test:all": "./run.sh all"
+  },
+  "devDependencies": {
+    "jsqr": "^1.4.0",
+    "pngjs": "^7.0.0",
+    "playwright": "^1.49.0",
+    "qrcode": "^1.5.4"
+  }
+}

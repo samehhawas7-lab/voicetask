@@ -1,0 +1,372 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b1020">
+<meta name="description" content="بوّابة مصرية: تصفّح المواقع المتاحة داخل مصر وأنت خارجها، ونفق WireGuard كامل للجوال.">
+<title>مصر VPN</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🇪🇬</text></svg>">
+<style>
+  :root{
+    --bg:#0a0f1e; --card:#131a30; --card2:#0f1527; --line:#26304f;
+    --txt:#e8edff; --dim:#93a1c9; --red:#c8102e; --gold:#d4a017; --green:#27c07a; --amber:#e8a33d;
+    --r:16px;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    background:var(--bg); color:var(--txt); min-height:100vh;
+    font:16px/1.75 "Segoe UI",system-ui,-apple-system,"Noto Naskh Arabic","Tahoma",sans-serif;
+    padding-bottom:calc(76px + env(safe-area-inset-bottom));
+    -webkit-text-size-adjust:100%;
+  }
+  .wrap{max-width:760px;margin:0 auto;padding:16px}
+
+  header{display:flex;align-items:center;gap:12px;padding:18px 16px 6px;max-width:760px;margin:0 auto}
+  header .logo{font-size:30px;line-height:1}
+  header h1{font-size:21px;margin:0;letter-spacing:-.3px}
+  header p{margin:0;color:var(--dim);font-size:13px}
+
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:18px;margin-bottom:14px}
+  .card h2{font-size:16px;margin:0 0 4px}
+  .card .sub{color:var(--dim);font-size:13.5px;margin:0 0 14px}
+
+  .banner{display:flex;gap:12px;align-items:flex-start;border-radius:var(--r);padding:16px;margin-bottom:14px;border:1px solid}
+  .banner .ico{font-size:24px;line-height:1.2}
+  .banner b{display:block;margin-bottom:2px}
+  .banner span{font-size:13.5px;color:var(--dim)}
+  .ok{background:rgba(39,192,122,.10);border-color:rgba(39,192,122,.35)}
+  .warn{background:rgba(232,163,61,.10);border-color:rgba(232,163,61,.35)}
+  .bad{background:rgba(200,16,46,.12);border-color:rgba(200,16,46,.4)}
+
+  .pair{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  @media(max-width:400px){.pair{grid-template-columns:1fr}}
+  .loc{background:var(--card2);border:1px solid var(--line);border-radius:14px;padding:14px;text-align:center}
+  .loc .flag{font-size:34px;line-height:1.2}
+  .loc .name{font-weight:700;margin-top:2px}
+  .loc .meta{color:var(--dim);font-size:12.5px;direction:ltr;overflow-wrap:break-word}
+  .loc .tag{font-size:12px;color:var(--dim);margin-bottom:4px}
+
+  label{display:block;font-size:13.5px;color:var(--dim);margin:12px 0 6px}
+  input,select,textarea{
+    width:100%;background:#0b1121;color:var(--txt);border:1px solid var(--line);
+    border-radius:12px;padding:13px 14px;font:15px/1.6 inherit;
+  }
+  input:focus,select,textarea:focus{outline:2px solid rgba(200,16,46,.55);outline-offset:1px}
+  textarea{direction:ltr;text-align:left;font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-size:12.5px;min-height:230px;white-space:pre}
+  input[dir=ltr]{direction:ltr;text-align:left}
+
+  button{
+    font:600 15px/1 inherit;border:0;border-radius:12px;padding:14px 18px;cursor:pointer;
+    background:var(--red);color:#fff;transition:filter .15s;
+  }
+  button:hover{filter:brightness(1.12)}
+  button:disabled{opacity:.5;cursor:default}
+  button.ghost{background:transparent;color:var(--txt);border:1px solid var(--line)}
+  button.gold{background:var(--gold);color:#1a1200}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
+  .row>*{flex:1;min-width:130px}
+
+  .go{display:flex;gap:8px}
+  .go input{flex:1}
+  .go button{flex:0 0 auto;padding:14px 20px}
+
+  .sites{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-top:6px}
+  .site{
+    display:block;text-align:right;background:var(--card2);border:1px solid var(--line);
+    border-radius:13px;padding:12px;cursor:pointer;color:var(--txt);font:inherit;
+  }
+  .site:hover{border-color:var(--red)}
+  .site b{display:block;font-size:14.5px}
+  .site em{font-style:normal;color:var(--dim);font-size:11.5px;direction:ltr;display:block}
+  .site .need{display:inline-block;margin-top:6px;font-size:10.5px;padding:2px 7px;border-radius:20px;background:rgba(232,163,61,.16);color:var(--amber)}
+  .site .need.web{background:rgba(39,192,122,.14);color:var(--green)}
+  h3.grp{font-size:13px;color:var(--dim);margin:18px 0 8px;font-weight:600}
+
+  nav{
+    position:fixed;inset:auto 0 0 0;background:rgba(11,16,32,.94);backdrop-filter:blur(12px);
+    border-top:1px solid var(--line);display:flex;padding:8px 8px calc(8px + env(safe-area-inset-bottom));
+    z-index:50;
+  }
+  nav button{
+    flex:1;background:none;color:var(--dim);font-size:11.5px;font-weight:600;padding:8px 2px;
+    display:flex;flex-direction:column;align-items:center;gap:4px;border-radius:12px;
+  }
+  nav button i{font-style:normal;font-size:20px;line-height:1}
+  nav button[aria-selected=true]{color:#fff;background:rgba(200,16,46,.18)}
+
+  .panel{display:none}
+  .panel.on{display:block;animation:fade .18s ease}
+  @keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+
+  .steps{counter-reset:s;list-style:none;padding:0;margin:0}
+  .steps>li{counter-increment:s;position:relative;padding-inline-start:38px;margin-bottom:20px}
+  .steps>li::before{
+    content:counter(s);position:absolute;inset-inline-start:0;top:0;width:26px;height:26px;
+    border-radius:50%;background:var(--red);color:#fff;display:grid;place-items:center;font-size:13px;font-weight:700;
+  }
+  .steps h4{margin:2px 0 6px;font-size:15px}
+  .steps p{margin:0 0 8px;color:var(--dim);font-size:13.5px}
+
+  code{background:#0b1121;border:1px solid var(--line);border-radius:6px;padding:2px 6px;font-size:12.5px;direction:ltr;display:inline-block}
+  pre{background:#0b1121;border:1px solid var(--line);border-radius:12px;padding:12px;overflow-x:auto;direction:ltr;text-align:left;font-size:12.5px;margin:8px 0}
+  details{border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin:10px 0;background:var(--card2)}
+  summary{cursor:pointer;font-weight:600;font-size:14.5px}
+  details[open] summary{margin-bottom:8px}
+  details p,details li{color:var(--dim);font-size:13.5px}
+  ul.tidy{padding-inline-start:20px;margin:6px 0}
+  ul.tidy li{margin-bottom:6px}
+
+  #qr{background:#fff;border-radius:14px;padding:10px;width:266px;max-width:100%;margin:14px auto 0}
+  #qr svg{display:block;width:100%;height:auto}
+  .hint{font-size:12.5px;color:var(--dim);margin-top:8px}
+  .flash{position:fixed;inset-inline:0;bottom:calc(84px + env(safe-area-inset-bottom));margin:auto;width:max-content;max-width:88%;
+    background:#1c2542;border:1px solid var(--line);border-radius:12px;padding:10px 18px;font-size:14px;z-index:60;
+    opacity:0;transform:translateY(8px);transition:.2s;pointer-events:none}
+  .flash.on{opacity:1;transform:none}
+  .spin{display:inline-block;width:13px;height:13px;border:2px solid var(--dim);border-top-color:transparent;border-radius:50%;animation:sp .7s linear infinite;vertical-align:-2px}
+  @keyframes sp{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">🇪🇬</div>
+  <div>
+    <h1>مصر VPN</h1>
+    <p>افتح مواقع مصر وأنت بالرياض</p>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <!-- ═══ الحالة ═══ -->
+  <section class="panel on" id="p-status">
+    <div id="verdict" class="banner warn">
+      <div class="ico"><span class="spin"></span></div>
+      <div><b>جارٍ الفحص…</b><span>نسأل: من أين تظهر أنت، ومن أين تظهر البوّابة؟</span></div>
+    </div>
+
+    <div class="card">
+      <h2>الموقع الظاهر</h2>
+      <p class="sub">ما تراه المواقع عنك الآن، وما ستراه لو مررتَ بالبوّابة.</p>
+      <div class="pair">
+        <div class="loc">
+          <div class="tag">أنت الآن</div>
+          <div class="flag" id="you-flag">🏳️</div>
+          <div class="name" id="you-name">…</div>
+          <div class="meta" id="you-ip"></div>
+        </div>
+        <div class="loc">
+          <div class="tag">البوّابة</div>
+          <div class="flag" id="gate-flag">🏳️</div>
+          <div class="name" id="gate-name">…</div>
+          <div class="meta" id="gate-ip"></div>
+        </div>
+      </div>
+      <div class="row" style="margin-top:14px">
+        <button class="ghost" id="refresh">تحديث الفحص</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>ما الفرق بين الوضعين؟</h2>
+      <p class="sub">اختر ما يناسب حاجتك — والفرق جوهريّ.</p>
+      <div class="pair">
+        <div class="loc" style="text-align:start">
+          <div class="tag">🌐 التصفّح عبر البوّابة</div>
+          <div class="name">يعمل حالاً، بلا تثبيت</div>
+          <div class="meta" style="direction:rtl;text-align:start;margin-top:6px">
+            المواقع فقط، داخل هذا المتصفّح. مناسب للأخبار والخدمات الحكومية وبنك المعرفة.
+          </div>
+        </div>
+        <div class="loc" style="text-align:start">
+          <div class="tag">🔒 النفق الكامل</div>
+          <div class="name">الجوال كلّه داخل مصر</div>
+          <div class="meta" style="direction:rtl;text-align:start;margin-top:6px">
+            يشمل التطبيقات والبثّ. يحتاج تطبيق WireGuard وخادماً في مصر — والتطبيق يجهّز لك الإعداد.
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══ التصفّح ═══ -->
+  <section class="panel" id="p-browse">
+    <div class="card">
+      <h2>افتح موقعاً عبر مصر</h2>
+      <p class="sub">اكتب العنوان، وسنجلب الصفحة من البوّابة ونعيد كتابة روابطها لتتصفّح كأنّك هناك.</p>
+      <form class="go" id="go-form">
+        <input id="go-url" type="text" dir="ltr" inputmode="url" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="ekb.eg">
+        <button type="submit">اذهب</button>
+      </form>
+      <p class="hint" id="browse-hint"></p>
+    </div>
+
+    <div class="card">
+      <h2>مواقع مصرية</h2>
+      <p class="sub">الأخضر يفتح بالمتصفّح، والبرتقاليّ يحتاج النفق الكامل.</p>
+      <div id="catalog"></div>
+    </div>
+  </section>
+
+  <!-- ═══ النفق ═══ -->
+  <section class="panel" id="p-tunnel">
+    <div class="card">
+      <h2>نفق WireGuard</h2>
+      <p class="sub">ثلاث خطوات: خادم في مصر، ثمّ مفاتيح، ثمّ مسحُ الرمز بتطبيق WireGuard.</p>
+
+      <ol class="steps">
+        <li>
+          <h4>جهاز داخل مصر</h4>
+          <p>خادم VPS في القاهرة، أو حاسوب صغير في بيت الأهل. الخيار الثاني أثبتُ مع خدمات البثّ لأنّ عنوانه منزليّ لا «مركز بيانات».</p>
+          <details>
+            <summary>كيف أختار؟</summary>
+            <ul class="tidy">
+              <li>اشترط أن يكون مركز البيانات <b>في مصر</b> — تحقّق بعد الشراء بأنّ عنوانه يظهر EG.</li>
+              <li>أرخص كافٍ: نواة واحدة وذاكرة ٥١٢ ميجا تكفي لجوالٍ أو جوالين.</li>
+              <li>خيار البيت: راسبيري باي أو أيّ حاسوب قديم يبقى موصولاً، مع توجيه المنفذ <code>51820/UDP</code> من الراوتر.</li>
+              <li>كثير من خدمات البثّ تحجب عناوين مراكز البيانات؛ فإن فشل البثّ فالسبب غالباً هذا لا الإعداد.</li>
+            </ul>
+          </details>
+        </li>
+        <li>
+          <h4>مفاتيح الجوال</h4>
+          <p>تُولَّد داخل جهازك ولا تغادره. المفتاح الخاصّ لا يُرسل إلى أيّ خادم.</p>
+          <div class="row">
+            <button id="gen-keys">ولّد مفاتيح الجوال</button>
+            <button class="ghost" id="clear-keys">امسح</button>
+          </div>
+          <div id="keys-out" style="display:none">
+            <label>المفتاح العامّ للجوال (يوضع في الخادم)</label>
+            <input id="cli-pub" dir="ltr" readonly>
+            <p class="hint" id="keys-via"></p>
+          </div>
+        </li>
+        <li>
+          <h4>جهّز الخادم</h4>
+          <p>نزّل السكربت ونفّذه على جهاز مصر مرّة واحدة — سيطبع في آخره مفتاح الخادم وعنوانه.</p>
+          <div class="row">
+            <button class="ghost" id="dl-script">نزّل سكربت الخادم</button>
+            <button class="ghost" id="copy-cmd">انسخ أمر التنفيذ</button>
+          </div>
+          <p class="hint">يحتاج المفتاح العامّ من الخطوة السابقة.</p>
+        </li>
+        <li>
+          <h4>بيانات الخادم</h4>
+          <label for="ep-host">عنوان الخادم (IP أو اسم نطاق)</label>
+          <input id="ep-host" dir="ltr" inputmode="url" placeholder="41.33.10.20">
+          <div class="row">
+            <div>
+              <label for="ep-port">المنفذ</label>
+              <input id="ep-port" dir="ltr" inputmode="numeric" value="51820">
+            </div>
+            <div>
+              <label for="cli-ip">عنوان الجوال داخل النفق</label>
+              <input id="cli-ip" dir="ltr" value="10.7.0.2/32">
+            </div>
+          </div>
+          <label for="srv-pub">المفتاح العامّ للخادم</label>
+          <input id="srv-pub" dir="ltr" placeholder="من مخرجات السكربت">
+          <label for="dns">خادم الأسماء (DNS)</label>
+          <select id="dns">
+            <option value="163.121.128.134, 163.121.128.135">مصري — TE Data (يُنصح به)</option>
+            <option value="1.1.1.1, 1.0.0.1">Cloudflare</option>
+            <option value="8.8.8.8, 8.8.4.4">Google</option>
+          </select>
+          <p class="hint">الأسماءُ المصرية تجعل المواقع تراك أقربَ إلى مصر، وتفتح ما يعتمد على DNS محلّي.</p>
+        </li>
+        <li>
+          <h4>امسح الرمز</h4>
+          <p>ثبّت تطبيق <b>WireGuard</b> الرسميّ، ثمّ: إضافة نفق ← من رمز QR.</p>
+          <div class="row">
+            <button id="build" class="gold">أنشئ الإعداد والرمز</button>
+          </div>
+          <div id="conf-out" style="display:none">
+            <div id="qr"></div>
+            <p class="hint" style="text-align:center">امسحه من تطبيق WireGuard على الجوال</p>
+            <label>ملفّ الإعداد</label>
+            <textarea id="conf-text" readonly dir="ltr"></textarea>
+            <div class="row">
+              <button class="ghost" id="copy-conf">انسخ</button>
+              <button class="ghost" id="dl-conf">نزّل الملفّ</button>
+            </div>
+          </div>
+        </li>
+      </ol>
+    </div>
+
+    <div class="banner warn">
+      <div class="ico">🔑</div>
+      <div><b>المفتاح الخاصّ يبقى في هذا الجهاز</b>
+        <span>يُحفظ في ذاكرة المتصفّح ليظهر لك الإعداد لاحقاً. اضغط «امسح» على جهازٍ مشترك.</span></div>
+    </div>
+  </section>
+
+  <!-- ═══ الدليل ═══ -->
+  <section class="panel" id="p-help">
+    <div class="card">
+      <h2>ما الذي يعمل فعلاً؟</h2>
+      <p class="sub">بصراحة، حتّى لا تضيّع وقتك.</p>
+      <ul class="tidy">
+        <li><b>تطبيق الويب لا يستطيع تحويل ترافيك الجوال كلّه.</b> المتصفّح لا يملك هذه الصلاحية أصلاً — لذلك هنا بوّابةُ تصفّح، وهناك نفقٌ حقيقيّ عبر WireGuard.</li>
+        <li><b>البوّابة</b> تفتح مواقع الأخبار والخدمات الحكومية وبنك المعرفة جيّداً.</li>
+        <li><b>البثّ المحميّ</b> (وواتش إت وشاهد وتود) لا يعمل عبر بوّابة التصفّح إطلاقاً — الحماية الرقمية تمنع ذلك. يحتاج النفق الكامل.</li>
+        <li><b>تطبيقات البنوك</b> كثيراً ما ترفض أيّ VPN، وقد تُقفل الحساب مؤقّتاً. لا تستعملها عبر النفق.</li>
+        <li><b>عنوان مركز البيانات</b> مكشوف لخدمات البثّ؛ العنوان المنزليّ في مصر أضمن.</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h2>تشغيل بوّابة مصرية</h2>
+      <p class="sub">بلا هذه الخطوة، البوّابة تخرج من مكان نشر التطبيق (غالباً أوروبا أو أمريكا) لا من مصر.</p>
+      <p style="font-size:14px">أضف في إعدادات النشر متغيّر بيئة:</p>
+      <pre>EGYPT_PROXY = http://user:pass@مضيف-مصري:8080
+# أو
+EGYPT_PROXY = socks5://user:pass@مضيف-مصري:1080</pre>
+      <p style="font-size:14px">ويمكن وضع أكثر من بوّابة مفصولةً بفاصلة، فيُختار بينها عشوائياً.</p>
+      <details>
+        <summary>من أين آتي ببوّابة مصرية؟</summary>
+        <ul class="tidy">
+          <li>نفس خادم مصر الذي أعددته للنفق: ثبّت عليه <code>squid</code> أو <code>dante</code> واجعله بروكسي بكلمة سرّ.</li>
+          <li>أو مزوّد بروكسيّات سكنية مصرية.</li>
+          <li>لا تجعل البوّابة مفتوحة للعامّة — ضع كلمة سرّ عليها دائماً.</li>
+        </ul>
+      </details>
+      <details>
+        <summary>حماية التطبيق برمز</summary>
+        <p>ضع متغيّر <code>VPN_CODE</code> فيطلب التطبيق رمزاً قبل أيّ تصفّح — وإلّا صارت بوّابتك مفتوحةً لمن يعرف الرابط.</p>
+      </details>
+      <details>
+        <summary>عنوان الخادم والمفتاح مسبقاً</summary>
+        <p>ضع <code>WG_ENDPOINT</code> و<code>WG_SERVER_PUBKEY</code> فتُملأ خانات النفق تلقائياً لكلّ من يفتح التطبيق.</p>
+      </details>
+    </div>
+
+    <div class="card">
+      <h2>الخصوصية والنظام</h2>
+      <ul class="tidy">
+        <li>تجاوزُ الحجب الجغرافيّ لمشاهدة محتوى بلدك وأنت مسافر أمرٌ اعتياديّ، لكنّه قد يخالف شروط بعض الخدمات — والمسؤولية عليك.</li>
+        <li>البوّابة تمرّ عبر خادمك أنت؛ فما تتصفّحه يمكن أن يُسجَّل عليه. لا تستعملها لبيانات حسّاسة.</li>
+        <li>لا تُخزَّن كلمات المرور هنا. كعكات كلّ موقع معزولة عن غيره داخل البوّابة.</li>
+      </ul>
+    </div>
+  </section>
+
+</main>
+
+<nav role="tablist">
+  <button role="tab" aria-selected="true" data-tab="status"><i>📍</i>الحالة</button>
+  <button role="tab" aria-selected="false" data-tab="browse"><i>🌐</i>تصفّح</button>
+  <button role="tab" aria-selected="false" data-tab="tunnel"><i>🔒</i>النفق</button>
+  <button role="tab" aria-selected="false" data-tab="help"><i>📘</i>دليل</button>
+</nav>
+
+<div class="flash" id="flash"></div>
+
+<script src="/vpn-qr.js"></script>
+<script src="/vpn-wg.js"></script>
+<script src="/vpn-app.js"></script>
+</body>
+</html>
