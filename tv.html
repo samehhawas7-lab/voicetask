@@ -118,6 +118,11 @@ html[data-theme="paper"] .tj-sukun,
 html[data-theme="light"] .tj-sukun  { color:#946012 }
 html[data-theme="paper"] .tj-tanween,
 html[data-theme="light"] .tj-tanween{ color:#96317a }
+/* وزنُ خطّ المصحف: الخطُّ العثمانيّ نسخةٌ واحدة الوزن، فالتغميقُ
+   يصنعه المتصفّح. «غامق» وزنٌ صناعيّ، و«أغمق» يزيد تحبيرَ الحواف */
+html[data-qbold="1"] .qtext, html[data-qbold="1"] .qbsml{ font-weight:700 }
+html[data-qbold="2"] .qtext, html[data-qbold="2"] .qbsml{
+  font-weight:700; -webkit-text-stroke:.015em currentColor }
 .tjlegend{display:flex;flex-wrap:wrap;gap:7px;margin-top:10px}
 .tjlegend span{font-size:11px;border:1px solid var(--line);border-radius:999px;
   padding:3px 10px;background:var(--surface)}
@@ -1151,6 +1156,13 @@ input::placeholder{color:#5c6579}
           <option value="paper">ورقيّ — كالمصحف المطبوع</option>
           <option value="light">فاتح</option>
           <option value="green">أخضر داكن</option>
+        </select>
+      </label>
+      <label>سُمك الخطّ
+        <select id="qBold">
+          <option value="1">غامق — الافتراضيّ</option>
+          <option value="2">أغمق</option>
+          <option value="0">عاديّ</option>
         </select>
       </label>
       <label>المصحف
@@ -3598,6 +3610,18 @@ function wakeTv(btn){
       + "مجوَّدٍ منشور، فطابقه في ٦٢٣٦ آية بلا اختلافٍ في موضعٍ واحد. "
       + "والإظهار لا لون له — فهو الأصل الذي لا حكم فيه.";
   }
+  // وزن الخطّ: غامقٌ سلفاً كما طلب صاحبُه، ويُعدَّل ويُحفظ
+  const qbold = () => {
+    const v = store.get("quran_bold");
+    return (v === null || v === undefined) ? "1" : v;
+  };
+  document.documentElement.setAttribute("data-qbold", qbold());
+  $("qBold").value = qbold();
+  $("qBold").onchange = () => {
+    store.set("quran_bold", $("qBold").value);
+    document.documentElement.setAttribute("data-qbold", $("qBold").value);
+  };
+
   $("qTajweed").value = String(tajweed);
   $("qTajweed").onchange = () => {
     tajweed = Number($("qTajweed").value) || 0;
