@@ -118,6 +118,11 @@ html[data-theme="paper"] .tj-sukun,
 html[data-theme="light"] .tj-sukun  { color:#946012 }
 html[data-theme="paper"] .tj-tanween,
 html[data-theme="light"] .tj-tanween{ color:#96317a }
+/* وزنُ خطّ المصحف: الخطُّ العثمانيّ نسخةٌ واحدة الوزن، فالتغميقُ
+   يصنعه المتصفّح. «غامق» وزنٌ صناعيّ، و«أغمق» يزيد تحبيرَ الحواف */
+html[data-qbold="1"] .qtext, html[data-qbold="1"] .qbsml{ font-weight:700 }
+html[data-qbold="2"] .qtext, html[data-qbold="2"] .qbsml{
+  font-weight:700; -webkit-text-stroke:.015em currentColor }
 .tjlegend{display:flex;flex-wrap:wrap;gap:7px;margin-top:10px}
 .tjlegend span{font-size:11px;border:1px solid var(--line);border-radius:999px;
   padding:3px 10px;background:var(--surface)}
@@ -662,6 +667,13 @@ input::placeholder{color:#5c6579}
           <option value="green">أخضر داكن</option>
         </select>
       </label>
+      <label>سُمك الخطّ
+        <select id="qBold">
+          <option value="1">غامق — الافتراضيّ</option>
+          <option value="2">أغمق</option>
+          <option value="0">عاديّ</option>
+        </select>
+      </label>
       <label>المصحف
         <select id="qTajweed">
           <option value="0">عاديّ — بلا ألوان</option>
@@ -734,7 +746,7 @@ input::placeholder{color:#5c6579}
 <!-- فاهمُ الأمر المنطوق يحقنه الخادم فوق هذا السطر — ملفٌّ واحد
      يعمل في node وفي المتصفّح. ولا يُطلب بوسمٍ حاجز: الصفحة لا يجوز
      أن تحتاج طلباً ثانياً لتُرسم -->
-<script>window.__APP__="mushaf";window.__STANDALONE__=1;window.__BUILD__="f6bbd5650d";window.__RECITERS__=[{"key":"husary","name":"محمود خليل الحصري","note":"مرتَّل","teacher":false,"urls":["https://everyayah.com/data/Husary_128kbps/{sss}{aaa}.mp3","https://cdn.islamic.network/quran/audio/128/ar.husary/{n}.mp3","https://everyayah.com/data/Husary_64kbps/{sss}{aaa}.mp3"]},{"key":"minshawi","name":"محمد صدّيق المنشاوي","note":"مرتَّل","teacher":false,"urls":["https://everyayah.com/data/Minshawy_Murattal_128kbps/{sss}{aaa}.mp3","https://cdn.islamic.network/quran/audio/128/ar.minshawi/{n}.mp3","https://everyayah.com/data/Minshawy_Mujawwad_192kbps/{sss}{aaa}.mp3"]},{"key":"ajamy","name":"أحمد بن علي العجمي","note":"مرتَّل","teacher":false,"urls":["https://everyayah.com/data/ahmed_ibn_ali_al_ajamy_128kbps/{sss}{aaa}.mp3","https://cdn.islamic.network/quran/audio/128/ar.ahmedajamy/{n}.mp3","https://everyayah.com/data/Ahmed_ibn_Ali_al_Ajamy_64kbps_QuranExplorer.Com/{sss}{aaa}.mp3"]},{"key":"husary_teacher","name":"الحصري — المصحف المعلّم","note":"مع ترديد الأطفال","teacher":true,"urls":["https://everyayah.com/data/Husary_Muallim_128kbps/{sss}{aaa}.mp3","https://www.everyayah.com/data/Husary_Muallim_128kbps/{sss}{aaa}.mp3","https://everyayah.com/data/Husary_128kbps_Muallim/{sss}{aaa}.mp3"]},{"key":"minshawi_teacher","name":"المنشاوي — المصحف المعلّم","note":"مع ترديد الأطفال","teacher":true,"urls":["https://everyayah.com/data/Minshawy_Mualim_128kbps/{sss}{aaa}.mp3","https://everyayah.com/data/Minshawy_Muallim_128kbps/{sss}{aaa}.mp3","https://everyayah.com/data/Minshawy_Teacher_128kbps/{sss}{aaa}.mp3"]},{"key":"hudhaify","name":"علي بن عبدالرحمن الحذيفي","note":"مرتَّل","teacher":false,"urls":["https://everyayah.com/data/Hudhaify_128kbps/{sss}{aaa}.mp3","https://cdn.islamic.network/quran/audio/128/ar.hudhaify/{n}.mp3","https://everyayah.com/data/Hudhaify_64kbps/{sss}{aaa}.mp3"]}];window.__CREDITS__=[{"label":"المصحف — رواية حفص، الرسم العثمانيّ","credit":"مجمّع الملك فهد لطباعة المصحف الشريف"},{"label":"التفسير الميسَّر","credit":"مجمّع الملك فهد لطباعة المصحف الشريف"},{"label":"تفسير الجلالين","credit":"جلال الدين المحلّي وجلال الدين السيوطي"},{"label":"فهرس السور","credit":"quran-api"},{"label":"تخطيط صفحات مصحف المدينة","credit":"quran-api — وقِيس ببدايات الأجزاء الثلاثين"},{"label":"الأذكار","credit":"حصن المسلم — ولكل ذكرٍ مرجعه"},{"label":"خطّ المصحف العثمانيّ","credit":"مجمّع الملك فهد"}];</script>
+<script>window.__APP__="mushaf";window.__STANDALONE__=1;window.__BUILD__="1fddb891f2";window.__RECITERS__=[{"key":"husary","name":"محمود خليل الحصري","note":"مرتَّل","teacher":false,"urls":["https://everyayah.com/data/Husary_128kbps/{sss}{aaa}.mp3","https://cdn.islamic.network/quran/audio/128/ar.husary/{n}.mp3","https://everyayah.com/data/Husary_64kbps/{sss}{aaa}.mp3"]},{"key":"minshawi","name":"محمد صدّيق المنشاوي","note":"مرتَّل","teacher":false,"urls":["https://everyayah.com/data/Minshawy_Murattal_128kbps/{sss}{aaa}.mp3","https://cdn.islamic.network/quran/audio/128/ar.minshawi/{n}.mp3","https://everyayah.com/data/Minshawy_Mujawwad_192kbps/{sss}{aaa}.mp3"]},{"key":"ajamy","name":"أحمد بن علي العجمي","note":"مرتَّل","teacher":false,"urls":["https://everyayah.com/data/ahmed_ibn_ali_al_ajamy_128kbps/{sss}{aaa}.mp3","https://cdn.islamic.network/quran/audio/128/ar.ahmedajamy/{n}.mp3","https://everyayah.com/data/Ahmed_ibn_Ali_al_Ajamy_64kbps_QuranExplorer.Com/{sss}{aaa}.mp3"]},{"key":"husary_teacher","name":"الحصري — المصحف المعلّم","note":"مع ترديد الأطفال","teacher":true,"urls":["https://everyayah.com/data/Husary_Muallim_128kbps/{sss}{aaa}.mp3","https://www.everyayah.com/data/Husary_Muallim_128kbps/{sss}{aaa}.mp3","https://everyayah.com/data/Husary_128kbps_Muallim/{sss}{aaa}.mp3"]},{"key":"minshawi_teacher","name":"المنشاوي — المصحف المعلّم","note":"مع ترديد الأطفال","teacher":true,"urls":["https://everyayah.com/data/Minshawy_Mualim_128kbps/{sss}{aaa}.mp3","https://everyayah.com/data/Minshawy_Muallim_128kbps/{sss}{aaa}.mp3","https://everyayah.com/data/Minshawy_Teacher_128kbps/{sss}{aaa}.mp3"]},{"key":"hudhaify","name":"علي بن عبدالرحمن الحذيفي","note":"مرتَّل","teacher":false,"urls":["https://everyayah.com/data/Hudhaify_128kbps/{sss}{aaa}.mp3","https://cdn.islamic.network/quran/audio/128/ar.hudhaify/{n}.mp3","https://everyayah.com/data/Hudhaify_64kbps/{sss}{aaa}.mp3"]}];window.__CREDITS__=[{"label":"المصحف — رواية حفص، الرسم العثمانيّ","credit":"مجمّع الملك فهد لطباعة المصحف الشريف"},{"label":"التفسير الميسَّر","credit":"مجمّع الملك فهد لطباعة المصحف الشريف"},{"label":"تفسير الجلالين","credit":"جلال الدين المحلّي وجلال الدين السيوطي"},{"label":"فهرس السور","credit":"quran-api"},{"label":"تخطيط صفحات مصحف المدينة","credit":"quran-api — وقِيس ببدايات الأجزاء الثلاثين"},{"label":"الأذكار","credit":"حصن المسلم — ولكل ذكرٍ مرجعه"},{"label":"خطّ المصحف العثمانيّ","credit":"مجمّع الملك فهد"}];</script>
 <link rel="manifest" href="manifest.webmanifest">
 <script>
 "use strict";
@@ -3091,6 +3103,18 @@ function wakeTv(btn){
       + "مجوَّدٍ منشور، فطابقه في ٦٢٣٦ آية بلا اختلافٍ في موضعٍ واحد. "
       + "والإظهار لا لون له — فهو الأصل الذي لا حكم فيه.";
   }
+  // وزن الخطّ: غامقٌ سلفاً كما طلب صاحبُه، ويُعدَّل ويُحفظ
+  const qbold = () => {
+    const v = store.get("quran_bold");
+    return (v === null || v === undefined) ? "1" : v;
+  };
+  document.documentElement.setAttribute("data-qbold", qbold());
+  $("qBold").value = qbold();
+  $("qBold").onchange = () => {
+    store.set("quran_bold", $("qBold").value);
+    document.documentElement.setAttribute("data-qbold", $("qBold").value);
+  };
+
   $("qTajweed").value = String(tajweed);
   $("qTajweed").onchange = () => {
     tajweed = Number($("qTajweed").value) || 0;
