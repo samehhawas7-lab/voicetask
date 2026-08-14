@@ -4451,6 +4451,13 @@ if (!MUSHAF_APP){
         };
         grid.appendChild(btn);
       });
+      // وما لم يوجد يُقال باسمه: فإن غاب ديزني فالعلّة أنّه غيرُ
+      // منصَّبٍ على الجهاز نفسه — لا زرٌّ ناقص هنا
+      if (r.missing && r.missing.length){
+        empty.hidden = false;
+        empty.textContent = "وليست منصَّبةً على الجهاز: " + r.missing.join("، ") +
+          " — نصِّبها من متجر البروجيكتر تظهر هنا وحدها";
+      }
     }).catch(() => { appsLoaded = false; });
   }
 

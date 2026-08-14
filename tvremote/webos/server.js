@@ -165,17 +165,27 @@ const KEYNAME = /^[A-Z0-9_]{1,32}$/;
 const PKGNAME = /^[a-zA-Z0-9._]{1,128}$/;
 
 // ما نعرضه من تطبيقات، ولكلٍّ أسماء حزمٍ تختلف بين الأجهزة
+/* لكلّ تطبيقٍ أسماءُ حزمٍ معروفة تُجرَّب أوّلاً، **وبصمةُ بحثٍ** تلتقط
+   ما سواها: البروجيكترات الرخيصة تشحن يوتيوب وديزني بأسماء حزمٍ
+   غريبةٍ لا يحصيها جدول — فما لم يُعرف اسمُه يُلتقط بملامحه من قائمة
+   المنصَّب على الجهاز نفسه. و«deny» تصدّ أشباهَ الاسم التي ليست
+   تطبيقاً يُفتح (WebView ليس متصفّحاً). */
 const PROJ_APPS = [
   { key: "youtube", name: "يوتيوب",       glyph: "\u25B6", color: "#e02f2f",
-    pkgs: ["com.google.android.youtube.tv", "com.google.android.youtube", "com.liskovsoft.smarttubetv.beta"] },
+    pkgs: ["com.google.android.youtube.tv", "com.google.android.youtube", "com.liskovsoft.smarttubetv.beta"],
+    find: /youtube|smarttube/i },
   { key: "netflix", name: "نتفلكس",       glyph: "N",  color: "#c9302c",
-    pkgs: ["com.netflix.ninja", "com.netflix.mediaclient"] },
+    pkgs: ["com.netflix.ninja", "com.netflix.mediaclient"],
+    find: /netflix/i },
   { key: "disney",  name: "ديزني بلس",    glyph: "D",  color: "#1f4bb8",
-    pkgs: ["com.disney.disneyplus"] },
+    pkgs: ["com.disney.disneyplus"],
+    find: /disney/i },
   { key: "prime",   name: "أمازون برايم", glyph: "P",  color: "#1f8fb8",
-    pkgs: ["com.amazon.amazonvideo.livingroom", "com.amazon.avod.thirdpartyclient"] },
+    pkgs: ["com.amazon.amazonvideo.livingroom", "com.amazon.avod.thirdpartyclient"],
+    find: /primevideo|amazon.*(video|avod)/i },
   { key: "browser", name: "المتصفح",      glyph: "\u{1F310}", color: "#31708f",
-    pkgs: ["com.android.chrome", "com.android.browser", "org.chromium.webview_shell"] },
+    pkgs: ["com.android.chrome", "com.android.browser", "org.chromium.webview_shell"],
+    find: /chrome|firefox|browser/i, deny: /webview|overlay|extension/i },
 ];
 
 let projApps = null;          // ما وُجد منها فعلاً على الجهاز
@@ -241,11 +251,20 @@ async function projShell(cmd) {
 async function projectorApps() {
   if (projApps) return projApps;
   const out = await projShell("pm list packages");
-  const have = new Set(out.split(/\r?\n/).map((l) => l.replace("package:", "").trim()).filter(Boolean));
-  projApps = PROJ_APPS.map((a) => {
-    const pkg = a.pkgs.find((p) => have.has(p));
-    return pkg ? { key: a.key, name: a.name, glyph: a.glyph, color: a.color, pkg } : null;
-  }).filter(Boolean);
+  const list = out.split(/\r?\n/).map((l) => l.replace("package:", "").trim()).filter(Boolean);
+  const have = new Set(list);
+  const found = [];
+  const missing = [];
+  for (const a of PROJ_APPS) {
+    // الاسم المعروف أوّلاً، ثم البصمة على المنصَّب فعلاً
+    let pkg = a.pkgs.find((p) => have.has(p));
+    if (!pkg && a.find) {
+      pkg = list.find((p) => a.find.test(p) && !(a.deny && a.deny.test(p)));
+    }
+    if (pkg) found.push({ key: a.key, name: a.name, glyph: a.glyph, color: a.color, pkg });
+    else missing.push(a.name);
+  }
+  projApps = { apps: found, missing };
   return projApps;
 }
 
@@ -1240,7 +1259,8 @@ const server = http.createServer((req, res) => {
       }).catch(fail);
     }
     if (what === "apps") {
-      return projectorApps().then((a) => json(200, { ok: true, apps: a })).catch(fail);
+      return projectorApps().then((a) => json(200, { ok: true, apps: a.apps, missing: a.missing }))
+        .catch(fail);
     }
     if (what === "key") {
       const name = url.searchParams.get("name") || "";
