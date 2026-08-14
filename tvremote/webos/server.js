@@ -195,6 +195,39 @@ async function findProjector() {
   return null;
 }
 
+/* أزرارُ التنقّل تُجمع دفعةً.
+
+   كلُّ `input keyevent` يستدعي آلةَ جافا كاملةً على الجهاز — نصفَ
+   ثانيةٍ وأكثر على عتادٍ ضعيف. والأصابع أسرع: خمسُ ضغطاتٍ متتالية
+   كانت تصير خمسَ آلاتٍ متتابعة، فيجمد البروجيكتر ثم تنفجر الضغطاتُ
+   دفعةً متأخّرة فيتجاوز المؤشّرُ هدفَه. وهذا هو «التعليق» الذي شُكي.
+
+   فالضغطاتُ المتلاحقة تُضمّ في استدعاءٍ واحد (input يقبل مفاتيحَ
+   عدّة)، والزرُّ يُجاب فوراً لا بعد التنفيذ، وما فاض عن ثمانٍ
+   **يُهمل** — كما يفعل الجهاز نفسه حين يشغَل: ضياعُ ضغطةٍ خيرٌ من
+   جهازٍ مخنوق. */
+let projPending = [];
+let projPumping = false;
+function projKey(name) {
+  if (projPending.length >= 8) return { ok: true, dropped: true };
+  projPending.push("KEYCODE_" + name);
+  if (!projPumping) {
+    projPumping = true;
+    (async () => {
+      try {
+        while (projPending.length) {
+          const batch = projPending.splice(0, projPending.length);
+          await projShell("input keyevent " + batch.join(" "));
+        }
+      } catch (e) {
+        projPending = [];
+        log("proj: key batch failed — " + e.message);
+      } finally { projPumping = false; }
+    })();
+  }
+  return { ok: true, queued: projPending.length };
+}
+
 async function projShell(cmd) {
   if (!projIp) {
     const found = await findProjector();
@@ -1212,8 +1245,12 @@ const server = http.createServer((req, res) => {
     if (what === "key") {
       const name = url.searchParams.get("name") || "";
       if (!KEYNAME.test(name)) return json(400, { ok: false, why: "اسم زرّ غير صالح" });
-      return projShell("input keyevent KEYCODE_" + name)
-        .then(() => json(200, { ok: true })).catch(fail);
+      // أوّلَ مرّةٍ فقط يُنتظر العثورُ عليه — ليصل خبرُ «ما وجدته» لصاحبه
+      if (!projIp) {
+        return projShell("input keyevent KEYCODE_" + name)
+          .then(() => json(200, { ok: true })).catch(fail);
+      }
+      return json(200, projKey(name));
     }
     if (what === "app") {
       const pkg = url.searchParams.get("pkg") || "";
