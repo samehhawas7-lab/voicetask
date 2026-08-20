@@ -20,6 +20,7 @@ const { mushafShell } = require(path.join(WEBOS, "mushaf-shell.js"));
 
 const dataDir = process.argv[2];
 const outDir = process.argv[3];
+const qcfDir = process.argv[4] || process.env.QCF_DIR || "";   // اختياريّ: أصول المصوَّر
 if (!dataDir || !outDir) {
   console.error("الاستعمال: node build-mushaf.js <مجلّد البيانات> <مجلّد الناتج>");
   process.exit(2);
@@ -121,8 +122,35 @@ const FILES = ["quran.json", "tafsir-muyassar.json", "tafsir-jalalayn.json",
                "suras.json", "pages.json", "azkar.json", "uthmanic.woff2"];
 for (const f of FILES) fs.copyFileSync(path.join(dataDir, f), path.join(outDir, "data", f));
 
+// المصوَّر: فهرسُ الصفحات يُشحن ويُخزَّن سلفاً، والخطوط (٦٠٤ ملفّاً،
+// ~٤٨ م.ب) تُخزَّن صفحةً صفحةً عند القراءة — لا تُفرض على من لم يطلبها
+let qcfShipped = false;
+if (qcfDir) {
+  const pagesJson = path.join(qcfDir, "mushaf-pages.json");
+  const fontsDir = path.join(qcfDir, "fonts");
+  if (fs.existsSync(pagesJson) && fs.existsSync(fontsDir)) {
+    const meta = JSON.parse(fs.readFileSync(pagesJson, "utf8"));
+    const pages = meta.pages;
+    if (pages.length !== 604) { console.error("فهرس المصوَّر ليس ٦٠٤"); process.exit(1); }
+    const qcfCount = pages.filter((x) => x.mode === "qcf").length;
+    fs.mkdirSync(path.join(outDir, "data", "qcf"), { recursive: true });
+    let missing = 0;
+    for (const pg of pages) {
+      if (pg.mode !== "qcf") continue;
+      const src = path.join(fontsDir, pg.font);
+      if (!fs.existsSync(src)) { missing++; continue; }
+      fs.copyFileSync(src, path.join(outDir, "data", "qcf", pg.font));
+    }
+    if (missing) { console.error("خطوطٌ ناقصة: " + missing); process.exit(1); }
+    fs.copyFileSync(pagesJson, path.join(outDir, "data", "mushaf-pages.json"));
+    qcfShipped = true;
+    console.log("المصوَّر: " + qcfCount + " صفحة بخطوطها · والبقية نصّية");
+  }
+}
+
 const PRECACHE = ["index.html", "manifest.webmanifest", "icon.png"]
-  .concat(FILES.map((f) => "data/" + f));
+  .concat(FILES.map((f) => "data/" + f))
+  .concat(qcfShipped ? ["data/mushaf-pages.json"] : []);
 let sw = fs.readFileSync(path.join(__dirname, "standalone-sw.js"), "utf8");
 sw = sw.replace("__CACHE_NAME__", "mushaf-" + stamp)
        .replace("__PRECACHE__", JSON.stringify(PRECACHE));
