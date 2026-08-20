@@ -45,9 +45,17 @@ html[data-imm="1"] #qOpts:not([hidden]){
 html[data-imm="1"] .screen{ padding:0 }
 html[data-imm="1"] #qSheet{
   border:none;border-radius:0;min-height:100dvh;
-  /* أعلى الورقة يُفسح لأزرارها العائمة، فلا يقع الزرُّ على عنوان سورة */
-  padding:calc(env(safe-area-inset-top) + 48px) 13px calc(env(safe-area-inset-bottom) + 64px);
+  /* حواشٍ كحواشي المصحف المطبوع: كلُّ ملّيمترٍ يُترك هنا يُقتطع من
+     قامة الحرف — قارنّاها بمصحفٍ مطبوعٍ فضاقت */
+  padding:calc(env(safe-area-inset-top) + 40px) 6px calc(env(safe-area-inset-bottom) + 56px);
   display:flex;flex-direction:column }
+/* والأسطرُ تُرصّ رصَّ المصحف: التباعدُ الرحب يأكل قامةَ الحرف.
+   وخطُّ المجمّع مصمَّمٌ لهذا الرصّ فلا تتصادم علاماتُه */
+html[data-imm="1"] .qtext{ line-height:2.08; word-spacing:0 }
+html[data-imm="1"] .qbsml{ line-height:1.9; margin:2px 0 6px }
+html[data-imm="1"] .qsura{ margin:8px 2px 6px; padding:6px 8px }
+html[data-imm="1"] .qtext .num{ min-width:21px;height:21px;line-height:19px;
+  font-size:10px;margin:0 3px }
 html[data-imm="1"] #qBody{ flex:1 }
 html[data-imm="1"] .qnav{
   position:fixed;inset-inline:0;bottom:0;z-index:40;margin:0;
@@ -58,7 +66,7 @@ html[data-imm="1"] .qnav{
 #qImmBar{ position:fixed;top:calc(env(safe-area-inset-top) + 6px);inset-inline-start:6px;
   z-index:41;display:none;gap:6px }
 html[data-imm="1"] #qImmBar{ display:flex }
-#qImmBar button{ width:36px;height:36px;border-radius:50%;
+#qImmBar button{ width:32px;height:32px;border-radius:50%;
   border:1px solid var(--line);background:var(--surface);color:var(--muted);
   font-size:14px;font-family:inherit;cursor:pointer;opacity:.72 }
 #qImmBar button:active{ opacity:1 }
@@ -769,7 +777,7 @@ input::placeholder{color:#5c6579}
 <!-- فاهمُ الأمر المنطوق يحقنه الخادم فوق هذا السطر — ملفٌّ واحد
      يعمل في node وفي المتصفّح. ولا يُطلب بوسمٍ حاجز: الصفحة لا يجوز
      أن تحتاج طلباً ثانياً لتُرسم -->
-<script>window.__APP__="mushaf";window.__STANDALONE__=1;window.__BUILD__="2888310f75";window.__RECITERS__=[{"key":"husary","name":"محمود خليل الحصري","note":"مرتَّل","teacher":false,"urls":["https://everyayah.com/data/Husary_128kbps/{sss}{aaa}.mp3","https://cdn.islamic.network/quran/audio/128/ar.husary/{n}.mp3","https://everyayah.com/data/Husary_64kbps/{sss}{aaa}.mp3"]},{"key":"minshawi","name":"محمد صدّيق المنشاوي","note":"مرتَّل","teacher":false,"urls":["https://everyayah.com/data/Minshawy_Murattal_128kbps/{sss}{aaa}.mp3","https://cdn.islamic.network/quran/audio/128/ar.minshawi/{n}.mp3","https://everyayah.com/data/Minshawy_Mujawwad_192kbps/{sss}{aaa}.mp3"]},{"key":"ajamy","name":"أحمد بن علي العجمي","note":"مرتَّل","teacher":false,"urls":["https://everyayah.com/data/ahmed_ibn_ali_al_ajamy_128kbps/{sss}{aaa}.mp3","https://cdn.islamic.network/quran/audio/128/ar.ahmedajamy/{n}.mp3","https://everyayah.com/data/Ahmed_ibn_Ali_al_Ajamy_64kbps_QuranExplorer.Com/{sss}{aaa}.mp3"]},{"key":"husary_teacher","name":"الحصري — المصحف المعلّم","note":"مع ترديد الأطفال","teacher":true,"urls":["https://everyayah.com/data/Husary_Muallim_128kbps/{sss}{aaa}.mp3","https://www.everyayah.com/data/Husary_Muallim_128kbps/{sss}{aaa}.mp3","https://everyayah.com/data/Husary_128kbps_Muallim/{sss}{aaa}.mp3"]},{"key":"minshawi_teacher","name":"المنشاوي — المصحف المعلّم","note":"مع ترديد الأطفال","teacher":true,"urls":["https://everyayah.com/data/Minshawy_Mualim_128kbps/{sss}{aaa}.mp3","https://everyayah.com/data/Minshawy_Muallim_128kbps/{sss}{aaa}.mp3","https://everyayah.com/data/Minshawy_Teacher_128kbps/{sss}{aaa}.mp3"]},{"key":"hudhaify","name":"علي بن عبدالرحمن الحذيفي","note":"مرتَّل","teacher":false,"urls":["https://everyayah.com/data/Hudhaify_128kbps/{sss}{aaa}.mp3","https://cdn.islamic.network/quran/audio/128/ar.hudhaify/{n}.mp3","https://everyayah.com/data/Hudhaify_64kbps/{sss}{aaa}.mp3"]}];window.__CREDITS__=[{"label":"المصحف — رواية حفص، الرسم العثمانيّ","credit":"مجمّع الملك فهد لطباعة المصحف الشريف"},{"label":"التفسير الميسَّر","credit":"مجمّع الملك فهد لطباعة المصحف الشريف"},{"label":"تفسير الجلالين","credit":"جلال الدين المحلّي وجلال الدين السيوطي"},{"label":"فهرس السور","credit":"quran-api"},{"label":"تخطيط صفحات مصحف المدينة","credit":"quran-api — وقِيس ببدايات الأجزاء الثلاثين"},{"label":"الأذكار","credit":"حصن المسلم — ولكل ذكرٍ مرجعه"},{"label":"خطّ المصحف العثمانيّ","credit":"مجمّع الملك فهد"}];</script>
+<script>window.__APP__="mushaf";window.__STANDALONE__=1;window.__BUILD__="b6c24903f7";window.__RECITERS__=[{"key":"husary","name":"محمود خليل الحصري","note":"مرتَّل","teacher":false,"urls":["https://everyayah.com/data/Husary_128kbps/{sss}{aaa}.mp3","https://cdn.islamic.network/quran/audio/128/ar.husary/{n}.mp3","https://everyayah.com/data/Husary_64kbps/{sss}{aaa}.mp3"]},{"key":"minshawi","name":"محمد صدّيق المنشاوي","note":"مرتَّل","teacher":false,"urls":["https://everyayah.com/data/Minshawy_Murattal_128kbps/{sss}{aaa}.mp3","https://cdn.islamic.network/quran/audio/128/ar.minshawi/{n}.mp3","https://everyayah.com/data/Minshawy_Mujawwad_192kbps/{sss}{aaa}.mp3"]},{"key":"ajamy","name":"أحمد بن علي العجمي","note":"مرتَّل","teacher":false,"urls":["https://everyayah.com/data/ahmed_ibn_ali_al_ajamy_128kbps/{sss}{aaa}.mp3","https://cdn.islamic.network/quran/audio/128/ar.ahmedajamy/{n}.mp3","https://everyayah.com/data/Ahmed_ibn_Ali_al_Ajamy_64kbps_QuranExplorer.Com/{sss}{aaa}.mp3"]},{"key":"husary_teacher","name":"الحصري — المصحف المعلّم","note":"مع ترديد الأطفال","teacher":true,"urls":["https://everyayah.com/data/Husary_Muallim_128kbps/{sss}{aaa}.mp3","https://www.everyayah.com/data/Husary_Muallim_128kbps/{sss}{aaa}.mp3","https://everyayah.com/data/Husary_128kbps_Muallim/{sss}{aaa}.mp3"]},{"key":"minshawi_teacher","name":"المنشاوي — المصحف المعلّم","note":"مع ترديد الأطفال","teacher":true,"urls":["https://everyayah.com/data/Minshawy_Mualim_128kbps/{sss}{aaa}.mp3","https://everyayah.com/data/Minshawy_Muallim_128kbps/{sss}{aaa}.mp3","https://everyayah.com/data/Minshawy_Teacher_128kbps/{sss}{aaa}.mp3"]},{"key":"hudhaify","name":"علي بن عبدالرحمن الحذيفي","note":"مرتَّل","teacher":false,"urls":["https://everyayah.com/data/Hudhaify_128kbps/{sss}{aaa}.mp3","https://cdn.islamic.network/quran/audio/128/ar.hudhaify/{n}.mp3","https://everyayah.com/data/Hudhaify_64kbps/{sss}{aaa}.mp3"]}];window.__CREDITS__=[{"label":"المصحف — رواية حفص، الرسم العثمانيّ","credit":"مجمّع الملك فهد لطباعة المصحف الشريف"},{"label":"التفسير الميسَّر","credit":"مجمّع الملك فهد لطباعة المصحف الشريف"},{"label":"تفسير الجلالين","credit":"جلال الدين المحلّي وجلال الدين السيوطي"},{"label":"فهرس السور","credit":"quran-api"},{"label":"تخطيط صفحات مصحف المدينة","credit":"quran-api — وقِيس ببدايات الأجزاء الثلاثين"},{"label":"الأذكار","credit":"حصن المسلم — ولكل ذكرٍ مرجعه"},{"label":"خطّ المصحف العثمانيّ","credit":"مجمّع الملك فهد"}];</script>
 <link rel="manifest" href="manifest.webmanifest">
 <script>
 "use strict";
@@ -3078,7 +3086,7 @@ function wakeTv(btn){
   const resize = (d) => {
     // تكبيرٌ باليد إبطالٌ للملاءمة: من ضبط قامته بيده فقد اختار
     if (fitOn){ fitOn = false; store.set("quran_fit", "0"); qsize = Math.round(fitSize || qsize); }
-    qsize = Math.max(13, Math.min(34, qsize + d));
+    qsize = Math.max(13, Math.min(44, qsize + d));
     store.set("quran_size", String(qsize));
     $("qBody").style.setProperty("--qsize", qsize + "px");
   };
@@ -3126,12 +3134,20 @@ function wakeTv(btn){
       - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom)
       - (foot.hidden ? 0 : foot.offsetHeight + 23);
     let size = fitSize || qsize;
-    for (let i = 0; i < 5; i++){
-      const h = last.getBoundingClientRect().bottom - first.getBoundingClientRect().top;
+    const measure = () => last.getBoundingClientRect().bottom - first.getBoundingClientRect().top;
+    for (let i = 0; i < 8; i++){
+      const h = measure();
       if (!h || budget < 100) return;
       const ratio = budget / h;
-      if (ratio > 0.97 && ratio < 1.03) break;
-      size = Math.max(12, Math.min(34, size * Math.sqrt(ratio)));
+      // القبول من جهةٍ واحدة: أقصر بقليلٍ يجوز، وأطول بمليمترٍ تمرير.
+      // وسقفُ الملاءمة أعلى من سقف اليد: الفاتحةُ وأخواتُها القِصار
+      // تستحقّ أن تملأ الشاشة كما في المصحف
+      if (h <= budget && ratio < 1.06) break;
+      size = Math.max(12, Math.min(44, size * Math.sqrt(ratio)));
+      body.style.setProperty("--qsize", size.toFixed(2) + "px");
+    }
+    for (let i = 0; i < 3 && measure() > budget && size > 12; i++){
+      size = Math.max(12, size * 0.97);
       body.style.setProperty("--qsize", size.toFixed(2) + "px");
     }
     fitSize = size;
