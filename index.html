@@ -624,7 +624,8 @@ input::placeholder{color:#5c6579}
   <!-- الإعدادات كلُّها خلف زرّ: صفحةُ المصحف تُترك لصاحبها.
        وفي ملء الشاشة تنفتح لوحةً سفليةً فوق الصفحة، كما في المصاحف -->
   <div id="qOpts">
-  <div class="act-row" id="qOptsHead" hidden style="justify-content:flex-end;margin:0 0 10px">
+  <div class="act-row" id="qOptsHead" hidden style="margin:0 0 10px">
+    <button class="key sm" id="qHub">الأقسام: الأذكار والمواقيت والقبلة</button>
     <button class="key sm" id="qOptsClose" style="flex:0 0 100px">إغلاق</button>
   </div>
   <div class="qbar">
@@ -768,7 +769,7 @@ input::placeholder{color:#5c6579}
 <!-- فاهمُ الأمر المنطوق يحقنه الخادم فوق هذا السطر — ملفٌّ واحد
      يعمل في node وفي المتصفّح. ولا يُطلب بوسمٍ حاجز: الصفحة لا يجوز
      أن تحتاج طلباً ثانياً لتُرسم -->
-<script>window.__APP__="mushaf";window.__STANDALONE__=1;window.__BUILD__="f3c8a049c9";window.__RECITERS__=[{"key":"husary","name":"محمود خليل الحصري","note":"مرتَّل","teacher":false,"urls":["https://everyayah.com/data/Husary_128kbps/{sss}{aaa}.mp3","https://cdn.islamic.network/quran/audio/128/ar.husary/{n}.mp3","https://everyayah.com/data/Husary_64kbps/{sss}{aaa}.mp3"]},{"key":"minshawi","name":"محمد صدّيق المنشاوي","note":"مرتَّل","teacher":false,"urls":["https://everyayah.com/data/Minshawy_Murattal_128kbps/{sss}{aaa}.mp3","https://cdn.islamic.network/quran/audio/128/ar.minshawi/{n}.mp3","https://everyayah.com/data/Minshawy_Mujawwad_192kbps/{sss}{aaa}.mp3"]},{"key":"ajamy","name":"أحمد بن علي العجمي","note":"مرتَّل","teacher":false,"urls":["https://everyayah.com/data/ahmed_ibn_ali_al_ajamy_128kbps/{sss}{aaa}.mp3","https://cdn.islamic.network/quran/audio/128/ar.ahmedajamy/{n}.mp3","https://everyayah.com/data/Ahmed_ibn_Ali_al_Ajamy_64kbps_QuranExplorer.Com/{sss}{aaa}.mp3"]},{"key":"husary_teacher","name":"الحصري — المصحف المعلّم","note":"مع ترديد الأطفال","teacher":true,"urls":["https://everyayah.com/data/Husary_Muallim_128kbps/{sss}{aaa}.mp3","https://www.everyayah.com/data/Husary_Muallim_128kbps/{sss}{aaa}.mp3","https://everyayah.com/data/Husary_128kbps_Muallim/{sss}{aaa}.mp3"]},{"key":"minshawi_teacher","name":"المنشاوي — المصحف المعلّم","note":"مع ترديد الأطفال","teacher":true,"urls":["https://everyayah.com/data/Minshawy_Mualim_128kbps/{sss}{aaa}.mp3","https://everyayah.com/data/Minshawy_Muallim_128kbps/{sss}{aaa}.mp3","https://everyayah.com/data/Minshawy_Teacher_128kbps/{sss}{aaa}.mp3"]},{"key":"hudhaify","name":"علي بن عبدالرحمن الحذيفي","note":"مرتَّل","teacher":false,"urls":["https://everyayah.com/data/Hudhaify_128kbps/{sss}{aaa}.mp3","https://cdn.islamic.network/quran/audio/128/ar.hudhaify/{n}.mp3","https://everyayah.com/data/Hudhaify_64kbps/{sss}{aaa}.mp3"]}];window.__CREDITS__=[{"label":"المصحف — رواية حفص، الرسم العثمانيّ","credit":"مجمّع الملك فهد لطباعة المصحف الشريف"},{"label":"التفسير الميسَّر","credit":"مجمّع الملك فهد لطباعة المصحف الشريف"},{"label":"تفسير الجلالين","credit":"جلال الدين المحلّي وجلال الدين السيوطي"},{"label":"فهرس السور","credit":"quran-api"},{"label":"تخطيط صفحات مصحف المدينة","credit":"quran-api — وقِيس ببدايات الأجزاء الثلاثين"},{"label":"الأذكار","credit":"حصن المسلم — ولكل ذكرٍ مرجعه"},{"label":"خطّ المصحف العثمانيّ","credit":"مجمّع الملك فهد"}];</script>
+<script>window.__APP__="mushaf";window.__STANDALONE__=1;window.__BUILD__="2888310f75";window.__RECITERS__=[{"key":"husary","name":"محمود خليل الحصري","note":"مرتَّل","teacher":false,"urls":["https://everyayah.com/data/Husary_128kbps/{sss}{aaa}.mp3","https://cdn.islamic.network/quran/audio/128/ar.husary/{n}.mp3","https://everyayah.com/data/Husary_64kbps/{sss}{aaa}.mp3"]},{"key":"minshawi","name":"محمد صدّيق المنشاوي","note":"مرتَّل","teacher":false,"urls":["https://everyayah.com/data/Minshawy_Murattal_128kbps/{sss}{aaa}.mp3","https://cdn.islamic.network/quran/audio/128/ar.minshawi/{n}.mp3","https://everyayah.com/data/Minshawy_Mujawwad_192kbps/{sss}{aaa}.mp3"]},{"key":"ajamy","name":"أحمد بن علي العجمي","note":"مرتَّل","teacher":false,"urls":["https://everyayah.com/data/ahmed_ibn_ali_al_ajamy_128kbps/{sss}{aaa}.mp3","https://cdn.islamic.network/quran/audio/128/ar.ahmedajamy/{n}.mp3","https://everyayah.com/data/Ahmed_ibn_Ali_al_Ajamy_64kbps_QuranExplorer.Com/{sss}{aaa}.mp3"]},{"key":"husary_teacher","name":"الحصري — المصحف المعلّم","note":"مع ترديد الأطفال","teacher":true,"urls":["https://everyayah.com/data/Husary_Muallim_128kbps/{sss}{aaa}.mp3","https://www.everyayah.com/data/Husary_Muallim_128kbps/{sss}{aaa}.mp3","https://everyayah.com/data/Husary_128kbps_Muallim/{sss}{aaa}.mp3"]},{"key":"minshawi_teacher","name":"المنشاوي — المصحف المعلّم","note":"مع ترديد الأطفال","teacher":true,"urls":["https://everyayah.com/data/Minshawy_Mualim_128kbps/{sss}{aaa}.mp3","https://everyayah.com/data/Minshawy_Muallim_128kbps/{sss}{aaa}.mp3","https://everyayah.com/data/Minshawy_Teacher_128kbps/{sss}{aaa}.mp3"]},{"key":"hudhaify","name":"علي بن عبدالرحمن الحذيفي","note":"مرتَّل","teacher":false,"urls":["https://everyayah.com/data/Hudhaify_128kbps/{sss}{aaa}.mp3","https://cdn.islamic.network/quran/audio/128/ar.hudhaify/{n}.mp3","https://everyayah.com/data/Hudhaify_64kbps/{sss}{aaa}.mp3"]}];window.__CREDITS__=[{"label":"المصحف — رواية حفص، الرسم العثمانيّ","credit":"مجمّع الملك فهد لطباعة المصحف الشريف"},{"label":"التفسير الميسَّر","credit":"مجمّع الملك فهد لطباعة المصحف الشريف"},{"label":"تفسير الجلالين","credit":"جلال الدين المحلّي وجلال الدين السيوطي"},{"label":"فهرس السور","credit":"quran-api"},{"label":"تخطيط صفحات مصحف المدينة","credit":"quran-api — وقِيس ببدايات الأجزاء الثلاثين"},{"label":"الأذكار","credit":"حصن المسلم — ولكل ذكرٍ مرجعه"},{"label":"خطّ المصحف العثمانيّ","credit":"مجمّع الملك فهد"}];</script>
 <link rel="manifest" href="manifest.webmanifest">
 <script>
 "use strict";
@@ -1956,7 +1957,9 @@ function setupRouter(){
   $("backBtn").onclick = () => { buzz(); show(backOf()); };
   // زرّ الرجوع في الجوال يعود خطوة لا يخرج من التطبيق
   addEventListener("popstate", () => { if (currentScreen !== HOME) show(backOf()); });
-  show(HOME);
+  // تطبيقُ المصحف يفتح على المصحف نفسه — وآخرُ صفحةٍ محفوظةٌ أصلاً
+  // فيعود إليها. والأقسامُ الأخرى بابُها زرُّ «الأقسام» في الخيارات
+  show(MUSHAF_APP ? "islam-quran" : HOME);
 }
 
 // لوحة اللمس: تحرّك المؤشر على التلفزيون عبر قناة الأزرار
@@ -3022,6 +3025,9 @@ function wakeTv(btn){
       saveTick().catch(() => {});
     } catch (e) { body.textContent = "النصوص لم تُنزَّل بعد — ارجع ونزّلها"; }
   };
+  // تطبيقُ المصحف يفتح على هذه الشاشة قبل أن تُعرَّف دالّتُها —
+  // فالموجّه يعمل أوّلاً وهذا القسمُ بعده. فتُستدعى هنا إن سبقت
+  if (currentScreen === "islam-quran") window.__islamQuran();
 
   // اختيار السورة ينقل إلى صفحتها الأولى، لا إلى قائمةٍ منفصلة
   $("qSura").onchange = () => paintPage(D.suras[Number($("qSura").value) - 1].page || 1);
@@ -3049,7 +3055,14 @@ function wakeTv(btn){
       if (skip) return;
       const t = e.changedTouches[0];
       const dx = t.clientX - x0, dy = t.clientY - y0;
-      // سحبٌ أفقيٌّ واضح، وإلا فهو تمريرٌ رأسيّ أو لمسةٌ على آية
+      // لمسةٌ ساكنة على الصفحة (في ملء الشاشة): تُظهر الخيارات كاملةً
+      // وتطويها — كما في المصاحف. والسحبُ يقلّب، والمائلُ تمرير
+      if (MUSHAF_APP && Math.abs(dx) < 12 && Math.abs(dy) < 12){
+        const opts = $("qOpts");
+        if (document.documentElement.getAttribute("data-imm") === "1")
+          opts.hidden = !opts.hidden;
+        return;
+      }
       if (Math.abs(dx) < 45 || Math.abs(dx) < Math.abs(dy) * 1.4) return;
       paintPage(page + (dx > 0 ? 1 : -1));
     }, { passive: true });
@@ -3082,6 +3095,7 @@ function wakeTv(btn){
     const toggle = (on) => { opts.hidden = !on; if (on) opts.scrollTop = 0; };
     gear.onclick = () => toggle(opts.hidden);
     $("qOptsClose").onclick = () => toggle(false);
+    $("qHub").onclick = () => { toggle(false); show("dev-islam"); };
   })();
 
   /* ---------- ملء الشاشة ----------

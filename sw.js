@@ -5,7 +5,7 @@
    بعدها بلا إنترنت أبداً. والصفحةُ نفسها من الشبكة بمهلةٍ ثمّ من
    المخزون: انتظارٌ بلا حدٍّ هو الشاشة السوداء بعينها. والتلاوةُ
    تُخزَّن حين تُسمع أو تُحفظ، وتُقدَّم من المخزون قبل الشبكة. */
-const CACHE = "mushaf-f3c8a049c9";
+const CACHE = "mushaf-2888310f75";
 const AUD = "mushaf-audio-v1";
 const CORE = ["index.html","manifest.webmanifest","icon.png","data/quran.json","data/tafsir-muyassar.json","data/tafsir-jalalayn.json","data/suras.json","data/pages.json","data/azkar.json","data/uthmanic.woff2"];
 
