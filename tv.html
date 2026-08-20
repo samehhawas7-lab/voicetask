@@ -1115,7 +1115,8 @@ input::placeholder{color:#5c6579}
   <!-- الإعدادات كلُّها خلف زرّ: صفحةُ المصحف تُترك لصاحبها.
        وفي ملء الشاشة تنفتح لوحةً سفليةً فوق الصفحة، كما في المصاحف -->
   <div id="qOpts">
-  <div class="act-row" id="qOptsHead" hidden style="justify-content:flex-end;margin:0 0 10px">
+  <div class="act-row" id="qOptsHead" hidden style="margin:0 0 10px">
+    <button class="key sm" id="qHub">الأقسام: الأذكار والمواقيت والقبلة</button>
     <button class="key sm" id="qOptsClose" style="flex:0 0 100px">إغلاق</button>
   </div>
   <div class="qbar">
@@ -2463,7 +2464,9 @@ function setupRouter(){
   $("backBtn").onclick = () => { buzz(); show(backOf()); };
   // زرّ الرجوع في الجوال يعود خطوة لا يخرج من التطبيق
   addEventListener("popstate", () => { if (currentScreen !== HOME) show(backOf()); });
-  show(HOME);
+  // تطبيقُ المصحف يفتح على المصحف نفسه — وآخرُ صفحةٍ محفوظةٌ أصلاً
+  // فيعود إليها. والأقسامُ الأخرى بابُها زرُّ «الأقسام» في الخيارات
+  show(MUSHAF_APP ? "islam-quran" : HOME);
 }
 
 // لوحة اللمس: تحرّك المؤشر على التلفزيون عبر قناة الأزرار
@@ -3529,6 +3532,9 @@ function wakeTv(btn){
       saveTick().catch(() => {});
     } catch (e) { body.textContent = "النصوص لم تُنزَّل بعد — ارجع ونزّلها"; }
   };
+  // تطبيقُ المصحف يفتح على هذه الشاشة قبل أن تُعرَّف دالّتُها —
+  // فالموجّه يعمل أوّلاً وهذا القسمُ بعده. فتُستدعى هنا إن سبقت
+  if (currentScreen === "islam-quran") window.__islamQuran();
 
   // اختيار السورة ينقل إلى صفحتها الأولى، لا إلى قائمةٍ منفصلة
   $("qSura").onchange = () => paintPage(D.suras[Number($("qSura").value) - 1].page || 1);
@@ -3556,7 +3562,14 @@ function wakeTv(btn){
       if (skip) return;
       const t = e.changedTouches[0];
       const dx = t.clientX - x0, dy = t.clientY - y0;
-      // سحبٌ أفقيٌّ واضح، وإلا فهو تمريرٌ رأسيّ أو لمسةٌ على آية
+      // لمسةٌ ساكنة على الصفحة (في ملء الشاشة): تُظهر الخيارات كاملةً
+      // وتطويها — كما في المصاحف. والسحبُ يقلّب، والمائلُ تمرير
+      if (MUSHAF_APP && Math.abs(dx) < 12 && Math.abs(dy) < 12){
+        const opts = $("qOpts");
+        if (document.documentElement.getAttribute("data-imm") === "1")
+          opts.hidden = !opts.hidden;
+        return;
+      }
       if (Math.abs(dx) < 45 || Math.abs(dx) < Math.abs(dy) * 1.4) return;
       paintPage(page + (dx > 0 ? 1 : -1));
     }, { passive: true });
@@ -3589,6 +3602,7 @@ function wakeTv(btn){
     const toggle = (on) => { opts.hidden = !on; if (on) opts.scrollTop = 0; };
     gear.onclick = () => toggle(opts.hidden);
     $("qOptsClose").onclick = () => toggle(false);
+    $("qHub").onclick = () => { toggle(false); show("dev-islam"); };
   })();
 
   /* ---------- ملء الشاشة ----------
