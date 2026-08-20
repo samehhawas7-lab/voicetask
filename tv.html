@@ -101,8 +101,9 @@ html[data-theme="green"]{            /* أخضر داكن — أهدأ ما جر
    صفحةُ طبعة المدينة بخطّ المجمّع: لكلّ صفحةٍ خطُّها وأشكالُ كلماتها
    المحفورة. السطرُ لا يلتفّ — كلماتُه أرواحُ الطباعة نفسها — فيُفرش
    بالتساوي حتى الحاشيتين كما في الورق */
+.qpage{margin:0 auto}
 .qline{display:flex;justify-content:space-between;align-items:baseline;
-  white-space:nowrap;line-height:2.06;direction:rtl}
+  white-space:nowrap;line-height:var(--qlh,1.9);direction:rtl}
 .qline.qshort{justify-content:center;gap:.14em}
 .qline .ay{cursor:pointer;border-radius:6px}
 .qline .ay.sel{background:var(--accent-dim)}
@@ -3176,11 +3177,24 @@ function wakeTv(btn){
     const budget = document.documentElement.clientHeight
       - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom)
       - ($("qFoot").hidden ? 0 : $("qFoot").offsetHeight + 23);
-    const LH = 2.06;
+    // خطوةُ السطر كخطوة الورق: كتلةُ نصِّ الطبعة أطولُ من عرضها بنحو
+    // النصف، وعرضُ أسطرها نحو ١٤ قامةً — فالخطوة قرابة ١.٤ قامة
+    const LH = 1.42;
     // العنوان ~صفّان صغيران، والبسملة سطرٌ أدنى — بوحدات قامة الحرف
     const units = textLines * LH + heads * 2.2 + bsmls * 1.5;
     let F = Math.min(W * pg.u / pg.mw, budget / Math.max(units, 1));
     F = Math.max(12, Math.min(44, F));
+
+    // الصفحةُ كتلةٌ بنسب الورق: عرضُها عرضُ أعرضِ سطرٍ بالقامة
+    // المختارة، تتوسّط الشاشةَ عرضاً وطولاً — لا تُمدَّد أسطرُها
+    // بفجواتٍ ليست في الطباعة
+    const pageBox = document.createElement("div");
+    pageBox.className = "qpage";
+    pageBox.style.width = Math.ceil(F * pg.mw / pg.u) + "px";
+    pageBox.style.setProperty("--qlh", String(LH));
+    const spare = budget - F * units;
+    if (spare > 0) pageBox.style.paddingTop = Math.round(spare / 2) + "px";
+    body.appendChild(pageBox);
 
     for (const ln of pg.lines){
       if (ln.h !== undefined){
@@ -3190,12 +3204,12 @@ function wakeTv(btn){
         const b = document.createElement("b");
         b.textContent = "سورة " + bare(su.name);
         h.appendChild(b);
-        body.appendChild(h);
+        pageBox.appendChild(h);
         if (ln.b){
           const bs = document.createElement("div");
           bs.className = "qbsml";
           bs.textContent = "بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ";
-          body.appendChild(bs);
+          pageBox.appendChild(bs);
         }
         continue;
       }
@@ -3214,7 +3228,7 @@ function wakeTv(btn){
         };
         div.appendChild(sp);
       }
-      body.appendChild(div);
+      pageBox.appendChild(div);
     }
     // وخطّا الجارتين يُسخَّنان — فالتقليب لا ينتظر شبكة
     for (const q of [pg.p, pg.p + 1, pg.p - 1]){
