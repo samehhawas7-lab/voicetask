@@ -29,9 +29,19 @@
    نفسه: يُطوى الرأسُ وما حول الورقة، وتمتدّ الورقةُ إلى الحوافّ.
    وهذا يعمل حيث لا تعمل تلك، ويعمل في التطبيق المثبَّت كذلك. */
 html[data-imm="1"] .topbar,
-html[data-imm="1"] #islam-quran > .qbar,
-html[data-imm="1"] #islam-quran > .card,
 html[data-imm="1"] #islam-quran > #qMarg{ display:none !important }
+/* في الريموت اللوحةُ مبسوطةٌ دائماً — فملءُ الشاشة يطويها كما كان
+   يطوي البطاقات، وإلا غطّت أزرارَ الصفحات */
+html[data-imm="1"] #qOpts[data-flat="1"]{ display:none !important }
+/* لوحةُ الخيارات في ملء الشاشة: تطفو من أسفل فوق الصفحة، لا تُخرِج منها */
+html[data-imm="1"] #qOpts:not([hidden]){
+  position:fixed;inset-inline:0;bottom:0;z-index:60;
+  max-height:74dvh;overflow-y:auto;background:var(--bg);
+  border-top:1px solid var(--line);border-radius:18px 18px 0 0;
+  padding:12px 14px calc(env(safe-area-inset-bottom) + 74px);
+  box-shadow:0 -12px 40px rgba(0,0,0,.35)}
+/* والسحبُ الأفقيّ للتقليب لا يتنازعه المتصفّح */
+#islam-quran{touch-action:pan-y}
 html[data-imm="1"] .screen{ padding:0 }
 html[data-imm="1"] #qSheet{
   border:none;border-radius:0;min-height:100dvh;
@@ -1087,13 +1097,6 @@ input::placeholder{color:#5c6579}
 
 <!-- المصحف -->
 <section class="screen" id="islam-quran" data-title="المصحف" data-sub="—" data-back="dev-islam">
-  <div class="qbar">
-    <select id="qSura"></select>
-    <button class="key sm" id="qTafsirWhich">الميسَّر</button>
-    <button class="key sm" id="qSmaller">ﻉ−</button>
-    <button class="key sm" id="qBigger">ﻉ+</button>
-    <button class="key sm" id="qImm">ملء الشاشة</button>
-  </div>
   <div class="qsheet" id="qSheet">
     <div id="qBody"></div>
     <div class="qfoot" id="qFoot" hidden>
@@ -1106,6 +1109,21 @@ input::placeholder{color:#5c6579}
     <button class="key sm" id="qPrev">السابقة ›</button>
     <input id="qGo" class="qjump" inputmode="numeric" pattern="[0-9]*" aria-label="رقم الصفحة">
     <button class="key sm" id="qNext">‹ التالية</button>
+    <button class="key sm" id="qGear" aria-label="الخيارات" style="flex:0 0 52px">⚙</button>
+  </div>
+
+  <!-- الإعدادات كلُّها خلف زرّ: صفحةُ المصحف تُترك لصاحبها.
+       وفي ملء الشاشة تنفتح لوحةً سفليةً فوق الصفحة، كما في المصاحف -->
+  <div id="qOpts">
+  <div class="act-row" id="qOptsHead" hidden style="justify-content:flex-end;margin:0 0 10px">
+    <button class="key sm" id="qOptsClose" style="flex:0 0 100px">إغلاق</button>
+  </div>
+  <div class="qbar">
+    <select id="qSura"></select>
+    <button class="key sm" id="qTafsirWhich">الميسَّر</button>
+    <button class="key sm" id="qSmaller">ﻉ−</button>
+    <button class="key sm" id="qBigger">ﻉ+</button>
+    <button class="key sm" id="qImm">ملء الشاشة</button>
   </div>
 
   <div class="card qplay">
@@ -1175,7 +1193,11 @@ input::placeholder{color:#5c6579}
     </div>
     <div id="qTajLegend" class="tjlegend" hidden></div>
     <p class="hint" id="qTajNote" hidden></p>
+    <div class="act-row" style="margin-top:10px">
+      <button class="key sm" id="qFit">ملاءمة الصفحة لطول الشاشة</button>
+    </div>
   </div>
+  </div><!-- /qOpts -->
 
   <div id="qMarg"></div>
   <div id="qImmBar">
@@ -3489,6 +3511,8 @@ function wakeTv(btn){
     $("qFootJuz").textContent = "الجزء " + AD(D.pages[p - 1][4]);
     $("qGo").value = AD(p);
     $("qSura").value = String(suras[0] || 1);
+    // كلُّ صفحةٍ تُلاءم طولَ الشاشة من جديد — فمحتواها غيرُ محتوى أختها
+    requestAnimationFrame(() => window.__qFit && window.__qFit());
     store.set("quran_page", String(p));
     screenSub("islam-quran", names + " · صفحة " + AD(p) + " · " + NAMES[which]);
     toTop();
@@ -3516,19 +3540,25 @@ function wakeTv(btn){
     paintPage(Number(v.replace(/\D/g, "")) || page);
   };
 
-  // وتُقلَّب بالإصبع كما تُقلَّب الورقة: سحبٌ نحو اليسار يُقدّم
+  /* التقليب بالإصبع — على الشاشة كلِّها لا الورقة وحدها، وبالاتجاه
+     المألوف في مصاحف الجوّال: السحبُ نحو اليمين يُقدّم (فالصفحة
+     التالية تأتي من اليسار كما في الكتاب الورقيّ). ولا يُقلَّب سحبٌ
+     يبدأ من زرٍّ أو قائمةٍ أو لوحة الخيارات. */
   (() => {
-    const sheet = $("qSheet");
-    let x0 = 0, y0 = 0;
-    sheet.addEventListener("touchstart", (e) => {
+    const scr = document.getElementById("islam-quran");
+    let x0 = 0, y0 = 0, skip = false;
+    scr.addEventListener("touchstart", (e) => {
+      const el = e.target;
+      skip = !!(el.closest && el.closest("button,select,input,#qOpts,#qImmBar,.qnav"));
       x0 = e.touches[0].clientX; y0 = e.touches[0].clientY;
     }, { passive: true });
-    sheet.addEventListener("touchend", (e) => {
+    scr.addEventListener("touchend", (e) => {
+      if (skip) return;
       const t = e.changedTouches[0];
       const dx = t.clientX - x0, dy = t.clientY - y0;
       // سحبٌ أفقيٌّ واضح، وإلا فهو تمريرٌ رأسيّ أو لمسةٌ على آية
-      if (Math.abs(dx) < 55 || Math.abs(dx) < Math.abs(dy) * 1.6) return;
-      paintPage(page + (dx < 0 ? 1 : -1));
+      if (Math.abs(dx) < 45 || Math.abs(dx) < Math.abs(dy) * 1.4) return;
+      paintPage(page + (dx > 0 ? 1 : -1));
     }, { passive: true });
   })();
 
@@ -3540,22 +3570,80 @@ function wakeTv(btn){
     paintPage(page);
   };
   const resize = (d) => {
-    qsize = Math.max(16, Math.min(34, qsize + d));
+    // تكبيرٌ باليد إبطالٌ للملاءمة: من ضبط قامته بيده فقد اختار
+    if (fitOn){ fitOn = false; store.set("quran_fit", "0"); qsize = Math.round(fitSize || qsize); }
+    qsize = Math.max(13, Math.min(34, qsize + d));
     store.set("quran_size", String(qsize));
     $("qBody").style.setProperty("--qsize", qsize + "px");
   };
   $("qBigger").onclick = () => resize(2);
   $("qSmaller").onclick = () => resize(-2);
 
+  /* الإعداداتُ خلف زرّ ⚙ في تطبيق المصحف: الصفحةُ لصاحبها، وما سواها
+     يُطلب فيُجاب. وفي الريموت تبقى مبسوطةً كما كانت. */
+  (() => {
+    const opts = $("qOpts"), gear = $("qGear");
+    if (!MUSHAF_APP){ gear.hidden = true; opts.dataset.flat = "1"; return; }
+    opts.hidden = true;
+    $("qOptsHead").hidden = false;
+    const toggle = (on) => { opts.hidden = !on; if (on) opts.scrollTop = 0; };
+    gear.onclick = () => toggle(opts.hidden);
+    $("qOptsClose").onclick = () => toggle(false);
+  })();
+
   /* ---------- ملء الشاشة ----------
      ولا يُترك المرءُ في شاشةٍ لا بابَ لها: زرُّ الخروج ظاهرٌ دائماً،
      وزرُّ الرجوع يخرج منها أوّلاً ثمّ يرجع، فلا يقفز إلى شاشةٍ أخرى
      وقد نسي أنّه فيها. */
-  let imm = store.get("quran_full") === "1";
+  // في تطبيق المصحف: ملءُ الشاشة هو الأصل — تفتح فترى الصفحة وحدها
+  const qfSaved = store.get("quran_full");
+  let imm = (qfSaved === null || qfSaved === undefined) ? MUSHAF_APP : qfSaved === "1";
+
+  /* الملاءمة: تُضبط قامةُ الخطّ حتى تملأ الصفحةُ طولَ الشاشة تماماً —
+     كورقة المصحف، لا أطولَ فتُمرَّر ولا أقصرَ فتترك فراغاً. والقياس
+     بالمحتوى نفسه: الأسطرُ تلتفّ مع كل قامة، وطولُ الصفحة يتبع مربّعَ
+     القامة تقريباً، فجذرُ النسبة يقرّب بخطوتين أو ثلاث. */
+  let fitOn = store.get("quran_fit") !== "0";
+  let fitSize = 0;
+  function fitPage(){
+    if (!imm || !fitOn || currentScreen !== "islam-quran") return;
+    const body = $("qBody");
+    const first = body.firstElementChild, last = body.lastElementChild;
+    if (!first || !last) return;
+    // الميزانية من طول الشاشة نفسه، لا من وعاءٍ يتمدّد مع المحتوى
+    // فيوهم أنّ الطويل مُطابق (وقعت، فقِيست فأُصلحت)
+    const sheet = $("qSheet");
+    const cs = getComputedStyle(sheet);
+    const foot = $("qFoot");
+    const budget = document.documentElement.clientHeight
+      - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom)
+      - (foot.hidden ? 0 : foot.offsetHeight + 23);
+    let size = fitSize || qsize;
+    for (let i = 0; i < 5; i++){
+      const h = last.getBoundingClientRect().bottom - first.getBoundingClientRect().top;
+      if (!h || budget < 100) return;
+      const ratio = budget / h;
+      if (ratio > 0.97 && ratio < 1.03) break;
+      size = Math.max(12, Math.min(34, size * Math.sqrt(ratio)));
+      body.style.setProperty("--qsize", size.toFixed(2) + "px");
+    }
+    fitSize = size;
+  }
+  window.__qFit = fitPage;
+  $("qFit").onclick = () => {
+    fitOn = true; store.set("quran_fit", "1");
+    if (!imm) setImm(true);
+    fitPage();
+  };
+  let fitT = null;
+  addEventListener("resize", () => { clearTimeout(fitT); fitT = setTimeout(fitPage, 200); });
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => fitPage());
   function setImm(on){
     imm = !!on;
     store.set("quran_full", imm ? "1" : "0");
     $("qImm").textContent = imm ? "أخرج" : "ملء الشاشة";
+    if (imm) requestAnimationFrame(() => window.__qFit && window.__qFit());
+    else { fitSize = 0; $("qBody").style.setProperty("--qsize", qsize + "px"); }
     // الرغبةُ محفوظة، والطيُّ لا يقع إلا والمصحفُ معروض. ولولا هذا
     // لفُتح التطبيقُ على الرئيسية بلا رأسٍ ولا أزرار، فبدا معطوباً
     const here = (typeof currentScreen !== "undefined") && currentScreen === "islam-quran";
