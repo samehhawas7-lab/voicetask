@@ -73,9 +73,39 @@ ${js}
       diag("الاتصال سيكون من نفس المصدر — بلا قيود شهادات");
       // التطبيق قد يكون بدأ الاتصال بالمفتاح المحفوظ، فلا نفتح اتصالاً ثانياً فوقه
       if (tv.status === "disconnected") tv.connect(host);
-    } else {
-      diag("تحذير: هذي الصفحة مو صفحة التلفزيون (" + host + ")");
-      diag("افتح " + "http://<عنوان-التلفزيون>:3000" + " ثم شغّل الاختصار من هناك");
+    } else if (typeof window.__TV_PROXY__ === "undefined") {
+      // الاختصار ضُغط من تبويبٍ فارغ أو من صفحةٍ أخرى: التطبيق يُرسَم هنا
+      // لكنه لا يستطيع الوصول إلى التلفزيون أبداً (أصلٌ غريب، والتخزين
+      // محظور على about:blank). سطرٌ في السجلّ لا يكفي — تُغطّى الشاشة
+      // بإرشادٍ وزرٍّ يفتح صفحة التلفزيون، ومنها يُضغط الاختصار ثانيةً.
+      var ip = null;
+      try { ip = localStorage.getItem("webos_ip"); } catch (e) {}
+      if (!/^\d{1,3}(\.\d{1,3}){3}$/.test(ip || "")) ip = "192.168.8.77";
+      diag("تحذير: هذي الصفحة مو صفحة التلفزيون (" + (host || "تبويب فارغ") + ")");
+      diag("افتح http://" + ip + ":3000 ثم شغّل الاختصار من هناك");
+      var ov = doc.createElement("div");
+      ov.id = "wrongPage";
+      ov.setAttribute("dir", "rtl");
+      ov.style.cssText = "position:fixed;inset:0;z-index:99999;background:var(--bg,#12161b);" +
+        "color:var(--text,#e7ecf1);display:flex;flex-direction:column;justify-content:center;" +
+        "align-items:center;gap:18px;padding:32px 24px;text-align:center;font:17px/1.7 system-ui,sans-serif";
+      var h = doc.createElement("div");
+      h.style.cssText = "font-size:22px;font-weight:700";
+      h.textContent = "الاختصار ضُغط من الصفحة الغلط";
+      var pTxt = doc.createElement("div");
+      pTxt.style.cssText = "color:var(--muted,#8f9bab);max-width:420px";
+      pTxt.textContent = "الريموت لا يقدر يكلّم التلفزيون إلا من صفحة التلفزيون نفسها. " +
+        "اضغط الزر، وبعد ما تشوف «Hello world» اضغط الإشارة «ريموت» مرة ثانية من تلك الصفحة.";
+      var a = doc.createElement("a");
+      a.href = "http://" + ip + ":3000/";
+      a.textContent = "افتح صفحة التلفزيون";
+      a.style.cssText = "display:block;padding:16px 28px;border-radius:16px;background:var(--accent,#4db6a5);" +
+        "color:#0d1512;font-weight:700;font-size:19px;text-decoration:none;min-width:240px";
+      var small = doc.createElement("div");
+      small.style.cssText = "font-size:13px;color:var(--muted,#8f9bab);direction:ltr";
+      small.textContent = "http://" + ip + ":3000";
+      ov.append(h, pTxt, a, small);
+      doc.body.appendChild(ov);
     }
   })();
 
