@@ -5,6 +5,7 @@
   "description": "شبكة البيت — إدارة إنترنت المنزل: يرى أي جهاز فتح أي موقع، ويحجب ويجدول بلا مكتبات خارجية",
   "main": "server.js",
   "scripts": {
+    "check": "node tools/check.js",
     "start": "node server.js",
     "dev": "HOMENET_DNS_PORT=5335 HOMENET_DATA=./data-dev node server.js",
     "test": "node test/selftest.js"

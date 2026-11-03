@@ -47,8 +47,8 @@ VPN، أو DNS مشفّر داخل المتصفح (DoH)، أو تغيير إعد
 
 ## المتطلبات
 
-- جهاز يظل شغّالاً في البيت: **راسبيري باي**، أو لابتوب قديم، أو أي كمبيوتر
-  متصل بالراوتر (يُفضّل بسلك).
+- جهاز يظل شغّالاً في البيت: **راسبيري باي**، أو لابتوب قديم (ويندوز أو لينكس
+  أو ماك)، أو أي كمبيوتر متصل بالراوتر (يُفضّل بسلك).
 - **Node.js 18** فأحدث.
 - إمكانية دخول إعدادات الراوتر (لتغيير خادم DNS).
 
@@ -56,8 +56,14 @@ VPN، أو DNS مشفّر داخل المتصفح (DoH)، أو تغيير إعد
 
 ```bash
 cd homenet
+npm run check           # ابدأ بهذا: يفحص الجاهزية ويقول لك ما ينقص
 node server.js          # يحتاج صلاحية المنفذ ٥٣
 ```
+
+`npm run check` يفحص نسخة Node، ويتأكد أن المنفذ ٥٣ متاح (ويسمّي لك البرنامج
+الذي يشغله إن كان مشغولاً)، ويستخرج **العنوان الذي تكتبه في الراوتر**، ويختبر
+وصول الجهاز لخوادم DNS الخارجية، وينبّهك لو كانت ساعة الجهاز على توقيت خاطئ
+(لأن أوقات النوم تعتمدها). شغّله أولاً، وعالج ما يطلبه، ثم شغّل الخادم.
 
 المنفذ ٥٣ محجوز للنظام، فعلى لينكس/ماك:
 
@@ -112,7 +118,14 @@ node server.js
 > أو استبدل الراوتر بواحد يدعم ذلك (أي راوتر بنظام OpenWrt أو MikroTik).
 > بديل أبسط لو ما نفع شيء: اضبط DNS يدوياً على أجهزة الأولاد فقط.
 
-## تشغيله دائماً (systemd على لينكس/راسبيري باي)
+## تشغيله دائماً
+
+> **قبل كل شيء — القاعدة الذهبية:** هذا الجهاز صار خادم DNS للبيت كله. لو نام أو
+> انطفأ أو فُصل عن الراوتر، **ينقطع الإنترنت عن كل أجهزة البيت**. عطّل السكون
+> على الجهاز، ووصّله بسلك لا بواي‑فاي، واجعله يشتغل تلقائياً عند الإقلاع.
+> ولو احتجت عودة سريعة: أرجع DNS في الراوتر إلى `1.1.1.1` ويعود النت فوراً.
+
+### لينكس / راسبيري باي (systemd)
 
 ```ini
 # /etc/systemd/system/homenet.service
@@ -135,10 +148,78 @@ WantedBy=multi-user.target
 
 ```bash
 sudo systemctl enable --now homenet
-sudo journalctl -u homenet -f
+sudo journalctl -u homenet -f          # متابعة السجل
+sudo systemctl disable --now systemd-resolved   # إن كان يشغل المنفذ ٥٣
 ```
 
-> اضبط `TZ` على منطقتك، لأن أوقات النوم والجداول تعتمد ساعة الجهاز.
+عطّل السكون على الراسبيري باي (لا ينام افتراضياً) أو على اللابتوب:
+
+```bash
+sudo systemctl mask sleep.target suspend.target hibernate.target
+# وعلى اللابتوب: اجعله لا ينام عند إغلاق الغطاء
+sudo sed -i 's/^#*HandleLidSwitch=.*/HandleLidSwitch=ignore/' /etc/systemd/logind.conf
+sudo systemctl restart systemd-logind
+```
+
+### ويندوز (لابتوب قديم)
+
+افتح **PowerShell بصلاحية مسؤول** (زر ويندوز ← اكتب PowerShell ← «تشغيل كمسؤول»):
+
+```powershell
+# ١) من يشغل المنفذ ٥٣؟ (غالباً مشاركة الاتصال أو Hyper-V)
+netstat -ano -p UDP | findstr ":53 "
+net stop SharedAccess                 # أوقف مشاركة الاتصال إن كانت هي
+sc config SharedAccess start= disabled
+
+# ٢) اسمح بالمنافذ في جدار الحماية
+New-NetFirewallRule -DisplayName "شبكة البيت DNS UDP" -Direction Inbound -Protocol UDP -LocalPort 53 -Action Allow
+New-NetFirewallRule -DisplayName "شبكة البيت DNS TCP" -Direction Inbound -Protocol TCP -LocalPort 53 -Action Allow
+New-NetFirewallRule -DisplayName "شبكة البيت اللوحة" -Direction Inbound -Protocol TCP -LocalPort 8081 -Action Allow
+
+# ٣) لا تنم أبداً (وإلا انقطع النت عن البيت)
+powercfg /change standby-timeout-ac 0
+powercfg /change hibernate-timeout-ac 0
+powercfg /change monitor-timeout-ac 10
+# لابتوب: لا ينام عند إغلاق الغطاء وهو موصول بالكهرباء
+powercfg /setacvalueindex SCHEME_CURRENT 4f971e89-eebd-4455-a8de-9e59040e7347 5ca83367-6e45-459f-a27b-476b1d01c936 0
+powercfg /setactive SCHEME_CURRENT
+
+# ٤) اجعله يشتغل مع الإقلاع
+schtasks /create /tn "شبكة البيت" /tr "node C:\homenet\server.js" /sc onstart /ru SYSTEM /rl HIGHEST /f
+```
+
+ثم جرّب يدوياً أولاً: `cd C:\homenet` ثم `npm run check` ثم `node server.js`.
+
+### ماك
+
+```bash
+sudo pmset -a sleep 0 disablesleep 1      # لا ينام
+```
+
+```xml
+<!-- /Library/LaunchDaemons/com.homenet.plist -->
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>Label</key><string>com.homenet</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/local/bin/node</string>
+    <string>/Users/me/homenet/server.js</string>
+  </array>
+  <key>WorkingDirectory</key><string>/Users/me/homenet</string>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>EnvironmentVariables</key><dict><key>TZ</key><string>Asia/Riyadh</string></dict>
+</dict></plist>
+```
+
+```bash
+sudo launchctl load -w /Library/LaunchDaemons/com.homenet.plist
+```
+
+> اضبط `TZ` على منطقتك في كل الأنظمة، لأن أوقات النوم والجداول تعتمد ساعة الجهاز.
 
 ---
 
@@ -219,12 +300,14 @@ sudo journalctl -u homenet -f
 
 | المشكلة | الحل |
 |---|---|
-| `EACCES` عند التشغيل | المنفذ ٥٣ يحتاج صلاحيات: `sudo` أو `setcap` (فوق) |
-| `EADDRINUSE` | شيء آخر يستعمل المنفذ ٥٣. على أوبنتو: `sudo systemctl disable --now systemd-resolved` ثم اكتب `nameserver 127.0.0.1` في `/etc/resolv.conf` |
+| ما أدري من أين أبدأ | `npm run check` — يفحص كل شيء ويعطيك الخطوة التالية |
+| `EACCES` عند التشغيل | المنفذ ٥٣ يحتاج صلاحيات: `sudo` أو `setcap` (لينكس/ماك)، أو نافذة بصلاحية مسؤول (ويندوز) |
+| `EADDRINUSE` | شيء آخر يستعمل المنفذ ٥٣ — `npm run check` يسمّيه لك. على أوبنتو غالباً `systemd-resolved`، وعلى ويندوز `SharedAccess` |
 | ما ظهرت أي أجهزة | الراوتر ما زال يوزّع DNS القديم؛ راجع خطوة الربط وأعد تشغيل الأجهزة |
 | الأجهزة تظهر بعنوان IP بلا MAC | جدول ARP يحتاج الجهاز في نفس الشبكة الفرعية؛ لا يؤثر على العمل، فقط سمِّ الجهاز يدوياً |
 | موقع مهم انحجب بالغلط | زر «اسمح» بجانبه في القائمة الحيّة — السماح يتقدّم على كل القواعد |
-| انقطع النت عن البيت كله | أوقف التطبيق مؤقتاً، وأرجع DNS في الراوتر إلى `1.1.1.1` لحين إصلاح المشكلة |
+| أوقات النوم تشتغل بوقت خاطئ | ساعة الجهاز على توقيت آخر؛ اضبط `TZ` كما في قسم «تشغيله دائماً» |
+| انقطع النت عن البيت كله | أرجع DNS في الراوتر إلى `1.1.1.1` — يعود النت فوراً — ثم أصلح المشكلة على مهل |
 
 ---
 
@@ -243,6 +326,7 @@ homenet/
 │   ├── lists.js        تحميل قوائم الحجب الكبيرة
 │   └── notify.js       تنبيهات الويب‑هوك وتلجرام
 ├── public/             اللوحة (HTML/CSS/JS عربية RTL)
+├── tools/check.js      فحص الجاهزية قبل التشغيل الأول
 └── test/selftest.js    اختبار ذاتي كامل بلا إنترنت
 ```
 
