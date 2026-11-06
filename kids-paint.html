@@ -1,0 +1,179 @@
+<title>لوحة الرسم</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+  /* لوحة رسم للأطفال باللمس: شريط ألوان كبير أعلى، لوحة رسم تملأ الشاشة، أدوات أسفل */
+  :root{
+    --bg:#fff7ed; --panel:#ffffff; --ink:#3b2f2a; --line:#f0d9c0;
+    --accent:#ff7a3d; --shadow:0 6px 0 rgba(0,0,0,.12);
+    --r:22px;
+  }
+  @media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+    --bg:#241c2b; --panel:#352b3f; --ink:#f6edf6; --line:#4a3d56;
+    --accent:#ff9a5c; --shadow:0 6px 0 rgba(0,0,0,.35); color-scheme:dark;
+  }}
+  :root[data-theme="dark"]{
+    --bg:#241c2b; --panel:#352b3f; --ink:#f6edf6; --line:#4a3d56;
+    --accent:#ff9a5c; --shadow:0 6px 0 rgba(0,0,0,.35); color-scheme:dark;
+  }
+  html,body{height:100%}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font-family:"Baloo Bhaijaan 2","Comic Sans MS",system-ui,sans-serif;
+    display:flex; flex-direction:column;
+    overflow:hidden; user-select:none; -webkit-user-select:none; touch-action:none;
+  }
+  .bar{
+    display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+    padding:10px max(14px,env(safe-area-inset-left,0px)) 10px max(14px,env(safe-area-inset-right,0px));
+  }
+  .swatches{display:flex; gap:9px; flex:1; flex-wrap:wrap; min-width:0}
+  .sw{
+    width:40px; height:40px; border-radius:50%; border:4px solid #fff;
+    box-shadow:var(--shadow); cursor:pointer; padding:0; flex:0 0 auto;
+    transition:transform .08s;
+  }
+  :root[data-theme="dark"] .sw, :root:not([data-theme="light"]) .sw{border-color:#2b2233}
+  @media (prefers-color-scheme: light){ :root:not([data-theme="dark"]) .sw{border-color:#fff} }
+  .sw.on{transform:scale(1.28); outline:3px dashed var(--accent); outline-offset:3px}
+  .stage{flex:1; min-height:0; position:relative; padding:0 max(14px,env(safe-area-inset-left,0px))}
+  canvas{
+    width:100%; height:100%; display:block; background:#fff;
+    border-radius:var(--r); box-shadow:var(--shadow); touch-action:none;
+  }
+  .tools{
+    display:flex; align-items:center; gap:10px; flex-wrap:wrap; justify-content:center;
+    padding:10px max(14px,env(safe-area-inset-left,0px)) calc(10px + env(safe-area-inset-bottom,0px)) max(14px,env(safe-area-inset-right,0px));
+  }
+  .btn{
+    font-family:inherit; font-size:17px; font-weight:700; color:var(--ink);
+    background:var(--panel); border:none; border-radius:var(--r);
+    box-shadow:var(--shadow); padding:12px 16px; cursor:pointer;
+    display:flex; align-items:center; gap:7px; min-height:52px;
+    transition:transform .08s;
+  }
+  .btn:active{transform:translateY(3px); box-shadow:0 3px 0 rgba(0,0,0,.12)}
+  .btn .ic{font-size:22px}
+  .sizes{display:flex; gap:8px; align-items:center; background:var(--panel); border-radius:var(--r); box-shadow:var(--shadow); padding:7px 12px}
+  .size{width:44px; height:44px; border:none; background:transparent; cursor:pointer; display:grid; place-items:center; padding:0}
+  .size .dot{background:var(--ink); border-radius:50%}
+  .size.on{background:var(--accent); border-radius:50%}
+  .size.on .dot{background:#fff}
+  .brush.on{outline:3px dashed var(--accent); outline-offset:3px}
+  :focus-visible{outline:3px solid var(--accent); outline-offset:3px}
+</style>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+Bhaijaan+2:wght@600;700;800&display=swap">
+
+<div class="bar">
+  <div class="swatches" id="swatches" role="radiogroup" aria-label="الألوان"></div>
+</div>
+
+<div class="stage">
+  <canvas id="pad" aria-label="لوحة الرسم"></canvas>
+</div>
+
+<div class="tools">
+  <div class="sizes" role="radiogroup" aria-label="حجم القلم">
+    <button class="size" data-size="6" aria-label="رفيع"><span class="dot" style="width:10px;height:10px"></span></button>
+    <button class="size on" data-size="16" aria-label="وسط"><span class="dot" style="width:18px;height:18px"></span></button>
+    <button class="size" data-size="34" aria-label="عريض"><span class="dot" style="width:28px;height:28px"></span></button>
+  </div>
+  <button class="btn brush on" id="brushBtn"><span class="ic">🖍️</span>ألوّن</button>
+  <button class="btn" id="eraserBtn"><span class="ic">🧽</span>أمسح</button>
+  <button class="btn" id="clearBtn"><span class="ic">✨</span>ورقة جديدة</button>
+</div>
+
+<script>
+  "use strict";
+  var colors = ["#ff3b3b","#ff7a3d","#ffd21e","#39d353","#1ec8ff","#3d5bff","#b14dff","#ff5fa2","#7a4a27","#111111","#ffffff"];
+  var pad = document.getElementById("pad");
+  var ctx = pad.getContext("2d");
+  var state = { color:"#ff3b3b", size:16, erasing:false };
+  var dpr = Math.max(1, Math.min(3, window.devicePixelRatio||1));
+
+  // نحفظ الرسم ونعيد رسمه بعد تغيير الحجم حتى لا يختفي
+  function resize(){
+    var r = pad.getBoundingClientRect();
+    var snap = null;
+    try { snap = (pad.width>0) ? ctx.getImageData(0,0,pad.width,pad.height) : null; } catch(e){}
+    pad.width = Math.round(r.width*dpr);
+    pad.height = Math.round(r.height*dpr);
+    ctx.fillStyle = "#ffffff"; ctx.fillRect(0,0,pad.width,pad.height);
+    if (snap){ try { ctx.putImageData(snap,0,0); } catch(e){} }
+    ctx.lineCap="round"; ctx.lineJoin="round";
+  }
+
+  // شريط الألوان
+  var sw = document.getElementById("swatches");
+  colors.forEach(function(c,i){
+    var b = document.createElement("button");
+    b.className = "sw" + (i===0?" on":"");
+    b.style.background = c;
+    b.setAttribute("role","radio");
+    b.setAttribute("aria-checked", i===0?"true":"false");
+    b.setAttribute("aria-label","لون");
+    b.addEventListener("pointerdown", function(){
+      state.color = c; state.erasing = false; setBrush(true);
+      [].forEach.call(sw.children,function(x){x.classList.remove("on");x.setAttribute("aria-checked","false");});
+      b.classList.add("on"); b.setAttribute("aria-checked","true");
+    });
+    sw.appendChild(b);
+  });
+
+  // الأحجام
+  [].forEach.call(document.querySelectorAll(".size"), function(s){
+    s.addEventListener("pointerdown", function(){
+      state.size = Number(s.dataset.size);
+      document.querySelectorAll(".size").forEach(function(x){x.classList.remove("on");});
+      s.classList.add("on");
+    });
+  });
+
+  var brushBtn = document.getElementById("brushBtn");
+  var eraserBtn = document.getElementById("eraserBtn");
+  function setBrush(on){
+    state.erasing = !on;
+    brushBtn.classList.toggle("on", on);
+    eraserBtn.classList.toggle("on", !on);
+  }
+  brushBtn.addEventListener("pointerdown", function(){ setBrush(true); });
+  eraserBtn.addEventListener("pointerdown", function(){ setBrush(false); });
+
+  document.getElementById("clearBtn").addEventListener("pointerdown", function(){
+    ctx.fillStyle="#ffffff"; ctx.fillRect(0,0,pad.width,pad.height);
+  });
+
+  // الرسم باللمس والفأرة
+  var drawing=false, lastX=0, lastY=0;
+  function pos(e){
+    var r = pad.getBoundingClientRect();
+    return { x:(e.clientX-r.left)*dpr, y:(e.clientY-r.top)*dpr };
+  }
+  function dot(x,y){
+    ctx.beginPath();
+    ctx.fillStyle = state.erasing ? "#ffffff" : state.color;
+    ctx.arc(x,y,(state.size*dpr)/2,0,Math.PI*2); ctx.fill();
+  }
+  pad.addEventListener("pointerdown", function(e){
+    e.preventDefault(); drawing=true;
+    try{ pad.setPointerCapture(e.pointerId); }catch(_){}
+    var p=pos(e); lastX=p.x; lastY=p.y; dot(p.x,p.y);
+  });
+  pad.addEventListener("pointermove", function(e){
+    if(!drawing) return; e.preventDefault();
+    var evs = (e.getCoalescedEvents && e.getCoalescedEvents()) || [e];
+    for (var i=0;i<evs.length;i++){
+      var p = pos(evs[i]);
+      ctx.strokeStyle = state.erasing ? "#ffffff" : state.color;
+      ctx.lineWidth = state.size*dpr;
+      ctx.beginPath(); ctx.moveTo(lastX,lastY); ctx.lineTo(p.x,p.y); ctx.stroke();
+      lastX=p.x; lastY=p.y;
+    }
+  });
+  function stop(){ drawing=false; }
+  pad.addEventListener("pointerup", stop);
+  pad.addEventListener("pointercancel", stop);
+  pad.addEventListener("pointerleave", stop);
+
+  window.addEventListener("resize", resize);
+  resize();
+</script>
