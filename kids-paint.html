@@ -1,7 +1,7 @@
 <title>لوحة الرسم</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <style>
-  /* لوحة رسم للأطفال باللمس: ألوان أعلى، لوحة بطبقتين (تلوين تحت وخطوط ثابتة فوق)، صندوق رسمات وحروف مع صورها أسفل */
+  /* لوحة رسم للأطفال باللمس: ألوان أعلى، لوحة بطبقتين (تلوين تحت وحروف ثابتة فوق)، صور إيموجي وحروف أسفل */
   :root{
     --bg:#fff7ed; --panel:#ffffff; --ink:#3b2f2a; --line:#f0d9c0;
     --accent:#ff7a3d; --shadow:0 6px 0 rgba(0,0,0,.12);
@@ -123,247 +123,57 @@
   var lines = document.getElementById("lines"), lctx = lines.getContext("2d");
   var state = { color:"#ff3b3b", size:16, erasing:false, template:null };
   var dpr = Math.max(1, Math.min(3, window.devicePixelRatio||1));
+  var EMOJI = "'Baloo Bhaijaan 2','Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji',sans-serif";
 
-  /* ---------- أدوات الرسم ---------- */
-  function box(x,y,w,h,mf){ var m=Math.min(w,h)*(mf||0.12); return {x:x+m,y:y+m,w:w-2*m,h:h-2*m,cx:x+w/2,cy:y+h/2,s:Math.min(w-2*m,h-2*m)}; }
-  function pen(b){ lctx.strokeStyle="#111"; lctx.lineWidth=Math.max(4,b.s*0.03); lctx.lineJoin="round"; lctx.lineCap="round"; }
-
-  /* ---------- الرسمات، كلٌّ داخل مربّعٍ يُعطى لها ---------- */
-  var SHAPES = {
-    star:function(b){ pen(b); var cx=b.cx,cy=b.cy,R=b.s*0.48,r=b.s*0.2; lctx.beginPath();
-      for(var i=0;i<10;i++){ var a=-Math.PI/2+i*Math.PI/5, rad=(i%2?r:R), x=cx+Math.cos(a)*rad, y=cy+Math.sin(a)*rad; i?lctx.lineTo(x,y):lctx.moveTo(x,y);} lctx.closePath(); lctx.stroke(); },
-    heart:function(b){ pen(b); var cx=b.cx,cy=b.cy,u=b.s*0.3; lctx.beginPath(); lctx.moveTo(cx,cy+u*1.2);
-      lctx.bezierCurveTo(cx-u*1.8,cy-u*0.4,cx-u*0.9,cy-u*1.5,cx,cy-u*0.5);
-      lctx.bezierCurveTo(cx+u*0.9,cy-u*1.5,cx+u*1.8,cy-u*0.4,cx,cy+u*1.2); lctx.closePath(); lctx.stroke(); },
-    house:function(b){ pen(b); var x=b.cx-b.s*0.33,y=b.cy-b.s*0.05,s=b.s*0.66;
-      lctx.strokeRect(x,y,s,s*0.7);
-      lctx.beginPath(); lctx.moveTo(x-s*0.07,y); lctx.lineTo(b.cx,y-s*0.42); lctx.lineTo(x+s+s*0.07,y); lctx.stroke();
-      lctx.strokeRect(x+s*0.38,y+s*0.3,s*0.24,s*0.4); },
-    fish:function(b){ pen(b); var cx=b.cx,cy=b.cy,r=b.s*0.3;
-      lctx.beginPath(); lctx.ellipse(cx+r*0.3,cy,r,r*0.62,0,0,Math.PI*2); lctx.stroke();
-      lctx.beginPath(); lctx.moveTo(cx-r*0.6,cy); lctx.lineTo(cx-r*1.4,cy-r*0.5); lctx.lineTo(cx-r*1.4,cy+r*0.5); lctx.closePath(); lctx.stroke();
-      lctx.beginPath(); lctx.arc(cx+r*0.9,cy-r*0.18,r*0.1,0,Math.PI*2); lctx.stroke(); },
-    flower:function(b){ pen(b); var cx=b.cx,cy=b.cy,R=b.s*0.17;
-      for(var i=0;i<6;i++){ var a=i*Math.PI/3; lctx.beginPath(); lctx.arc(cx+Math.cos(a)*R*1.5,cy+Math.sin(a)*R*1.5,R,0,Math.PI*2); lctx.stroke(); }
-      lctx.beginPath(); lctx.arc(cx,cy,R*0.8,0,Math.PI*2); lctx.stroke(); },
-    sun:function(b){ pen(b); var cx=b.cx,cy=b.cy,R=b.s*0.22;
-      lctx.beginPath(); lctx.arc(cx,cy,R,0,Math.PI*2); lctx.stroke();
-      for(var i=0;i<12;i++){ var a=i*Math.PI/6; lctx.beginPath(); lctx.moveTo(cx+Math.cos(a)*R*1.35,cy+Math.sin(a)*R*1.35); lctx.lineTo(cx+Math.cos(a)*R*1.75,cy+Math.sin(a)*R*1.75); lctx.stroke(); } },
-    car:function(b){ pen(b); var cx=b.cx,cy=b.cy,bw=b.s*0.7,bh=b.s*0.26,x=cx-bw/2,y=cy-bh/2;
-      lctx.beginPath(); lctx.moveTo(x,y+bh); lctx.lineTo(x,y+bh*0.3); lctx.lineTo(x+bw*0.22,y+bh*0.3);
-      lctx.lineTo(x+bw*0.34,y-bh*0.55); lctx.lineTo(x+bw*0.68,y-bh*0.55); lctx.lineTo(x+bw*0.8,y+bh*0.3);
-      lctx.lineTo(x+bw,y+bh*0.3); lctx.lineTo(x+bw,y+bh); lctx.closePath(); lctx.stroke();
-      lctx.beginPath(); lctx.arc(x+bw*0.27,y+bh,bh*0.42,0,Math.PI*2); lctx.stroke();
-      lctx.beginPath(); lctx.arc(x+bw*0.73,y+bh,bh*0.42,0,Math.PI*2); lctx.stroke(); },
-    balloon:function(b){ pen(b); var cx=b.cx,cy=b.cy-b.s*0.08,R=b.s*0.26;
-      lctx.beginPath(); lctx.ellipse(cx,cy,R*0.82,R,0,0,Math.PI*2); lctx.stroke();
-      lctx.beginPath(); lctx.moveTo(cx,cy+R); lctx.lineTo(cx-R*0.12,cy+R*0.12+R); lctx.lineTo(cx+R*0.12,cy+R*0.12+R); lctx.closePath(); lctx.stroke();
-      lctx.beginPath(); lctx.moveTo(cx,cy+R*1.18); lctx.quadraticCurveTo(cx+R*0.5,cy+R*1.8,cx-R*0.2,cy+R*2.4); lctx.stroke(); },
-    rabbit:function(b){ pen(b); var cx=b.cx,cy=b.cy+b.s*0.08,s=b.s;
-      lctx.beginPath(); lctx.arc(cx,cy,s*0.22,0,Math.PI*2); lctx.stroke();
-      lctx.beginPath(); lctx.ellipse(cx-s*0.1,cy-s*0.3,s*0.06,s*0.2,-0.12,0,Math.PI*2); lctx.stroke();
-      lctx.beginPath(); lctx.ellipse(cx+s*0.1,cy-s*0.3,s*0.06,s*0.2,0.12,0,Math.PI*2); lctx.stroke();
-      lctx.beginPath(); lctx.arc(cx-s*0.07,cy-s*0.02,s*0.022,0,Math.PI*2); lctx.stroke();
-      lctx.beginPath(); lctx.arc(cx+s*0.07,cy-s*0.02,s*0.022,0,Math.PI*2); lctx.stroke(); },
-    duck:function(b){ pen(b); var cx=b.cx,cy=b.cy,s=b.s;
-      lctx.beginPath(); lctx.ellipse(cx-s*0.03,cy+s*0.14,s*0.27,s*0.18,0,0,Math.PI*2); lctx.stroke();
-      lctx.beginPath(); lctx.arc(cx+s*0.19,cy-s*0.06,s*0.13,0,Math.PI*2); lctx.stroke();
-      lctx.beginPath(); lctx.moveTo(cx+s*0.31,cy-s*0.08); lctx.lineTo(cx+s*0.44,cy-s*0.04); lctx.lineTo(cx+s*0.31,cy+s*0.01); lctx.closePath(); lctx.stroke();
-      lctx.beginPath(); lctx.arc(cx+s*0.21,cy-s*0.09,s*0.02,0,Math.PI*2); lctx.stroke(); },
-    apple:function(b){ pen(b); var cx=b.cx,cy=b.cy+b.s*0.05,s=b.s;
-      lctx.beginPath(); lctx.arc(cx,cy,s*0.24,0,Math.PI*2); lctx.stroke();
-      lctx.beginPath(); lctx.moveTo(cx,cy-s*0.2); lctx.lineTo(cx,cy-s*0.34); lctx.stroke();
-      lctx.beginPath(); lctx.ellipse(cx+s*0.1,cy-s*0.3,s*0.09,s*0.045,-0.6,0,Math.PI*2); lctx.stroke(); },
-    banana:function(b){ pen(b); var cx=b.cx,cy=b.cy,s=b.s;
-      lctx.beginPath(); lctx.moveTo(cx-s*0.3,cy-s*0.14);
-      lctx.quadraticCurveTo(cx+s*0.02,cy+s*0.36,cx+s*0.32,cy-s*0.06);
-      lctx.quadraticCurveTo(cx+s*0.12,cy+s*0.2,cx-s*0.1,cy+s*0.22);
-      lctx.quadraticCurveTo(cx-s*0.3,cy+s*0.08,cx-s*0.3,cy-s*0.14); lctx.closePath(); lctx.stroke(); },
-    crescent:function(b){ pen(b); var cx=b.cx,cy=b.cy,R=b.s*0.3;
-      lctx.beginPath();
-      lctx.arc(cx-R*0.1,cy,R,Math.PI*0.42,Math.PI*1.58,false);
-      lctx.arc(cx+R*0.35,cy,R*0.92,Math.PI*1.58,Math.PI*0.42,true);
-      lctx.closePath(); lctx.stroke(); },
-    ball:function(b){ pen(b); var cx=b.cx,cy=b.cy,R=b.s*0.27;
-      lctx.beginPath(); lctx.arc(cx,cy,R,0,Math.PI*2); lctx.stroke();
-      lctx.beginPath(); lctx.moveTo(cx,cy-R); lctx.quadraticCurveTo(cx+R*0.6,cy,cx,cy+R); lctx.stroke();
-      lctx.beginPath(); lctx.moveTo(cx,cy-R); lctx.quadraticCurveTo(cx-R*0.6,cy,cx,cy+R); lctx.stroke();
-      lctx.beginPath(); lctx.ellipse(cx,cy,R,R*0.42,0,0,Math.PI*2); lctx.stroke(); },
-    snake:function(b){ pen(b); var x0=b.x+b.s*0.08,y=b.cy,A=b.s*0.15,L=b.s*0.78;
-      lctx.beginPath(); for(var i=0;i<=40;i++){ var t=i/40,X=x0+L*t,Y=y+Math.sin(t*Math.PI*3)*A; i?lctx.lineTo(X,Y):lctx.moveTo(X,Y);} lctx.stroke();
-      lctx.beginPath(); lctx.arc(x0+L,y,b.s*0.06,0,Math.PI*2); lctx.stroke();
-      lctx.beginPath(); lctx.moveTo(x0+L+b.s*0.06,y); lctx.lineTo(x0+L+b.s*0.14,y); lctx.stroke(); },
-    mountain:function(b){ pen(b); var x=b.cx,base=b.cy+b.s*0.3,w=b.s*0.82;
-      lctx.beginPath(); lctx.moveTo(x-w/2,base); lctx.lineTo(x-w*0.1,base-b.s*0.5); lctx.lineTo(x+w*0.05,base-b.s*0.25); lctx.lineTo(x+w*0.2,base-b.s*0.6); lctx.lineTo(x+w/2,base); lctx.closePath(); lctx.stroke();
-      lctx.beginPath(); lctx.moveTo(x+w*0.12,base-b.s*0.48); lctx.lineTo(x+w*0.2,base-b.s*0.6); lctx.lineTo(x+w*0.28,base-b.s*0.48); lctx.stroke(); },
-    whale:function(b){ pen(b); var cx=b.cx,cy=b.cy+b.s*0.05,r=b.s*0.3;
-      lctx.beginPath(); lctx.ellipse(cx,cy,r,r*0.7,0,0,Math.PI*2); lctx.stroke();
-      lctx.beginPath(); lctx.moveTo(cx+r*0.85,cy); lctx.lineTo(cx+r*1.3,cy-r*0.4); lctx.lineTo(cx+r*1.3,cy+r*0.4); lctx.closePath(); lctx.stroke();
-      lctx.beginPath(); lctx.arc(cx-r*0.4,cy-r*0.12,r*0.08,0,Math.PI*2); lctx.stroke();
-      lctx.beginPath(); lctx.moveTo(cx-r*0.1,cy-r*0.68); lctx.lineTo(cx-r*0.1,cy-r*0.98); lctx.stroke();
-      lctx.beginPath(); lctx.moveTo(cx-r*0.1,cy-r*0.68); lctx.lineTo(cx+r*0.18,cy-r*0.98); lctx.stroke(); },
-    tent:function(b){ pen(b); var cx=b.cx,base=b.cy+b.s*0.28,w=b.s*0.72,top=base-b.s*0.56;
-      lctx.beginPath(); lctx.moveTo(cx-w/2,base); lctx.lineTo(cx,top); lctx.lineTo(cx+w/2,base); lctx.closePath(); lctx.stroke();
-      lctx.beginPath(); lctx.moveTo(cx,top); lctx.lineTo(cx,base); lctx.stroke();
-      lctx.beginPath(); lctx.moveTo(cx-w*0.14,base); lctx.lineTo(cx,base-b.s*0.22); lctx.lineTo(cx+w*0.14,base); lctx.stroke(); },
-    bucket:function(b){ pen(b); var cx=b.cx,cy=b.cy,tw=b.s*0.5,bw=b.s*0.38,h=b.s*0.42,top=cy-h*0.3;
-      lctx.beginPath(); lctx.moveTo(cx-tw/2,top); lctx.lineTo(cx+tw/2,top); lctx.lineTo(cx+bw/2,top+h); lctx.lineTo(cx-bw/2,top+h); lctx.closePath(); lctx.stroke();
-      lctx.beginPath(); lctx.moveTo(cx-tw/2,top); lctx.quadraticCurveTo(cx,top-b.s*0.28,cx+tw/2,top); lctx.stroke(); },
-    corn:function(b){ pen(b); var cx=b.cx,cy=b.cy,w=b.s*0.22,h=b.s*0.36;
-      lctx.beginPath(); lctx.ellipse(cx,cy,w,h,0,0,Math.PI*2); lctx.stroke();
-      for(var i=-2;i<=2;i++){ lctx.beginPath(); lctx.moveTo(cx-w,cy+i*h*0.32); lctx.lineTo(cx+w,cy+i*h*0.32); lctx.stroke(); }
-      lctx.beginPath(); lctx.moveTo(cx,cy-h); lctx.quadraticCurveTo(cx+w*1.8,cy-h*1.1,cx+w*0.5,cy-h*0.3); lctx.stroke(); },
-    feather:function(b){ pen(b); var cx=b.cx;
-      lctx.beginPath(); lctx.ellipse(cx,b.cy,b.s*0.13,b.s*0.34,0,0,Math.PI*2); lctx.stroke();
-      lctx.beginPath(); lctx.moveTo(cx,b.cy-b.s*0.34); lctx.lineTo(cx,b.cy+b.s*0.34); lctx.stroke(); },
-    rocket:function(b){ pen(b); var cx=b.cx,cy=b.cy,w=b.s*0.26,h=b.s*0.5,top=cy-h*0.55;
-      lctx.beginPath(); lctx.moveTo(cx,top); lctx.quadraticCurveTo(cx+w,top+h*0.3,cx+w*0.7,cy+h*0.35);
-      lctx.lineTo(cx-w*0.7,cy+h*0.35); lctx.quadraticCurveTo(cx-w,top+h*0.3,cx,top); lctx.closePath(); lctx.stroke();
-      lctx.beginPath(); lctx.arc(cx,cy-h*0.05,w*0.35,0,Math.PI*2); lctx.stroke();
-      lctx.beginPath(); lctx.moveTo(cx-w*0.7,cy+h*0.1); lctx.lineTo(cx-w*1.3,cy+h*0.45); lctx.lineTo(cx-w*0.5,cy+h*0.35); lctx.stroke();
-      lctx.beginPath(); lctx.moveTo(cx+w*0.7,cy+h*0.1); lctx.lineTo(cx+w*1.3,cy+h*0.45); lctx.lineTo(cx+w*0.5,cy+h*0.35); lctx.stroke(); },
-    tooth:function(b){ pen(b); var cx=b.cx,cy=b.cy,w=b.s*0.4,top=cy-b.s*0.28;
-      lctx.beginPath(); lctx.moveTo(cx-w/2,top+b.s*0.1);
-      lctx.quadraticCurveTo(cx-w/2,top-b.s*0.08,cx,top);
-      lctx.quadraticCurveTo(cx+w/2,top-b.s*0.08,cx+w/2,top+b.s*0.1);
-      lctx.quadraticCurveTo(cx+w*0.4,cy+b.s*0.3,cx+w*0.18,cy+b.s*0.28);
-      lctx.quadraticCurveTo(cx+w*0.05,cy+b.s*0.1,cx,cy+b.s*0.12);
-      lctx.quadraticCurveTo(cx-w*0.05,cy+b.s*0.1,cx-w*0.18,cy+b.s*0.28);
-      lctx.quadraticCurveTo(cx-w*0.4,cy+b.s*0.3,cx-w/2,top+b.s*0.1); lctx.closePath(); lctx.stroke(); },
-    plane:function(b){ pen(b); var cx=b.cx,cy=b.cy,L=b.s*0.5;
-      lctx.beginPath(); lctx.ellipse(cx,cy,L*0.5,b.s*0.12,0,0,Math.PI*2); lctx.stroke();
-      lctx.beginPath(); lctx.moveTo(cx-L*0.1,cy); lctx.lineTo(cx-L*0.3,cy-b.s*0.28); lctx.lineTo(cx+L*0.08,cy-b.s*0.03); lctx.stroke();
-      lctx.beginPath(); lctx.moveTo(cx-L*0.1,cy); lctx.lineTo(cx-L*0.3,cy+b.s*0.28); lctx.lineTo(cx+L*0.08,cy+b.s*0.03); lctx.stroke();
-      lctx.beginPath(); lctx.moveTo(cx-L*0.45,cy); lctx.lineTo(cx-L*0.62,cy-b.s*0.14); lctx.lineTo(cx-L*0.42,cy-b.s*0.02); lctx.stroke(); },
-    envelope:function(b){ pen(b); var w=b.s*0.6,h=b.s*0.42,x=b.cx-w/2,y=b.cy-h/2;
-      lctx.strokeRect(x,y,w,h);
-      lctx.beginPath(); lctx.moveTo(x,y); lctx.lineTo(b.cx,b.cy); lctx.lineTo(x+w,y); lctx.stroke(); },
-    eye:function(b){ pen(b); var cx=b.cx,cy=b.cy,w=b.s*0.4;
-      lctx.beginPath(); lctx.moveTo(cx-w,cy); lctx.quadraticCurveTo(cx,cy-w*0.7,cx+w,cy); lctx.quadraticCurveTo(cx,cy+w*0.7,cx-w,cy); lctx.closePath(); lctx.stroke();
-      lctx.beginPath(); lctx.arc(cx,cy,w*0.35,0,Math.PI*2); lctx.stroke();
-      lctx.beginPath(); lctx.arc(cx,cy,w*0.14,0,Math.PI*2); lctx.stroke(); },
-    cloud:function(b){ pen(b); var cx=b.cx,cy=b.cy,u=b.s*0.16;
-      lctx.beginPath();
-      lctx.arc(cx-u*1.6,cy+u*0.4,u,Math.PI*0.5,Math.PI*1.5);
-      lctx.arc(cx-u*0.6,cy-u*0.4,u*1.1,Math.PI,Math.PI*1.85);
-      lctx.arc(cx+u*0.9,cy-u*0.3,u,Math.PI*1.2,Math.PI*2);
-      lctx.arc(cx+u*1.7,cy+u*0.4,u*0.9,Math.PI*1.6,Math.PI*0.5);
-      lctx.closePath(); lctx.stroke(); },
-    butterfly:function(b){ pen(b); var cx=b.cx,cy=b.cy,u=b.s*0.2;
-      lctx.beginPath(); lctx.moveTo(cx,cy-u*0.8); lctx.lineTo(cx,cy+u*0.8); lctx.stroke();
-      lctx.beginPath(); lctx.ellipse(cx-u*0.8,cy-u*0.5,u*0.8,u*0.6,0.5,0,Math.PI*2); lctx.stroke();
-      lctx.beginPath(); lctx.ellipse(cx-u*0.8,cy+u*0.5,u*0.7,u*0.5,-0.5,0,Math.PI*2); lctx.stroke();
-      lctx.beginPath(); lctx.ellipse(cx+u*0.8,cy-u*0.5,u*0.8,u*0.6,-0.5,0,Math.PI*2); lctx.stroke();
-      lctx.beginPath(); lctx.ellipse(cx+u*0.8,cy+u*0.5,u*0.7,u*0.5,0.5,0,Math.PI*2); lctx.stroke();
-      lctx.beginPath(); lctx.moveTo(cx,cy-u*0.8); lctx.lineTo(cx-u*0.3,cy-u*1.3); lctx.stroke();
-      lctx.beginPath(); lctx.moveTo(cx,cy-u*0.8); lctx.lineTo(cx+u*0.3,cy-u*1.3); lctx.stroke(); },
-    lemon:function(b){ pen(b); var cx=b.cx,cy=b.cy,w=b.s*0.3,h=b.s*0.22;
-      lctx.beginPath(); lctx.ellipse(cx,cy,w,h,0,0,Math.PI*2); lctx.stroke();
-      lctx.beginPath(); lctx.moveTo(cx-w,cy); lctx.lineTo(cx-w-b.s*0.05,cy); lctx.stroke();
-      lctx.beginPath(); lctx.moveTo(cx+w,cy); lctx.lineTo(cx+w+b.s*0.05,cy); lctx.stroke(); },
-    gift:function(b){ pen(b); var cx=b.cx,cy=b.cy,s=b.s*0.44,x=cx-s/2,y=cy-s*0.22;
-      lctx.strokeRect(x,y,s,s*0.7);
-      lctx.beginPath(); lctx.moveTo(cx,y); lctx.lineTo(cx,y+s*0.7); lctx.stroke();
-      lctx.beginPath(); lctx.arc(cx-s*0.12,y-s*0.08,s*0.12,0,Math.PI*2); lctx.stroke();
-      lctx.beginPath(); lctx.arc(cx+s*0.12,y-s*0.08,s*0.12,0,Math.PI*2); lctx.stroke(); },
-    boat:function(b){ pen(b); var cx=b.cx,cy=b.cy,w=b.s*0.52;
-      lctx.beginPath(); lctx.moveTo(cx-w/2,cy+b.s*0.12); lctx.lineTo(cx+w/2,cy+b.s*0.12); lctx.lineTo(cx+w*0.32,cy+b.s*0.32); lctx.lineTo(cx-w*0.32,cy+b.s*0.32); lctx.closePath(); lctx.stroke();
-      lctx.beginPath(); lctx.moveTo(cx,cy+b.s*0.12); lctx.lineTo(cx,cy-b.s*0.32); lctx.stroke();
-      lctx.beginPath(); lctx.moveTo(cx,cy-b.s*0.32); lctx.lineTo(cx+w*0.4,cy); lctx.lineTo(cx,cy); lctx.closePath(); lctx.stroke(); },
-    dinoNeck:function(b){ pen(b); var cx=b.cx,cy=b.cy,s=b.s;
-      lctx.beginPath();
-      lctx.moveTo(cx-s*0.36,cy+s*0.1);
-      lctx.quadraticCurveTo(cx-s*0.14,cy-s*0.04,cx+s*0.02,cy+s*0.0);
-      lctx.quadraticCurveTo(cx+s*0.26,cy-s*0.02,cx+s*0.3,cy-s*0.28);
-      lctx.quadraticCurveTo(cx+s*0.33,cy-s*0.42,cx+s*0.42,cy-s*0.36);
-      lctx.quadraticCurveTo(cx+s*0.48,cy-s*0.32,cx+s*0.42,cy-s*0.26);
-      lctx.quadraticCurveTo(cx+s*0.38,cy-s*0.24,cx+s*0.37,cy-s*0.27);
-      lctx.quadraticCurveTo(cx+s*0.2,cy-s*0.04,cx+s*0.12,cy+s*0.16);
-      lctx.quadraticCurveTo(cx-s*0.04,cy+s*0.28,cx-s*0.36,cy+s*0.1);
-      lctx.closePath(); lctx.stroke();
-      lctx.beginPath(); lctx.moveTo(cx-s*0.14,cy+s*0.2); lctx.lineTo(cx-s*0.14,cy+s*0.34); lctx.stroke();
-      lctx.beginPath(); lctx.moveTo(cx+s*0.04,cy+s*0.2); lctx.lineTo(cx+s*0.04,cy+s*0.34); lctx.stroke();
-      lctx.beginPath(); lctx.arc(cx+s*0.4,cy-s*0.32,s*0.015,0,Math.PI*2); lctx.stroke(); },
-    dinoRex:function(b){ pen(b); var cx=b.cx,cy=b.cy,s=b.s;
-      lctx.beginPath();
-      lctx.moveTo(cx-s*0.38,cy-s*0.04);
-      lctx.quadraticCurveTo(cx-s*0.12,cy-s*0.04,cx-s*0.02,cy-s*0.14);
-      lctx.quadraticCurveTo(cx+s*0.08,cy-s*0.32,cx+s*0.24,cy-s*0.32);
-      lctx.lineTo(cx+s*0.44,cy-s*0.28);
-      lctx.lineTo(cx+s*0.44,cy-s*0.17);
-      lctx.lineTo(cx+s*0.28,cy-s*0.15);
-      lctx.quadraticCurveTo(cx+s*0.2,cy-s*0.12,cx+s*0.17,cy+s*0.04);
-      lctx.quadraticCurveTo(cx+s*0.15,cy+s*0.22,cx+s*0.04,cy+s*0.26);
-      lctx.quadraticCurveTo(cx-s*0.08,cy+s*0.12,cx-s*0.38,cy-s*0.04);
-      lctx.closePath(); lctx.stroke();
-      lctx.beginPath(); lctx.moveTo(cx+s*0.05,cy+s*0.24); lctx.lineTo(cx+s*0.09,cy+s*0.36); lctx.lineTo(cx+s*0.18,cy+s*0.36); lctx.stroke();
-      lctx.beginPath(); lctx.moveTo(cx+s*0.18,cy+s*0.02); lctx.lineTo(cx+s*0.25,cy+s*0.08); lctx.stroke();
-      lctx.beginPath(); lctx.arc(cx+s*0.31,cy-s*0.23,s*0.016,0,Math.PI*2); lctx.stroke(); },
-    dinoStego:function(b){ pen(b); var cx=b.cx,cy=b.cy,s=b.s;
-      lctx.beginPath();
-      lctx.moveTo(cx-s*0.4,cy+s*0.04);
-      lctx.quadraticCurveTo(cx-s*0.12,cy-s*0.06,cx+s*0.1,cy-s*0.0);
-      lctx.quadraticCurveTo(cx+s*0.32,cy+s*0.02,cx+s*0.4,cy-s*0.02);
-      lctx.quadraticCurveTo(cx+s*0.44,cy+s*0.04,cx+s*0.38,cy+s*0.08);
-      lctx.quadraticCurveTo(cx+s*0.2,cy+s*0.14,cx+s*0.05,cy+s*0.18);
-      lctx.quadraticCurveTo(cx-s*0.1,cy+s*0.22,cx-s*0.4,cy+s*0.04);
-      lctx.closePath(); lctx.stroke();
-      function plate(x,top){ lctx.beginPath(); lctx.moveTo(cx+x*s-s*0.055,cy-s*0.04); lctx.lineTo(cx+x*s,top); lctx.lineTo(cx+x*s+s*0.055,cy-s*0.04); lctx.closePath(); lctx.stroke(); }
-      plate(-0.16,cy-s*0.24); plate(-0.03,cy-s*0.3); plate(0.1,cy-s*0.24);
-      lctx.beginPath(); lctx.moveTo(cx-s*0.1,cy+s*0.17); lctx.lineTo(cx-s*0.1,cy+s*0.31); lctx.stroke();
-      lctx.beginPath(); lctx.moveTo(cx+s*0.08,cy+s*0.16); lctx.lineTo(cx+s*0.08,cy+s*0.31); lctx.stroke();
-      lctx.beginPath(); lctx.arc(cx+s*0.37,cy-s*0.0,s*0.015,0,Math.PI*2); lctx.stroke(); },
-    dinoEgg:function(b){ pen(b); var cx=b.cx,cy=b.cy,s=b.s;
-      lctx.beginPath(); lctx.ellipse(cx,cy,s*0.22,s*0.3,0,0,Math.PI*2); lctx.stroke();
-      lctx.beginPath();
-      lctx.moveTo(cx-s*0.22,cy-s*0.02); lctx.lineTo(cx-s*0.1,cy+s*0.04); lctx.lineTo(cx-s*0.02,cy-s*0.04);
-      lctx.lineTo(cx+s*0.08,cy+s*0.05); lctx.lineTo(cx+s*0.22,cy-s*0.02); lctx.stroke(); }
-  };
-
-  /* قائمة الرسمات المرحة مع رموزها للأزرار */
-  var PICLIST = [["star","⭐"],["heart","❤️"],["house","🏠"],["fish","🐟"],["flower","🌸"],["sun","☀️"],["car","🚗"],["balloon","🎈"]];
-  var DINOLIST = [["dinoNeck","🦕","ديناصور"],["dinoRex","🦖","تي-ركس"],["dinoStego","🦕","ستيجو"],["dinoEgg","🥚","بيضة"]];
-  /* الحروف: كل حرف مع صورة تبدأ به وكلمتها */
+  /* قوائم الصور: رموز تعبيرية واضحة وملوّنة */
+  var PICLIST = ["⭐","❤️","🌈","🏠","🌸","🌞","🚗","🎈","🍎","🦋","🐠","🐱","🐶","🚀","🌙","🍉"];
+  var DINOLIST = [["🦕","ديناصور"],["🦖","تي-ركس"],["🐊","تمساح"],["🥚","بيضة"]];
+  /* الحروف: كل حرف مع صورةٍ تبدأ به وكلمتها */
   var ABC = [
-    ["أ","rabbit","أرنب"],["ب","duck","بطة"],["ت","apple","تفاحة"],["ث","snake","ثعبان"],
-    ["ج","mountain","جبل"],["ح","whale","حوت"],["خ","tent","خيمة"],["د","bucket","دلو"],
-    ["ذ","corn","ذرة"],["ر","feather","ريشة"],["ز","flower","زهرة"],["س","fish","سمكة"],
-    ["ش","sun","شمس"],["ص","rocket","صاروخ"],["ض","tooth","ضرس"],["ط","plane","طائرة"],
-    ["ظ","envelope","ظرف"],["ع","eye","عين"],["غ","cloud","غيمة"],["ف","butterfly","فراشة"],
-    ["ق","crescent","قمر"],["ك","ball","كرة"],["ل","lemon","ليمونة"],["م","banana","موزة"],
-    ["ن","star","نجمة"],["ه","gift","هدية"],["و","flower","وردة"],["ي","boat","يخت"]
+    ["أ","🐰","أرنب"],["ب","🦆","بطة"],["ت","🍎","تفاحة"],["ث","🦊","ثعلب"],
+    ["ج","🐫","جمل"],["ح","🐴","حصان"],["خ","🐑","خروف"],["د","🐔","دجاجة"],
+    ["ذ","🐺","ذئب"],["ر","🤖","روبوت"],["ز","🦒","زرافة"],["س","🐟","سمكة"],
+    ["ش","🌞","شمس"],["ص","🚀","صاروخ"],["ض","🐸","ضفدع"],["ط","✈️","طائرة"],
+    ["ظ","✉️","ظرف"],["ع","🍇","عنب"],["غ","🦌","غزال"],["ف","🦋","فراشة"],
+    ["ق","🐱","قطة"],["ك","🐶","كلب"],["ل","🍋","ليمونة"],["م","🍌","موزة"],
+    ["ن","🐝","نحلة"],["ه","🎁","هدية"],["و","🌹","وردة"],["ي","✋","يد"]
   ];
 
   function accent(){ try{ return getComputedStyle(document.documentElement).getPropertyValue("--accent").trim()||"#ff7a3d"; }catch(e){ return "#ff7a3d"; } }
+  function stampEmoji(g,cx,cy,size){ pctx.font=size+"px "+EMOJI; pctx.textAlign="center"; pctx.textBaseline="middle"; pctx.fillText(g,cx,cy); }
 
-  function picTemplate(name){ return function(w,h){ SHAPES[name](box(0,0,w,h)); }; }
-
-  function letterCard(ch,picName,word){ return function(w,h){
-    var areaH=h*0.84, bA, bB;
-    if(h>=w){ bA={x:0,y:0,w:w,h:areaH*0.5}; bB={x:0,y:areaH*0.5,w:w,h:areaH*0.5}; }
-    else { bA={x:0,y:0,w:w*0.5,h:areaH}; bB={x:w*0.5,y:0,w:w*0.5,h:areaH}; }
-    // الحرف كبيراً بخطوطٍ تُلوَّن
-    var lb=box(bA.x,bA.y,bA.w,bA.h,0.16), sz=lb.s*0.98;
+  /* ---------- رسم الطبقتين حسب نوع القالب ---------- */
+  function clearPaint(){ pctx.fillStyle="#fff"; pctx.fillRect(0,0,paint.width,paint.height); }
+  function drawLetterOutline(ch){
+    var W=lines.width,H=lines.height, sz=Math.min(W,H*0.62)*0.8;
     lctx.font="800 "+sz+"px 'Baloo Bhaijaan 2', sans-serif";
     lctx.textAlign="center"; lctx.textBaseline="middle"; lctx.lineJoin="round";
     lctx.strokeStyle="#111"; lctx.lineWidth=Math.max(6,sz*0.05);
-    lctx.strokeText(ch, lb.cx, lb.cy);
-    // الصورة
-    SHAPES[picName](box(bB.x,bB.y,bB.w,bB.h,0.14));
-    // الكلمة أسفل (ملوّنة سلفاً، للقراءة لا للتلوين)
-    var fs=Math.max(18,Math.min(w,h)*0.07);
-    lctx.font="800 "+fs+"px 'Baloo Bhaijaan 2', sans-serif";
-    lctx.fillStyle=accent(); lctx.textBaseline="alphabetic";
-    lctx.fillText(ch+" … "+word, w/2, h*0.955);
-  };}
+    lctx.strokeText(ch, W/2, H*0.36);
+  }
+  function redrawLines(){ lctx.clearRect(0,0,lines.width,lines.height); var t=state.template; if(t&&t.t==="letter") drawLetterOutline(t.ch); }
+  function renderTemplate(){
+    clearPaint(); lctx.clearRect(0,0,lines.width,lines.height);
+    var t=state.template; if(!t) return;
+    var W=paint.width,H=paint.height,m=Math.min(W,H);
+    if(t.t==="pic"){
+      stampEmoji(t.g, W/2, H/2, m*0.52);
+    } else if(t.t==="letter"){
+      drawLetterOutline(t.ch);
+      stampEmoji(t.g, W/2, H*0.76, m*0.26);
+      var fs=Math.max(18,m*0.07);
+      pctx.font="800 "+fs+"px "+EMOJI; pctx.textAlign="center"; pctx.textBaseline="alphabetic";
+      pctx.fillStyle=accent(); pctx.fillText(t.ch+" … "+t.word, W/2, H*0.965);
+    }
+  }
+  function setTemplate(t){ state.template=t; renderTemplate(); }
 
   /* ---------- الطبقتان وتغيير الحجم ---------- */
   function sizeCanvas(c){ var r=paint.getBoundingClientRect(); c.width=Math.round(r.width*dpr); c.height=Math.round(r.height*dpr); }
-  function redrawLines(){ lctx.clearRect(0,0,lines.width,lines.height); if(state.template) state.template(lines.width,lines.height); }
   function resize(){
     var snap=null; try{ snap=(paint.width>0)?pctx.getImageData(0,0,paint.width,paint.height):null; }catch(e){}
     sizeCanvas(paint); sizeCanvas(lines);
-    pctx.fillStyle="#fff"; pctx.fillRect(0,0,paint.width,paint.height);
+    clearPaint();
     if(snap){ try{ pctx.putImageData(snap,0,0); }catch(e){} }
     pctx.lineCap="round"; pctx.lineJoin="round";
     redrawLines();
@@ -397,33 +207,30 @@
   function setBrush(on){ state.erasing=!on; brushBtn.classList.toggle("on",on); eraserBtn.classList.toggle("on",!on); }
   brushBtn.addEventListener("pointerdown",function(){ setBrush(true); });
   eraserBtn.addEventListener("pointerdown",function(){ setBrush(false); });
-  document.getElementById("clearBtn").addEventListener("pointerdown",function(){
-    pctx.fillStyle="#fff"; pctx.fillRect(0,0,paint.width,paint.height);
-  });
+  document.getElementById("clearBtn").addEventListener("pointerdown",function(){ renderTemplate(); });
 
-  /* ---------- صندوق الرسمات والحروف ---------- */
+  /* ---------- صندوق الرسمات والحروف والديناصورات ---------- */
   var tray=document.getElementById("tray"), cats=document.getElementById("cats");
-  function setTemplate(fn){ state.template=fn; pctx.fillStyle="#fff"; pctx.fillRect(0,0,paint.width,paint.height); redrawLines(); }
   function buildTray(cat){
     tray.innerHTML="";
     if(cat==="none"){ tray.hidden=true; setTemplate(null); return; }
     tray.hidden=false;
     if(cat==="pics"){
-      PICLIST.forEach(function(p){
-        var b=document.createElement("button"); b.className="pick"; b.textContent=p[1]; b.setAttribute("aria-label","رسمة");
-        b.addEventListener("pointerdown",function(){ setTemplate(picTemplate(p[0])); }); tray.appendChild(b);
+      PICLIST.forEach(function(g){
+        var b=document.createElement("button"); b.className="pick"; b.textContent=g; b.setAttribute("aria-label","رسمة");
+        b.addEventListener("pointerdown",function(){ setTemplate({t:"pic",g:g}); }); tray.appendChild(b);
       });
     } else if(cat==="dino"){
       DINOLIST.forEach(function(d){
-        var b=document.createElement("button"); b.className="pick pair"; b.setAttribute("aria-label",d[2]);
-        b.innerHTML="<span>"+d[1]+"</span><small>"+d[2]+"</small>";
-        b.addEventListener("pointerdown",function(){ setTemplate(picTemplate(d[0])); }); tray.appendChild(b);
+        var b=document.createElement("button"); b.className="pick pair"; b.setAttribute("aria-label",d[1]);
+        b.innerHTML="<span>"+d[0]+"</span><small>"+d[1]+"</small>";
+        b.addEventListener("pointerdown",function(){ setTemplate({t:"pic",g:d[0]}); }); tray.appendChild(b);
       });
     } else {
       ABC.forEach(function(it){
         var b=document.createElement("button"); b.className="pick pair"; b.setAttribute("aria-label","حرف "+it[0]+" "+it[2]);
         b.innerHTML="<span>"+it[0]+"</span><small>"+it[2]+"</small>";
-        b.addEventListener("pointerdown",function(){ setTemplate(letterCard(it[0],it[1],it[2])); }); tray.appendChild(b);
+        b.addEventListener("pointerdown",function(){ setTemplate({t:"letter",ch:it[0],g:it[1],word:it[2]}); }); tray.appendChild(b);
       });
     }
   }
