@@ -1,7 +1,7 @@
 <title>لوحة الرسم</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <style>
-  /* لوحة رسم للأطفال باللمس: ألوان أعلى، لوحة رسم بطبقتين (تلوين تحت وخطوط ثابتة فوق)، أدوات وصندوق رسمات أسفل */
+  /* لوحة رسم للأطفال باللمس: ألوان أعلى، لوحة بطبقتين (تلوين تحت وخطوط ثابتة فوق)، صندوق رسمات وحروف مع صورها أسفل */
   :root{
     --bg:#fff7ed; --panel:#ffffff; --ink:#3b2f2a; --line:#f0d9c0;
     --accent:#ff7a3d; --shadow:0 6px 0 rgba(0,0,0,.12);
@@ -53,9 +53,10 @@
     flex:0 0 auto; width:58px; height:58px; border:none; border-radius:18px;
     background:var(--panel); box-shadow:var(--shadow); cursor:pointer;
     font-size:30px; display:grid; place-items:center; color:var(--ink);
-    font-family:inherit; font-weight:800;
+    font-family:inherit; font-weight:800; line-height:1;
   }
-  .pick.letter{font-size:30px}
+  .pick small{font-size:10px; font-weight:700; color:var(--accent); margin-top:2px}
+  .pick.pair{flex-direction:column; gap:0}
   .chip{
     flex:0 0 auto; border:none; border-radius:16px; background:var(--panel);
     box-shadow:var(--shadow); cursor:pointer; font-family:inherit; font-weight:700;
@@ -122,51 +123,103 @@
   var state = { color:"#ff3b3b", size:16, erasing:false, template:null };
   var dpr = Math.max(1, Math.min(3, window.devicePixelRatio||1));
 
-  /* ---------- الرسمات: دوال ترسم خطوطاً سوداء سميكة تُلوَّن داخلها ---------- */
-  function frame(w,h){ var m=Math.min(w,h)*0.12; return {x:m,y:m,w:w-2*m,h:h-2*m,cx:w/2,cy:h/2,s:Math.min(w,h)-2*m}; }
-  function pen(w,h){ lctx.strokeStyle="#111"; lctx.lineWidth=Math.max(5,Math.min(w,h)*0.022); lctx.lineJoin="round"; lctx.lineCap="round"; }
-  function starPath(cx,cy,R,r){ lctx.beginPath(); for(var i=0;i<10;i++){ var ang=-Math.PI/2+i*Math.PI/5, rad=(i%2?r:R); var x=cx+Math.cos(ang)*rad, y=cy+Math.sin(ang)*rad; i?lctx.lineTo(x,y):lctx.moveTo(x,y);} lctx.closePath(); lctx.stroke(); }
+  /* ---------- أدوات الرسم ---------- */
+  function box(x,y,w,h,mf){ var m=Math.min(w,h)*(mf||0.12); return {x:x+m,y:y+m,w:w-2*m,h:h-2*m,cx:x+w/2,cy:y+h/2,s:Math.min(w-2*m,h-2*m)}; }
+  function pen(b){ lctx.strokeStyle="#111"; lctx.lineWidth=Math.max(4,b.s*0.03); lctx.lineJoin="round"; lctx.lineCap="round"; }
 
-  var PICS = {
-    "⭐": function(w,h){ var f=frame(w,h); pen(w,h); starPath(f.cx,f.cy,f.s*0.48,f.s*0.2); },
-    "❤️": function(w,h){ var f=frame(w,h); pen(w,h); var cx=f.cx,cy=f.cy,u=f.s*0.3;
-      lctx.beginPath(); lctx.moveTo(cx,cy+u*1.2);
-      lctx.bezierCurveTo(cx-u*1.8,cy-u*0.4, cx-u*0.9,cy-u*1.5, cx,cy-u*0.5);
-      lctx.bezierCurveTo(cx+u*0.9,cy-u*1.5, cx+u*1.8,cy-u*0.4, cx,cy+u*1.2);
-      lctx.closePath(); lctx.stroke(); },
-    "🏠": function(w,h){ var f=frame(w,h); pen(w,h); var x=f.cx-f.s*0.33,y=f.cy-f.s*0.05,s=f.s*0.66;
+  /* ---------- الرسمات، كلٌّ داخل مربّعٍ يُعطى لها ---------- */
+  var SHAPES = {
+    star:function(b){ pen(b); var cx=b.cx,cy=b.cy,R=b.s*0.48,r=b.s*0.2; lctx.beginPath();
+      for(var i=0;i<10;i++){ var a=-Math.PI/2+i*Math.PI/5, rad=(i%2?r:R), x=cx+Math.cos(a)*rad, y=cy+Math.sin(a)*rad; i?lctx.lineTo(x,y):lctx.moveTo(x,y);} lctx.closePath(); lctx.stroke(); },
+    heart:function(b){ pen(b); var cx=b.cx,cy=b.cy,u=b.s*0.3; lctx.beginPath(); lctx.moveTo(cx,cy+u*1.2);
+      lctx.bezierCurveTo(cx-u*1.8,cy-u*0.4,cx-u*0.9,cy-u*1.5,cx,cy-u*0.5);
+      lctx.bezierCurveTo(cx+u*0.9,cy-u*1.5,cx+u*1.8,cy-u*0.4,cx,cy+u*1.2); lctx.closePath(); lctx.stroke(); },
+    house:function(b){ pen(b); var x=b.cx-b.s*0.33,y=b.cy-b.s*0.05,s=b.s*0.66;
       lctx.strokeRect(x,y,s,s*0.7);
-      lctx.beginPath(); lctx.moveTo(x-s*0.07,y); lctx.lineTo(f.cx,y-s*0.42); lctx.lineTo(x+s+s*0.07,y); lctx.stroke();
+      lctx.beginPath(); lctx.moveTo(x-s*0.07,y); lctx.lineTo(b.cx,y-s*0.42); lctx.lineTo(x+s+s*0.07,y); lctx.stroke();
       lctx.strokeRect(x+s*0.38,y+s*0.3,s*0.24,s*0.4); },
-    "🐟": function(w,h){ var f=frame(w,h); pen(w,h); var cx=f.cx,cy=f.cy,r=f.s*0.3;
+    fish:function(b){ pen(b); var cx=b.cx,cy=b.cy,r=b.s*0.3;
       lctx.beginPath(); lctx.ellipse(cx+r*0.3,cy,r,r*0.62,0,0,Math.PI*2); lctx.stroke();
       lctx.beginPath(); lctx.moveTo(cx-r*0.6,cy); lctx.lineTo(cx-r*1.4,cy-r*0.5); lctx.lineTo(cx-r*1.4,cy+r*0.5); lctx.closePath(); lctx.stroke();
       lctx.beginPath(); lctx.arc(cx+r*0.9,cy-r*0.18,r*0.1,0,Math.PI*2); lctx.stroke(); },
-    "🌸": function(w,h){ var f=frame(w,h); pen(w,h); var cx=f.cx,cy=f.cy,R=f.s*0.17;
+    flower:function(b){ pen(b); var cx=b.cx,cy=b.cy,R=b.s*0.17;
       for(var i=0;i<6;i++){ var a=i*Math.PI/3; lctx.beginPath(); lctx.arc(cx+Math.cos(a)*R*1.5,cy+Math.sin(a)*R*1.5,R,0,Math.PI*2); lctx.stroke(); }
       lctx.beginPath(); lctx.arc(cx,cy,R*0.8,0,Math.PI*2); lctx.stroke(); },
-    "☀️": function(w,h){ var f=frame(w,h); pen(w,h); var cx=f.cx,cy=f.cy,R=f.s*0.22;
+    sun:function(b){ pen(b); var cx=b.cx,cy=b.cy,R=b.s*0.22;
       lctx.beginPath(); lctx.arc(cx,cy,R,0,Math.PI*2); lctx.stroke();
       for(var i=0;i<12;i++){ var a=i*Math.PI/6; lctx.beginPath(); lctx.moveTo(cx+Math.cos(a)*R*1.35,cy+Math.sin(a)*R*1.35); lctx.lineTo(cx+Math.cos(a)*R*1.75,cy+Math.sin(a)*R*1.75); lctx.stroke(); } },
-    "🚗": function(w,h){ var f=frame(w,h); pen(w,h); var cx=f.cx,cy=f.cy,bw=f.s*0.7,bh=f.s*0.26,x=cx-bw/2,y=cy-bh/2;
-      lctx.beginPath();
-      lctx.moveTo(x,y+bh); lctx.lineTo(x,y+bh*0.3); lctx.lineTo(x+bw*0.22,y+bh*0.3);
+    car:function(b){ pen(b); var cx=b.cx,cy=b.cy,bw=b.s*0.7,bh=b.s*0.26,x=cx-bw/2,y=cy-bh/2;
+      lctx.beginPath(); lctx.moveTo(x,y+bh); lctx.lineTo(x,y+bh*0.3); lctx.lineTo(x+bw*0.22,y+bh*0.3);
       lctx.lineTo(x+bw*0.34,y-bh*0.55); lctx.lineTo(x+bw*0.68,y-bh*0.55); lctx.lineTo(x+bw*0.8,y+bh*0.3);
       lctx.lineTo(x+bw,y+bh*0.3); lctx.lineTo(x+bw,y+bh); lctx.closePath(); lctx.stroke();
       lctx.beginPath(); lctx.arc(x+bw*0.27,y+bh,bh*0.42,0,Math.PI*2); lctx.stroke();
       lctx.beginPath(); lctx.arc(x+bw*0.73,y+bh,bh*0.42,0,Math.PI*2); lctx.stroke(); },
-    "🎈": function(w,h){ var f=frame(w,h); pen(w,h); var cx=f.cx,cy=f.cy-f.s*0.08,R=f.s*0.26;
+    balloon:function(b){ pen(b); var cx=b.cx,cy=b.cy-b.s*0.08,R=b.s*0.26;
       lctx.beginPath(); lctx.ellipse(cx,cy,R*0.82,R,0,0,Math.PI*2); lctx.stroke();
       lctx.beginPath(); lctx.moveTo(cx,cy+R); lctx.lineTo(cx-R*0.12,cy+R*0.12+R); lctx.lineTo(cx+R*0.12,cy+R*0.12+R); lctx.closePath(); lctx.stroke();
-      lctx.beginPath(); lctx.moveTo(cx,cy+R*1.18); lctx.quadraticCurveTo(cx+R*0.5,cy+R*1.8,cx-R*0.2,cy+R*2.4); lctx.stroke(); }
+      lctx.beginPath(); lctx.moveTo(cx,cy+R*1.18); lctx.quadraticCurveTo(cx+R*0.5,cy+R*1.8,cx-R*0.2,cy+R*2.4); lctx.stroke(); },
+    rabbit:function(b){ pen(b); var cx=b.cx,cy=b.cy+b.s*0.08,s=b.s;
+      lctx.beginPath(); lctx.arc(cx,cy,s*0.22,0,Math.PI*2); lctx.stroke();
+      lctx.beginPath(); lctx.ellipse(cx-s*0.1,cy-s*0.3,s*0.06,s*0.2,-0.12,0,Math.PI*2); lctx.stroke();
+      lctx.beginPath(); lctx.ellipse(cx+s*0.1,cy-s*0.3,s*0.06,s*0.2,0.12,0,Math.PI*2); lctx.stroke();
+      lctx.beginPath(); lctx.arc(cx-s*0.07,cy-s*0.02,s*0.022,0,Math.PI*2); lctx.stroke();
+      lctx.beginPath(); lctx.arc(cx+s*0.07,cy-s*0.02,s*0.022,0,Math.PI*2); lctx.stroke(); },
+    duck:function(b){ pen(b); var cx=b.cx,cy=b.cy,s=b.s;
+      lctx.beginPath(); lctx.ellipse(cx-s*0.03,cy+s*0.14,s*0.27,s*0.18,0,0,Math.PI*2); lctx.stroke();
+      lctx.beginPath(); lctx.arc(cx+s*0.19,cy-s*0.06,s*0.13,0,Math.PI*2); lctx.stroke();
+      lctx.beginPath(); lctx.moveTo(cx+s*0.31,cy-s*0.08); lctx.lineTo(cx+s*0.44,cy-s*0.04); lctx.lineTo(cx+s*0.31,cy+s*0.01); lctx.closePath(); lctx.stroke();
+      lctx.beginPath(); lctx.arc(cx+s*0.21,cy-s*0.09,s*0.02,0,Math.PI*2); lctx.stroke(); },
+    apple:function(b){ pen(b); var cx=b.cx,cy=b.cy+b.s*0.05,s=b.s;
+      lctx.beginPath(); lctx.arc(cx,cy,s*0.24,0,Math.PI*2); lctx.stroke();
+      lctx.beginPath(); lctx.moveTo(cx,cy-s*0.2); lctx.lineTo(cx,cy-s*0.34); lctx.stroke();
+      lctx.beginPath(); lctx.ellipse(cx+s*0.1,cy-s*0.3,s*0.09,s*0.045,-0.6,0,Math.PI*2); lctx.stroke(); },
+    banana:function(b){ pen(b); var cx=b.cx,cy=b.cy,s=b.s;
+      lctx.beginPath(); lctx.moveTo(cx-s*0.3,cy-s*0.14);
+      lctx.quadraticCurveTo(cx+s*0.02,cy+s*0.36,cx+s*0.32,cy-s*0.06);
+      lctx.quadraticCurveTo(cx+s*0.12,cy+s*0.2,cx-s*0.1,cy+s*0.22);
+      lctx.quadraticCurveTo(cx-s*0.3,cy+s*0.08,cx-s*0.3,cy-s*0.14); lctx.closePath(); lctx.stroke(); },
+    crescent:function(b){ pen(b); var cx=b.cx,cy=b.cy,R=b.s*0.3;
+      lctx.beginPath();
+      lctx.arc(cx-R*0.1,cy,R,Math.PI*0.42,Math.PI*1.58,false);
+      lctx.arc(cx+R*0.35,cy,R*0.92,Math.PI*1.58,Math.PI*0.42,true);
+      lctx.closePath(); lctx.stroke(); },
+    ball:function(b){ pen(b); var cx=b.cx,cy=b.cy,R=b.s*0.27;
+      lctx.beginPath(); lctx.arc(cx,cy,R,0,Math.PI*2); lctx.stroke();
+      lctx.beginPath(); lctx.moveTo(cx,cy-R); lctx.quadraticCurveTo(cx+R*0.6,cy,cx,cy+R); lctx.stroke();
+      lctx.beginPath(); lctx.moveTo(cx,cy-R); lctx.quadraticCurveTo(cx-R*0.6,cy,cx,cy+R); lctx.stroke();
+      lctx.beginPath(); lctx.ellipse(cx,cy,R,R*0.42,0,0,Math.PI*2); lctx.stroke(); }
   };
-  var LETTERS = ["أ","ب","ت","ح","د","ر","س","م","ن","ه","و","ي"];
-  function drawLetter(ch){ return function(w,h){
-    var sz=Math.min(w,h)*0.72;
+
+  /* قائمة الرسمات المرحة مع رموزها للأزرار */
+  var PICLIST = [["star","⭐"],["heart","❤️"],["house","🏠"],["fish","🐟"],["flower","🌸"],["sun","☀️"],["car","🚗"],["balloon","🎈"]];
+  /* الحروف: كل حرف مع صورة تبدأ به وكلمتها */
+  var ABC = [
+    ["أ","rabbit","أرنب"],["ب","duck","بطة"],["ت","apple","تفاحة"],["س","fish","سمكة"],
+    ["ش","sun","شمس"],["ق","crescent","قمر"],["ن","star","نجمة"],["و","flower","وردة"],
+    ["م","banana","موزة"],["ك","ball","كرة"]
+  ];
+
+  function accent(){ try{ return getComputedStyle(document.documentElement).getPropertyValue("--accent").trim()||"#ff7a3d"; }catch(e){ return "#ff7a3d"; } }
+
+  function picTemplate(name){ return function(w,h){ SHAPES[name](box(0,0,w,h)); }; }
+
+  function letterCard(ch,picName,word){ return function(w,h){
+    var areaH=h*0.84, bA, bB;
+    if(h>=w){ bA={x:0,y:0,w:w,h:areaH*0.5}; bB={x:0,y:areaH*0.5,w:w,h:areaH*0.5}; }
+    else { bA={x:0,y:0,w:w*0.5,h:areaH}; bB={x:w*0.5,y:0,w:w*0.5,h:areaH}; }
+    // الحرف كبيراً بخطوطٍ تُلوَّن
+    var lb=box(bA.x,bA.y,bA.w,bA.h,0.16), sz=lb.s*0.98;
     lctx.font="800 "+sz+"px 'Baloo Bhaijaan 2', sans-serif";
-    lctx.textAlign="center"; lctx.textBaseline="middle";
-    lctx.lineJoin="round"; lctx.strokeStyle="#111"; lctx.lineWidth=Math.max(6,sz*0.05);
-    lctx.strokeText(ch,w/2,h/2+sz*0.06);
+    lctx.textAlign="center"; lctx.textBaseline="middle"; lctx.lineJoin="round";
+    lctx.strokeStyle="#111"; lctx.lineWidth=Math.max(6,sz*0.05);
+    lctx.strokeText(ch, lb.cx, lb.cy);
+    // الصورة
+    SHAPES[picName](box(bB.x,bB.y,bB.w,bB.h,0.14));
+    // الكلمة أسفل (ملوّنة سلفاً، للقراءة لا للتلوين)
+    var fs=Math.max(18,Math.min(w,h)*0.07);
+    lctx.font="800 "+fs+"px 'Baloo Bhaijaan 2', sans-serif";
+    lctx.fillStyle=accent(); lctx.textBaseline="alphabetic";
+    lctx.fillText(ch+" … "+word, w/2, h*0.955);
   };}
 
   /* ---------- الطبقتان وتغيير الحجم ---------- */
@@ -213,7 +266,7 @@
     pctx.fillStyle="#fff"; pctx.fillRect(0,0,paint.width,paint.height);
   });
 
-  /* ---------- صندوق الرسمات ---------- */
+  /* ---------- صندوق الرسمات والحروف ---------- */
   var tray=document.getElementById("tray"), cats=document.getElementById("cats");
   function setTemplate(fn){ state.template=fn; pctx.fillStyle="#fff"; pctx.fillRect(0,0,paint.width,paint.height); redrawLines(); }
   function buildTray(cat){
@@ -221,14 +274,15 @@
     if(cat==="none"){ tray.hidden=true; setTemplate(null); return; }
     tray.hidden=false;
     if(cat==="pics"){
-      Object.keys(PICS).forEach(function(k){
-        var b=document.createElement("button"); b.className="pick"; b.textContent=k; b.setAttribute("aria-label","رسمة");
-        b.addEventListener("pointerdown",function(){ setTemplate(PICS[k]); }); tray.appendChild(b);
+      PICLIST.forEach(function(p){
+        var b=document.createElement("button"); b.className="pick"; b.textContent=p[1]; b.setAttribute("aria-label","رسمة");
+        b.addEventListener("pointerdown",function(){ setTemplate(picTemplate(p[0])); }); tray.appendChild(b);
       });
     } else {
-      LETTERS.forEach(function(ch){
-        var b=document.createElement("button"); b.className="pick letter"; b.textContent=ch; b.setAttribute("aria-label","حرف "+ch);
-        b.addEventListener("pointerdown",function(){ setTemplate(drawLetter(ch)); }); tray.appendChild(b);
+      ABC.forEach(function(it){
+        var b=document.createElement("button"); b.className="pick pair"; b.setAttribute("aria-label","حرف "+it[0]+" "+it[2]);
+        b.innerHTML="<span>"+it[0]+"</span><small>"+it[2]+"</small>";
+        b.addEventListener("pointerdown",function(){ setTemplate(letterCard(it[0],it[1],it[2])); }); tray.appendChild(b);
       });
     }
   }
