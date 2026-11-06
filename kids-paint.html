@@ -1,7 +1,7 @@
 <title>لوحة الرسم</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <style>
-  /* لوحة رسم للأطفال باللمس: شريط ألوان كبير أعلى، لوحة رسم تملأ الشاشة، أدوات أسفل */
+  /* لوحة رسم للأطفال باللمس: ألوان أعلى، لوحة رسم بطبقتين (تلوين تحت وخطوط ثابتة فوق)، أدوات وصندوق رسمات أسفل */
   :root{
     --bg:#fff7ed; --panel:#ffffff; --ink:#3b2f2a; --line:#f0d9c0;
     --accent:#ff7a3d; --shadow:0 6px 0 rgba(0,0,0,.12);
@@ -28,7 +28,7 @@
   }
   .swatches{display:flex; gap:9px; flex:1; flex-wrap:wrap; min-width:0}
   .sw{
-    width:40px; height:40px; border-radius:50%; border:4px solid #fff;
+    width:38px; height:38px; border-radius:50%; border:4px solid #fff;
     box-shadow:var(--shadow); cursor:pointer; padding:0; flex:0 0 auto;
     transition:transform .08s;
   }
@@ -36,29 +36,51 @@
   @media (prefers-color-scheme: light){ :root:not([data-theme="dark"]) .sw{border-color:#fff} }
   .sw.on{transform:scale(1.28); outline:3px dashed var(--accent); outline-offset:3px}
   .stage{flex:1; min-height:0; position:relative; padding:0 max(14px,env(safe-area-inset-left,0px))}
+  .wrap{position:relative; width:100%; height:100%}
   canvas{
-    width:100%; height:100%; display:block; background:#fff;
-    border-radius:var(--r); box-shadow:var(--shadow); touch-action:none;
+    position:absolute; inset:0; width:100%; height:100%; display:block;
+    border-radius:var(--r); touch-action:none;
   }
+  #paint{background:#fff; box-shadow:var(--shadow)}
+  #lines{background:transparent; pointer-events:none}
+
+  .tray{
+    display:flex; gap:9px; align-items:center; overflow-x:auto; -webkit-overflow-scrolling:touch;
+    padding:8px max(14px,env(safe-area-inset-left,0px));
+  }
+  .tray.cats{padding-top:4px; padding-bottom:0}
+  .pick{
+    flex:0 0 auto; width:58px; height:58px; border:none; border-radius:18px;
+    background:var(--panel); box-shadow:var(--shadow); cursor:pointer;
+    font-size:30px; display:grid; place-items:center; color:var(--ink);
+    font-family:inherit; font-weight:800;
+  }
+  .pick.letter{font-size:30px}
+  .chip{
+    flex:0 0 auto; border:none; border-radius:16px; background:var(--panel);
+    box-shadow:var(--shadow); cursor:pointer; font-family:inherit; font-weight:700;
+    font-size:15px; color:var(--ink); padding:9px 16px;
+  }
+  .chip.on{background:var(--accent); color:#fff}
   .tools{
-    display:flex; align-items:center; gap:10px; flex-wrap:wrap; justify-content:center;
-    padding:10px max(14px,env(safe-area-inset-left,0px)) calc(10px + env(safe-area-inset-bottom,0px)) max(14px,env(safe-area-inset-right,0px));
+    display:flex; align-items:center; gap:9px; flex-wrap:wrap; justify-content:center;
+    padding:9px max(14px,env(safe-area-inset-left,0px)) calc(10px + env(safe-area-inset-bottom,0px)) max(14px,env(safe-area-inset-right,0px));
   }
   .btn{
-    font-family:inherit; font-size:17px; font-weight:700; color:var(--ink);
+    font-family:inherit; font-size:16px; font-weight:700; color:var(--ink);
     background:var(--panel); border:none; border-radius:var(--r);
-    box-shadow:var(--shadow); padding:12px 16px; cursor:pointer;
-    display:flex; align-items:center; gap:7px; min-height:52px;
+    box-shadow:var(--shadow); padding:11px 15px; cursor:pointer;
+    display:flex; align-items:center; gap:6px; min-height:50px;
     transition:transform .08s;
   }
   .btn:active{transform:translateY(3px); box-shadow:0 3px 0 rgba(0,0,0,.12)}
-  .btn .ic{font-size:22px}
-  .sizes{display:flex; gap:8px; align-items:center; background:var(--panel); border-radius:var(--r); box-shadow:var(--shadow); padding:7px 12px}
-  .size{width:44px; height:44px; border:none; background:transparent; cursor:pointer; display:grid; place-items:center; padding:0}
+  .btn .ic{font-size:21px}
+  .btn.on{outline:3px dashed var(--accent); outline-offset:3px}
+  .sizes{display:flex; gap:6px; align-items:center; background:var(--panel); border-radius:var(--r); box-shadow:var(--shadow); padding:6px 10px}
+  .size{width:42px; height:42px; border:none; background:transparent; cursor:pointer; display:grid; place-items:center; padding:0}
   .size .dot{background:var(--ink); border-radius:50%}
   .size.on{background:var(--accent); border-radius:50%}
   .size.on .dot{background:#fff}
-  .brush.on{outline:3px dashed var(--accent); outline-offset:3px}
   :focus-visible{outline:3px solid var(--accent); outline-offset:3px}
 </style>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+Bhaijaan+2:wght@600;700;800&display=swap">
@@ -68,8 +90,18 @@
 </div>
 
 <div class="stage">
-  <canvas id="pad" aria-label="لوحة الرسم"></canvas>
+  <div class="wrap">
+    <canvas id="paint" aria-label="لوحة الرسم"></canvas>
+    <canvas id="lines" aria-hidden="true"></canvas>
+  </div>
 </div>
+
+<div class="tray cats" id="cats" role="tablist" aria-label="نوع الرسمة">
+  <button class="chip on" data-cat="pics">🎨 رسمات</button>
+  <button class="chip" data-cat="letters">أ ب ت  حروف</button>
+  <button class="chip" data-cat="none" style="margin-inline-start:auto">بلا رسمة</button>
+</div>
+<div class="tray" id="tray" aria-label="اختر رسمة"></div>
 
 <div class="tools">
   <div class="sizes" role="radiogroup" aria-label="حجم القلم">
@@ -77,103 +109,153 @@
     <button class="size on" data-size="16" aria-label="وسط"><span class="dot" style="width:18px;height:18px"></span></button>
     <button class="size" data-size="34" aria-label="عريض"><span class="dot" style="width:28px;height:28px"></span></button>
   </div>
-  <button class="btn brush on" id="brushBtn"><span class="ic">🖍️</span>ألوّن</button>
+  <button class="btn on" id="brushBtn"><span class="ic">🖍️</span>ألوّن</button>
   <button class="btn" id="eraserBtn"><span class="ic">🧽</span>أمسح</button>
-  <button class="btn" id="clearBtn"><span class="ic">✨</span>ورقة جديدة</button>
+  <button class="btn" id="clearBtn"><span class="ic">✨</span>جديد</button>
 </div>
 
 <script>
   "use strict";
   var colors = ["#ff3b3b","#ff7a3d","#ffd21e","#39d353","#1ec8ff","#3d5bff","#b14dff","#ff5fa2","#7a4a27","#111111","#ffffff"];
-  var pad = document.getElementById("pad");
-  var ctx = pad.getContext("2d");
-  var state = { color:"#ff3b3b", size:16, erasing:false };
+  var paint = document.getElementById("paint"), pctx = paint.getContext("2d");
+  var lines = document.getElementById("lines"), lctx = lines.getContext("2d");
+  var state = { color:"#ff3b3b", size:16, erasing:false, template:null };
   var dpr = Math.max(1, Math.min(3, window.devicePixelRatio||1));
 
-  // نحفظ الرسم ونعيد رسمه بعد تغيير الحجم حتى لا يختفي
+  /* ---------- الرسمات: دوال ترسم خطوطاً سوداء سميكة تُلوَّن داخلها ---------- */
+  function frame(w,h){ var m=Math.min(w,h)*0.12; return {x:m,y:m,w:w-2*m,h:h-2*m,cx:w/2,cy:h/2,s:Math.min(w,h)-2*m}; }
+  function pen(w,h){ lctx.strokeStyle="#111"; lctx.lineWidth=Math.max(5,Math.min(w,h)*0.022); lctx.lineJoin="round"; lctx.lineCap="round"; }
+  function starPath(cx,cy,R,r){ lctx.beginPath(); for(var i=0;i<10;i++){ var ang=-Math.PI/2+i*Math.PI/5, rad=(i%2?r:R); var x=cx+Math.cos(ang)*rad, y=cy+Math.sin(ang)*rad; i?lctx.lineTo(x,y):lctx.moveTo(x,y);} lctx.closePath(); lctx.stroke(); }
+
+  var PICS = {
+    "⭐": function(w,h){ var f=frame(w,h); pen(w,h); starPath(f.cx,f.cy,f.s*0.48,f.s*0.2); },
+    "❤️": function(w,h){ var f=frame(w,h); pen(w,h); var cx=f.cx,cy=f.cy,u=f.s*0.3;
+      lctx.beginPath(); lctx.moveTo(cx,cy+u*1.2);
+      lctx.bezierCurveTo(cx-u*1.8,cy-u*0.4, cx-u*0.9,cy-u*1.5, cx,cy-u*0.5);
+      lctx.bezierCurveTo(cx+u*0.9,cy-u*1.5, cx+u*1.8,cy-u*0.4, cx,cy+u*1.2);
+      lctx.closePath(); lctx.stroke(); },
+    "🏠": function(w,h){ var f=frame(w,h); pen(w,h); var x=f.cx-f.s*0.33,y=f.cy-f.s*0.05,s=f.s*0.66;
+      lctx.strokeRect(x,y,s,s*0.7);
+      lctx.beginPath(); lctx.moveTo(x-s*0.07,y); lctx.lineTo(f.cx,y-s*0.42); lctx.lineTo(x+s+s*0.07,y); lctx.stroke();
+      lctx.strokeRect(x+s*0.38,y+s*0.3,s*0.24,s*0.4); },
+    "🐟": function(w,h){ var f=frame(w,h); pen(w,h); var cx=f.cx,cy=f.cy,r=f.s*0.3;
+      lctx.beginPath(); lctx.ellipse(cx+r*0.3,cy,r,r*0.62,0,0,Math.PI*2); lctx.stroke();
+      lctx.beginPath(); lctx.moveTo(cx-r*0.6,cy); lctx.lineTo(cx-r*1.4,cy-r*0.5); lctx.lineTo(cx-r*1.4,cy+r*0.5); lctx.closePath(); lctx.stroke();
+      lctx.beginPath(); lctx.arc(cx+r*0.9,cy-r*0.18,r*0.1,0,Math.PI*2); lctx.stroke(); },
+    "🌸": function(w,h){ var f=frame(w,h); pen(w,h); var cx=f.cx,cy=f.cy,R=f.s*0.17;
+      for(var i=0;i<6;i++){ var a=i*Math.PI/3; lctx.beginPath(); lctx.arc(cx+Math.cos(a)*R*1.5,cy+Math.sin(a)*R*1.5,R,0,Math.PI*2); lctx.stroke(); }
+      lctx.beginPath(); lctx.arc(cx,cy,R*0.8,0,Math.PI*2); lctx.stroke(); },
+    "☀️": function(w,h){ var f=frame(w,h); pen(w,h); var cx=f.cx,cy=f.cy,R=f.s*0.22;
+      lctx.beginPath(); lctx.arc(cx,cy,R,0,Math.PI*2); lctx.stroke();
+      for(var i=0;i<12;i++){ var a=i*Math.PI/6; lctx.beginPath(); lctx.moveTo(cx+Math.cos(a)*R*1.35,cy+Math.sin(a)*R*1.35); lctx.lineTo(cx+Math.cos(a)*R*1.75,cy+Math.sin(a)*R*1.75); lctx.stroke(); } },
+    "🚗": function(w,h){ var f=frame(w,h); pen(w,h); var cx=f.cx,cy=f.cy,bw=f.s*0.7,bh=f.s*0.26,x=cx-bw/2,y=cy-bh/2;
+      lctx.beginPath();
+      lctx.moveTo(x,y+bh); lctx.lineTo(x,y+bh*0.3); lctx.lineTo(x+bw*0.22,y+bh*0.3);
+      lctx.lineTo(x+bw*0.34,y-bh*0.55); lctx.lineTo(x+bw*0.68,y-bh*0.55); lctx.lineTo(x+bw*0.8,y+bh*0.3);
+      lctx.lineTo(x+bw,y+bh*0.3); lctx.lineTo(x+bw,y+bh); lctx.closePath(); lctx.stroke();
+      lctx.beginPath(); lctx.arc(x+bw*0.27,y+bh,bh*0.42,0,Math.PI*2); lctx.stroke();
+      lctx.beginPath(); lctx.arc(x+bw*0.73,y+bh,bh*0.42,0,Math.PI*2); lctx.stroke(); },
+    "🎈": function(w,h){ var f=frame(w,h); pen(w,h); var cx=f.cx,cy=f.cy-f.s*0.08,R=f.s*0.26;
+      lctx.beginPath(); lctx.ellipse(cx,cy,R*0.82,R,0,0,Math.PI*2); lctx.stroke();
+      lctx.beginPath(); lctx.moveTo(cx,cy+R); lctx.lineTo(cx-R*0.12,cy+R*0.12+R); lctx.lineTo(cx+R*0.12,cy+R*0.12+R); lctx.closePath(); lctx.stroke();
+      lctx.beginPath(); lctx.moveTo(cx,cy+R*1.18); lctx.quadraticCurveTo(cx+R*0.5,cy+R*1.8,cx-R*0.2,cy+R*2.4); lctx.stroke(); }
+  };
+  var LETTERS = ["أ","ب","ت","ح","د","ر","س","م","ن","ه","و","ي"];
+  function drawLetter(ch){ return function(w,h){
+    var sz=Math.min(w,h)*0.72;
+    lctx.font="800 "+sz+"px 'Baloo Bhaijaan 2', sans-serif";
+    lctx.textAlign="center"; lctx.textBaseline="middle";
+    lctx.lineJoin="round"; lctx.strokeStyle="#111"; lctx.lineWidth=Math.max(6,sz*0.05);
+    lctx.strokeText(ch,w/2,h/2+sz*0.06);
+  };}
+
+  /* ---------- الطبقتان وتغيير الحجم ---------- */
+  function sizeCanvas(c){ var r=paint.getBoundingClientRect(); c.width=Math.round(r.width*dpr); c.height=Math.round(r.height*dpr); }
+  function redrawLines(){ lctx.clearRect(0,0,lines.width,lines.height); if(state.template) state.template(lines.width,lines.height); }
   function resize(){
-    var r = pad.getBoundingClientRect();
-    var snap = null;
-    try { snap = (pad.width>0) ? ctx.getImageData(0,0,pad.width,pad.height) : null; } catch(e){}
-    pad.width = Math.round(r.width*dpr);
-    pad.height = Math.round(r.height*dpr);
-    ctx.fillStyle = "#ffffff"; ctx.fillRect(0,0,pad.width,pad.height);
-    if (snap){ try { ctx.putImageData(snap,0,0); } catch(e){} }
-    ctx.lineCap="round"; ctx.lineJoin="round";
+    var snap=null; try{ snap=(paint.width>0)?pctx.getImageData(0,0,paint.width,paint.height):null; }catch(e){}
+    sizeCanvas(paint); sizeCanvas(lines);
+    pctx.fillStyle="#fff"; pctx.fillRect(0,0,paint.width,paint.height);
+    if(snap){ try{ pctx.putImageData(snap,0,0); }catch(e){} }
+    pctx.lineCap="round"; pctx.lineJoin="round";
+    redrawLines();
   }
 
-  // شريط الألوان
-  var sw = document.getElementById("swatches");
+  /* ---------- شريط الألوان ---------- */
+  var sw=document.getElementById("swatches");
   colors.forEach(function(c,i){
-    var b = document.createElement("button");
-    b.className = "sw" + (i===0?" on":"");
-    b.style.background = c;
-    b.setAttribute("role","radio");
-    b.setAttribute("aria-checked", i===0?"true":"false");
-    b.setAttribute("aria-label","لون");
-    b.addEventListener("pointerdown", function(){
-      state.color = c; state.erasing = false; setBrush(true);
+    var b=document.createElement("button");
+    b.className="sw"+(i===0?" on":""); b.style.background=c;
+    b.setAttribute("role","radio"); b.setAttribute("aria-checked",i===0?"true":"false"); b.setAttribute("aria-label","لون");
+    b.addEventListener("pointerdown",function(){
+      state.color=c; state.erasing=false; setBrush(true);
       [].forEach.call(sw.children,function(x){x.classList.remove("on");x.setAttribute("aria-checked","false");});
       b.classList.add("on"); b.setAttribute("aria-checked","true");
     });
     sw.appendChild(b);
   });
 
-  // الأحجام
-  [].forEach.call(document.querySelectorAll(".size"), function(s){
-    s.addEventListener("pointerdown", function(){
-      state.size = Number(s.dataset.size);
+  /* ---------- الأحجام ---------- */
+  [].forEach.call(document.querySelectorAll(".size"),function(s){
+    s.addEventListener("pointerdown",function(){
+      state.size=Number(s.dataset.size);
       document.querySelectorAll(".size").forEach(function(x){x.classList.remove("on");});
       s.classList.add("on");
     });
   });
 
-  var brushBtn = document.getElementById("brushBtn");
-  var eraserBtn = document.getElementById("eraserBtn");
-  function setBrush(on){
-    state.erasing = !on;
-    brushBtn.classList.toggle("on", on);
-    eraserBtn.classList.toggle("on", !on);
-  }
-  brushBtn.addEventListener("pointerdown", function(){ setBrush(true); });
-  eraserBtn.addEventListener("pointerdown", function(){ setBrush(false); });
-
-  document.getElementById("clearBtn").addEventListener("pointerdown", function(){
-    ctx.fillStyle="#ffffff"; ctx.fillRect(0,0,pad.width,pad.height);
+  /* ---------- القلم والممحاة ---------- */
+  var brushBtn=document.getElementById("brushBtn"), eraserBtn=document.getElementById("eraserBtn");
+  function setBrush(on){ state.erasing=!on; brushBtn.classList.toggle("on",on); eraserBtn.classList.toggle("on",!on); }
+  brushBtn.addEventListener("pointerdown",function(){ setBrush(true); });
+  eraserBtn.addEventListener("pointerdown",function(){ setBrush(false); });
+  document.getElementById("clearBtn").addEventListener("pointerdown",function(){
+    pctx.fillStyle="#fff"; pctx.fillRect(0,0,paint.width,paint.height);
   });
 
-  // الرسم باللمس والفأرة
-  var drawing=false, lastX=0, lastY=0;
-  function pos(e){
-    var r = pad.getBoundingClientRect();
-    return { x:(e.clientX-r.left)*dpr, y:(e.clientY-r.top)*dpr };
-  }
-  function dot(x,y){
-    ctx.beginPath();
-    ctx.fillStyle = state.erasing ? "#ffffff" : state.color;
-    ctx.arc(x,y,(state.size*dpr)/2,0,Math.PI*2); ctx.fill();
-  }
-  pad.addEventListener("pointerdown", function(e){
-    e.preventDefault(); drawing=true;
-    try{ pad.setPointerCapture(e.pointerId); }catch(_){}
-    var p=pos(e); lastX=p.x; lastY=p.y; dot(p.x,p.y);
-  });
-  pad.addEventListener("pointermove", function(e){
-    if(!drawing) return; e.preventDefault();
-    var evs = (e.getCoalescedEvents && e.getCoalescedEvents()) || [e];
-    for (var i=0;i<evs.length;i++){
-      var p = pos(evs[i]);
-      ctx.strokeStyle = state.erasing ? "#ffffff" : state.color;
-      ctx.lineWidth = state.size*dpr;
-      ctx.beginPath(); ctx.moveTo(lastX,lastY); ctx.lineTo(p.x,p.y); ctx.stroke();
-      lastX=p.x; lastY=p.y;
+  /* ---------- صندوق الرسمات ---------- */
+  var tray=document.getElementById("tray"), cats=document.getElementById("cats");
+  function setTemplate(fn){ state.template=fn; pctx.fillStyle="#fff"; pctx.fillRect(0,0,paint.width,paint.height); redrawLines(); }
+  function buildTray(cat){
+    tray.innerHTML="";
+    if(cat==="none"){ tray.hidden=true; setTemplate(null); return; }
+    tray.hidden=false;
+    if(cat==="pics"){
+      Object.keys(PICS).forEach(function(k){
+        var b=document.createElement("button"); b.className="pick"; b.textContent=k; b.setAttribute("aria-label","رسمة");
+        b.addEventListener("pointerdown",function(){ setTemplate(PICS[k]); }); tray.appendChild(b);
+      });
+    } else {
+      LETTERS.forEach(function(ch){
+        var b=document.createElement("button"); b.className="pick letter"; b.textContent=ch; b.setAttribute("aria-label","حرف "+ch);
+        b.addEventListener("pointerdown",function(){ setTemplate(drawLetter(ch)); }); tray.appendChild(b);
+      });
     }
+  }
+  [].forEach.call(cats.children,function(chip){
+    chip.addEventListener("pointerdown",function(){
+      [].forEach.call(cats.children,function(x){x.classList.remove("on");}); chip.classList.add("on");
+      buildTray(chip.dataset.cat);
+    });
+  });
+
+  /* ---------- الرسم ---------- */
+  var drawing=false,lastX=0,lastY=0;
+  function pos(e){ var r=paint.getBoundingClientRect(); return {x:(e.clientX-r.left)*dpr,y:(e.clientY-r.top)*dpr}; }
+  function dot(x,y){ pctx.beginPath(); pctx.fillStyle=state.erasing?"#fff":state.color; pctx.arc(x,y,(state.size*dpr)/2,0,Math.PI*2); pctx.fill(); }
+  paint.addEventListener("pointerdown",function(e){ e.preventDefault(); drawing=true; try{paint.setPointerCapture(e.pointerId);}catch(_){} var p=pos(e); lastX=p.x; lastY=p.y; dot(p.x,p.y); });
+  paint.addEventListener("pointermove",function(e){
+    if(!drawing) return; e.preventDefault();
+    var evs=(e.getCoalescedEvents&&e.getCoalescedEvents())||[e];
+    for(var i=0;i<evs.length;i++){ var p=pos(evs[i]);
+      pctx.strokeStyle=state.erasing?"#fff":state.color; pctx.lineWidth=state.size*dpr;
+      pctx.beginPath(); pctx.moveTo(lastX,lastY); pctx.lineTo(p.x,p.y); pctx.stroke(); lastX=p.x; lastY=p.y; }
   });
   function stop(){ drawing=false; }
-  pad.addEventListener("pointerup", stop);
-  pad.addEventListener("pointercancel", stop);
-  pad.addEventListener("pointerleave", stop);
+  paint.addEventListener("pointerup",stop); paint.addEventListener("pointercancel",stop); paint.addEventListener("pointerleave",stop);
 
-  window.addEventListener("resize", resize);
+  window.addEventListener("resize",resize);
   resize();
+  buildTray("pics");
+  if(document.fonts&&document.fonts.ready){ document.fonts.ready.then(redrawLines); }
 </script>
