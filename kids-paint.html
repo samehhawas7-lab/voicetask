@@ -100,6 +100,7 @@
 <div class="tray cats" id="cats" role="tablist" aria-label="نوع الرسمة">
   <button class="chip on" data-cat="pics">🎨 رسمات</button>
   <button class="chip" data-cat="letters">أ ب ت  حروف</button>
+  <button class="chip" data-cat="dino">🦕 ديناصورات</button>
   <button class="chip" data-cat="none" style="margin-inline-start:auto">بلا رسمة</button>
 </div>
 <div class="tray" id="tray" aria-label="اختر رسمة"></div>
@@ -268,11 +269,60 @@
     boat:function(b){ pen(b); var cx=b.cx,cy=b.cy,w=b.s*0.52;
       lctx.beginPath(); lctx.moveTo(cx-w/2,cy+b.s*0.12); lctx.lineTo(cx+w/2,cy+b.s*0.12); lctx.lineTo(cx+w*0.32,cy+b.s*0.32); lctx.lineTo(cx-w*0.32,cy+b.s*0.32); lctx.closePath(); lctx.stroke();
       lctx.beginPath(); lctx.moveTo(cx,cy+b.s*0.12); lctx.lineTo(cx,cy-b.s*0.32); lctx.stroke();
-      lctx.beginPath(); lctx.moveTo(cx,cy-b.s*0.32); lctx.lineTo(cx+w*0.4,cy); lctx.lineTo(cx,cy); lctx.closePath(); lctx.stroke(); }
+      lctx.beginPath(); lctx.moveTo(cx,cy-b.s*0.32); lctx.lineTo(cx+w*0.4,cy); lctx.lineTo(cx,cy); lctx.closePath(); lctx.stroke(); },
+    dinoNeck:function(b){ pen(b); var cx=b.cx,cy=b.cy,s=b.s;
+      lctx.beginPath();
+      lctx.moveTo(cx-s*0.36,cy+s*0.1);
+      lctx.quadraticCurveTo(cx-s*0.14,cy-s*0.04,cx+s*0.02,cy+s*0.0);
+      lctx.quadraticCurveTo(cx+s*0.26,cy-s*0.02,cx+s*0.3,cy-s*0.28);
+      lctx.quadraticCurveTo(cx+s*0.33,cy-s*0.42,cx+s*0.42,cy-s*0.36);
+      lctx.quadraticCurveTo(cx+s*0.48,cy-s*0.32,cx+s*0.42,cy-s*0.26);
+      lctx.quadraticCurveTo(cx+s*0.38,cy-s*0.24,cx+s*0.37,cy-s*0.27);
+      lctx.quadraticCurveTo(cx+s*0.2,cy-s*0.04,cx+s*0.12,cy+s*0.16);
+      lctx.quadraticCurveTo(cx-s*0.04,cy+s*0.28,cx-s*0.36,cy+s*0.1);
+      lctx.closePath(); lctx.stroke();
+      lctx.beginPath(); lctx.moveTo(cx-s*0.14,cy+s*0.2); lctx.lineTo(cx-s*0.14,cy+s*0.34); lctx.stroke();
+      lctx.beginPath(); lctx.moveTo(cx+s*0.04,cy+s*0.2); lctx.lineTo(cx+s*0.04,cy+s*0.34); lctx.stroke();
+      lctx.beginPath(); lctx.arc(cx+s*0.4,cy-s*0.32,s*0.015,0,Math.PI*2); lctx.stroke(); },
+    dinoRex:function(b){ pen(b); var cx=b.cx,cy=b.cy,s=b.s;
+      lctx.beginPath();
+      lctx.moveTo(cx-s*0.38,cy-s*0.04);
+      lctx.quadraticCurveTo(cx-s*0.12,cy-s*0.04,cx-s*0.02,cy-s*0.14);
+      lctx.quadraticCurveTo(cx+s*0.08,cy-s*0.32,cx+s*0.24,cy-s*0.32);
+      lctx.lineTo(cx+s*0.44,cy-s*0.28);
+      lctx.lineTo(cx+s*0.44,cy-s*0.17);
+      lctx.lineTo(cx+s*0.28,cy-s*0.15);
+      lctx.quadraticCurveTo(cx+s*0.2,cy-s*0.12,cx+s*0.17,cy+s*0.04);
+      lctx.quadraticCurveTo(cx+s*0.15,cy+s*0.22,cx+s*0.04,cy+s*0.26);
+      lctx.quadraticCurveTo(cx-s*0.08,cy+s*0.12,cx-s*0.38,cy-s*0.04);
+      lctx.closePath(); lctx.stroke();
+      lctx.beginPath(); lctx.moveTo(cx+s*0.05,cy+s*0.24); lctx.lineTo(cx+s*0.09,cy+s*0.36); lctx.lineTo(cx+s*0.18,cy+s*0.36); lctx.stroke();
+      lctx.beginPath(); lctx.moveTo(cx+s*0.18,cy+s*0.02); lctx.lineTo(cx+s*0.25,cy+s*0.08); lctx.stroke();
+      lctx.beginPath(); lctx.arc(cx+s*0.31,cy-s*0.23,s*0.016,0,Math.PI*2); lctx.stroke(); },
+    dinoStego:function(b){ pen(b); var cx=b.cx,cy=b.cy,s=b.s;
+      lctx.beginPath();
+      lctx.moveTo(cx-s*0.4,cy+s*0.04);
+      lctx.quadraticCurveTo(cx-s*0.12,cy-s*0.06,cx+s*0.1,cy-s*0.0);
+      lctx.quadraticCurveTo(cx+s*0.32,cy+s*0.02,cx+s*0.4,cy-s*0.02);
+      lctx.quadraticCurveTo(cx+s*0.44,cy+s*0.04,cx+s*0.38,cy+s*0.08);
+      lctx.quadraticCurveTo(cx+s*0.2,cy+s*0.14,cx+s*0.05,cy+s*0.18);
+      lctx.quadraticCurveTo(cx-s*0.1,cy+s*0.22,cx-s*0.4,cy+s*0.04);
+      lctx.closePath(); lctx.stroke();
+      function plate(x,top){ lctx.beginPath(); lctx.moveTo(cx+x*s-s*0.055,cy-s*0.04); lctx.lineTo(cx+x*s,top); lctx.lineTo(cx+x*s+s*0.055,cy-s*0.04); lctx.closePath(); lctx.stroke(); }
+      plate(-0.16,cy-s*0.24); plate(-0.03,cy-s*0.3); plate(0.1,cy-s*0.24);
+      lctx.beginPath(); lctx.moveTo(cx-s*0.1,cy+s*0.17); lctx.lineTo(cx-s*0.1,cy+s*0.31); lctx.stroke();
+      lctx.beginPath(); lctx.moveTo(cx+s*0.08,cy+s*0.16); lctx.lineTo(cx+s*0.08,cy+s*0.31); lctx.stroke();
+      lctx.beginPath(); lctx.arc(cx+s*0.37,cy-s*0.0,s*0.015,0,Math.PI*2); lctx.stroke(); },
+    dinoEgg:function(b){ pen(b); var cx=b.cx,cy=b.cy,s=b.s;
+      lctx.beginPath(); lctx.ellipse(cx,cy,s*0.22,s*0.3,0,0,Math.PI*2); lctx.stroke();
+      lctx.beginPath();
+      lctx.moveTo(cx-s*0.22,cy-s*0.02); lctx.lineTo(cx-s*0.1,cy+s*0.04); lctx.lineTo(cx-s*0.02,cy-s*0.04);
+      lctx.lineTo(cx+s*0.08,cy+s*0.05); lctx.lineTo(cx+s*0.22,cy-s*0.02); lctx.stroke(); }
   };
 
   /* قائمة الرسمات المرحة مع رموزها للأزرار */
   var PICLIST = [["star","⭐"],["heart","❤️"],["house","🏠"],["fish","🐟"],["flower","🌸"],["sun","☀️"],["car","🚗"],["balloon","🎈"]];
+  var DINOLIST = [["dinoNeck","🦕","ديناصور"],["dinoRex","🦖","تي-ركس"],["dinoStego","🦕","ستيجو"],["dinoEgg","🥚","بيضة"]];
   /* الحروف: كل حرف مع صورة تبدأ به وكلمتها */
   var ABC = [
     ["أ","rabbit","أرنب"],["ب","duck","بطة"],["ت","apple","تفاحة"],["ث","snake","ثعبان"],
@@ -362,6 +412,12 @@
       PICLIST.forEach(function(p){
         var b=document.createElement("button"); b.className="pick"; b.textContent=p[1]; b.setAttribute("aria-label","رسمة");
         b.addEventListener("pointerdown",function(){ setTemplate(picTemplate(p[0])); }); tray.appendChild(b);
+      });
+    } else if(cat==="dino"){
+      DINOLIST.forEach(function(d){
+        var b=document.createElement("button"); b.className="pick pair"; b.setAttribute("aria-label",d[2]);
+        b.innerHTML="<span>"+d[1]+"</span><small>"+d[2]+"</small>";
+        b.addEventListener("pointerdown",function(){ setTemplate(picTemplate(d[0])); }); tray.appendChild(b);
       });
     } else {
       ABC.forEach(function(it){
