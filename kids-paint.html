@@ -123,11 +123,30 @@
   var lines = document.getElementById("lines"), lctx = lines.getContext("2d");
   var state = { color:"#ff3b3b", size:16, erasing:false, template:null };
   var dpr = Math.max(1, Math.min(3, window.devicePixelRatio||1));
-  var EMOJI = "'Baloo Bhaijaan 2','Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji',sans-serif";
-
-  /* قوائم الصور: رموز تعبيرية واضحة وملوّنة */
-  var PICLIST = ["⭐","❤️","🌈","🏠","🌸","🌞","🚗","🎈","🍎","🦋","🐠","🐱","🐶","🚀","🌙","🍉"];
-  var DINOLIST = [["🦕","ديناصور"],["🦖","تي-ركس"],["🐊","تمساح"],["🥚","بيضة"]];
+  /* رسومات خطّية داخل مربّع 0..100 — خطوط سوداء فارغة يلوّنها الطفل */
+  var OUTLINES = {
+    star:"M50 8 L61 38 L93 38 L67 58 L77 90 L50 70 L23 90 L33 58 L7 38 L39 38 Z",
+    heart:"M50 86 C22 64 10 46 10 32 C10 18 20 10 31 10 C40 10 47 16 50 24 C53 16 60 10 69 10 C80 10 90 18 90 32 C90 46 78 64 50 86 Z",
+    flower:"M59 50 a11 11 0 1 0 22 0 a11 11 0 1 0 -22 0 M49 67.3 a11 11 0 1 0 22 0 a11 11 0 1 0 -22 0 M29 67.3 a11 11 0 1 0 22 0 a11 11 0 1 0 -22 0 M19 50 a11 11 0 1 0 22 0 a11 11 0 1 0 -22 0 M29 32.7 a11 11 0 1 0 22 0 a11 11 0 1 0 -22 0 M49 32.7 a11 11 0 1 0 22 0 a11 11 0 1 0 -22 0 M41 50 a9 9 0 1 0 18 0 a9 9 0 1 0 -18 0",
+    sun:"M32 50 a18 18 0 1 0 36 0 a18 18 0 1 0 -36 0 M50 6 L50 18 M50 82 L50 94 M6 50 L18 50 M82 50 L94 50 M20 20 L28 28 M72 72 L80 80 M80 20 L72 28 M28 72 L20 80",
+    apple:"M50 32 C41 22 22 24 22 44 C22 64 38 84 50 84 C62 84 78 64 78 44 C78 24 59 22 50 32 Z M50 32 L50 18 M50 22 C58 14 70 15 73 23 C66 30 55 29 50 22 Z",
+    fish:"M16 50 C30 34 60 34 78 50 C60 66 30 66 16 50 Z M78 50 L94 38 L94 62 Z M66 44 a2.5 2.5 0 1 0 0.1 0",
+    house:"M18 50 L50 22 L82 50 M26 46 L26 84 L74 84 L74 46 M44 84 L44 62 L58 62 L58 84 M34 54 L42 54 L42 62 L34 62 Z",
+    car:"M12 66 L20 48 L36 44 L44 34 L66 34 L74 48 L88 50 L88 66 Z M30 66 a8 8 0 1 0 0.1 0 M70 66 a8 8 0 1 0 0.1 0 M46 44 L46 34 M62 44 L66 44",
+    balloon:"M50 14 C33 14 27 34 34 48 C38 57 46 61 50 64 C54 61 62 57 66 48 C73 34 67 14 50 14 Z M50 64 L46 70 L54 70 Z M50 70 C57 78 43 84 50 92",
+    butterfly:"M50 28 L50 74 M50 34 C33 18 16 28 22 46 C16 58 32 68 50 52 M50 34 C67 18 84 28 78 46 C84 58 68 68 50 52 M50 30 L43 20 M50 30 L57 20",
+    tree:"M50 86 L50 56 M40 86 L60 86 M50 56 C28 56 22 36 38 30 C36 16 64 16 62 30 C78 36 72 56 50 56 Z",
+    cloud:"M30 68 C16 68 14 52 26 50 C26 36 46 32 50 44 C56 32 78 34 76 50 C88 50 88 68 74 68 Z",
+    moon:"M60 14 C42 18 30 32 30 50 C30 68 42 82 60 86 C50 78 44 66 44 50 C44 34 50 22 60 14 Z",
+    icecream:"M36 46 L50 88 L64 46 Z M33 46 a9 9 0 1 1 18 0 M40 42 a9 9 0 1 1 18 0 M31 42 a9 9 0 1 1 18 0",
+    dinoNeck:"M12 70 C24 60 38 62 48 64 C52 52 52 32 60 26 C64 22 74 22 76 30 C72 31 70 33 70 38 C70 54 64 64 56 70 C44 78 26 80 12 70 Z M26 74 L26 86 M48 72 L48 86 M62 72 L62 84",
+    dinoRex:"M10 54 C24 54 34 50 40 42 C44 30 54 26 66 26 L86 30 L86 42 L68 44 C62 46 60 54 58 60 C54 72 40 74 34 64 C26 70 16 64 10 54 Z M44 66 L48 82 L60 82 M60 44 L68 50 M30 36 a2 2 0 1 0 0.1 0",
+    croc:"M10 60 C26 54 44 54 60 57 C70 58 80 55 90 60 C82 67 70 65 60 65 C44 65 26 66 10 60 Z M20 60 L18 52 M30 59 L28 51 M66 62 L70 54 M78 61 L82 54 M82 58 a2 2 0 1 0 0.1 0",
+    dinoEgg:"M50 14 C33 14 30 46 30 58 C30 78 40 88 50 88 C60 88 70 78 70 58 C70 46 67 14 50 14 Z M34 50 L44 58 L50 48 L58 60 L66 50"
+  };
+  /* أزرار الصندوق: الاسم ورمزه التوضيحي */
+  var PICLIST = [["star","⭐"],["heart","❤️"],["flower","🌸"],["sun","🌞"],["apple","🍎"],["fish","🐟"],["house","🏠"],["car","🚗"],["balloon","🎈"],["butterfly","🦋"],["tree","🌳"],["cloud","☁️"],["moon","🌙"],["icecream","🍦"]];
+  var DINOLIST = [["dinoNeck","🦕","ديناصور"],["dinoRex","🦖","تي-ركس"],["croc","🐊","تمساح"],["dinoEgg","🥚","بيضة"]];
   /* الحروف: كل حرف مع صورةٍ تبدأ به وكلمتها */
   var ABC = [
     ["أ","🐰","أرنب"],["ب","🦆","بطة"],["ت","🍎","تفاحة"],["ث","🦊","ثعلب"],
@@ -140,32 +159,33 @@
   ];
 
   function accent(){ try{ return getComputedStyle(document.documentElement).getPropertyValue("--accent").trim()||"#ff7a3d"; }catch(e){ return "#ff7a3d"; } }
-  function stampEmoji(g,cx,cy,size){ pctx.font=size+"px "+EMOJI; pctx.textAlign="center"; pctx.textBaseline="middle"; pctx.fillText(g,cx,cy); }
-
-  /* ---------- رسم الطبقتين حسب نوع القالب ---------- */
+  /* ---------- رسم الطبقتين: الخطوط فوق، التلوين تحت ---------- */
   function clearPaint(){ pctx.fillStyle="#fff"; pctx.fillRect(0,0,paint.width,paint.height); }
-  function drawLetterOutline(ch){
-    var W=lines.width,H=lines.height, sz=Math.min(W,H*0.62)*0.8;
+  function drawOutline(name){
+    var d=OUTLINES[name]; if(!d) return;
+    var W=lines.width,H=lines.height, S=Math.min(W,H)*0.82, ox=(W-S)/2, oy=(H-S)/2;
+    lctx.save(); lctx.translate(ox,oy); lctx.scale(S/100,S/100);
+    lctx.strokeStyle="#111"; lctx.lineJoin="round"; lctx.lineCap="round"; lctx.lineWidth=280/S;
+    try{ lctx.stroke(new Path2D(d)); }catch(e){}
+    lctx.restore();
+  }
+  function drawLetterOutline(ch,word){
+    var W=lines.width,H=lines.height, sz=Math.min(W,H*0.6)*0.78;
+    lctx.strokeStyle="#111"; lctx.lineJoin="round";
     lctx.font="800 "+sz+"px 'Baloo Bhaijaan 2', sans-serif";
-    lctx.textAlign="center"; lctx.textBaseline="middle"; lctx.lineJoin="round";
-    lctx.strokeStyle="#111"; lctx.lineWidth=Math.max(6,sz*0.05);
-    lctx.strokeText(ch, W/2, H*0.36);
+    lctx.textAlign="center"; lctx.textBaseline="middle"; lctx.lineWidth=Math.max(6,sz*0.05);
+    lctx.strokeText(ch, W/2, H*0.42);
+    if(word){ var fs=Math.max(18,Math.min(W,H)*0.08);
+      lctx.font="800 "+fs+"px 'Baloo Bhaijaan 2',sans-serif";
+      lctx.fillStyle=accent(); lctx.textBaseline="alphabetic"; lctx.fillText(ch+" … "+word, W/2, H*0.93); }
   }
-  function redrawLines(){ lctx.clearRect(0,0,lines.width,lines.height); var t=state.template; if(t&&t.t==="letter") drawLetterOutline(t.ch); }
-  function renderTemplate(){
-    clearPaint(); lctx.clearRect(0,0,lines.width,lines.height);
+  function redrawLines(){
+    lctx.clearRect(0,0,lines.width,lines.height);
     var t=state.template; if(!t) return;
-    var W=paint.width,H=paint.height,m=Math.min(W,H);
-    if(t.t==="pic"){
-      stampEmoji(t.g, W/2, H/2, m*0.52);
-    } else if(t.t==="letter"){
-      drawLetterOutline(t.ch);
-      stampEmoji(t.g, W/2, H*0.76, m*0.26);
-      var fs=Math.max(18,m*0.07);
-      pctx.font="800 "+fs+"px "+EMOJI; pctx.textAlign="center"; pctx.textBaseline="alphabetic";
-      pctx.fillStyle=accent(); pctx.fillText(t.ch+" … "+t.word, W/2, H*0.965);
-    }
+    if(t.t==="pic") drawOutline(t.name);
+    else if(t.t==="letter") drawLetterOutline(t.ch,t.word);
   }
+  function renderTemplate(){ clearPaint(); redrawLines(); }
   function setTemplate(t){ state.template=t; renderTemplate(); }
 
   /* ---------- الطبقتان وتغيير الحجم ---------- */
@@ -216,21 +236,21 @@
     if(cat==="none"){ tray.hidden=true; setTemplate(null); return; }
     tray.hidden=false;
     if(cat==="pics"){
-      PICLIST.forEach(function(g){
-        var b=document.createElement("button"); b.className="pick"; b.textContent=g; b.setAttribute("aria-label","رسمة");
-        b.addEventListener("pointerdown",function(){ setTemplate({t:"pic",g:g}); }); tray.appendChild(b);
+      PICLIST.forEach(function(p){
+        var b=document.createElement("button"); b.className="pick"; b.textContent=p[1]; b.setAttribute("aria-label","رسمة");
+        b.addEventListener("pointerdown",function(){ setTemplate({t:"pic",name:p[0]}); }); tray.appendChild(b);
       });
     } else if(cat==="dino"){
       DINOLIST.forEach(function(d){
-        var b=document.createElement("button"); b.className="pick pair"; b.setAttribute("aria-label",d[1]);
-        b.innerHTML="<span>"+d[0]+"</span><small>"+d[1]+"</small>";
-        b.addEventListener("pointerdown",function(){ setTemplate({t:"pic",g:d[0]}); }); tray.appendChild(b);
+        var b=document.createElement("button"); b.className="pick pair"; b.setAttribute("aria-label",d[2]);
+        b.innerHTML="<span>"+d[1]+"</span><small>"+d[2]+"</small>";
+        b.addEventListener("pointerdown",function(){ setTemplate({t:"pic",name:d[0]}); }); tray.appendChild(b);
       });
     } else {
       ABC.forEach(function(it){
         var b=document.createElement("button"); b.className="pick pair"; b.setAttribute("aria-label","حرف "+it[0]+" "+it[2]);
         b.innerHTML="<span>"+it[0]+"</span><small>"+it[2]+"</small>";
-        b.addEventListener("pointerdown",function(){ setTemplate({t:"letter",ch:it[0],g:it[1],word:it[2]}); }); tray.appendChild(b);
+        b.addEventListener("pointerdown",function(){ setTemplate({t:"letter",ch:it[0],word:it[2]}); }); tray.appendChild(b);
       });
     }
   }
