@@ -799,6 +799,7 @@ input::placeholder{color:#5c6579}
           <button class="btn ghost" data-nfx="en">الظاهر: a b c</button>
         </div>
         <div class="nfx-row" id="nfxReset" hidden>
+          <button class="btn ghost" data-nfx="switch" id="nfxSwitch">تبديل اللغة</button>
           <button class="btn ghost" data-nfx="reset">إعادة ضبط موضع المؤشر</button>
         </div>
       </div>
@@ -2198,6 +2199,7 @@ const NFX_GRID = {
   ar: ["ابتثجح", "خدذرزس", "شصضطظع", "غفقكلم", "نهةويى", "ء01234", "56789"],
   en: ["fedcba", "lkjihg", "rqponm", "xwvuts", "4321zy", "098765"]
 };
+const NFX_SWITCH = "\u21C4";
 const NFX_FOLD = { "أ":"ا", "إ":"ا", "آ":"ا", "ٱ":"ا", "ؤ":"و", "ئ":"ي", "ک":"ك", "ی":"ي" };
 
 function nfxNormalize(text){
@@ -2241,6 +2243,12 @@ function nfxPlan(text, state){
   const goToggle = () => { if (pos !== "toggle"){ goTo(0, 0); mv("UP", 1); pos = "toggle"; } };
 
   for (const ch of nfxNormalize(text)){
+    if (ch === NFX_SWITCH){               // طلبٌ صريح بتبديل اللغة
+      goToggle();
+      steps.push({ btn: "ENTER", kind: "toggle" });
+      layout = layout === "ar" ? "en" : "ar";
+      continue;
+    }
     if (ch === " "){
       goToggle();
       mv("LEFT", 1); steps.push({ btn: "ENTER", kind: "enter" }); mv("RIGHT", 1);
@@ -2290,8 +2298,10 @@ const nfx = {
     $("nfxSync").hidden = !!this.state || this.typing;
     $("nfxReset").hidden = !this.state || this.typing;
     $("sendTextBtn").textContent = this.typing ? "إيقاف" : "إرسال";
+    if (this.state) $("nfxSwitch").textContent =
+      this.state.layout === "ar" ? "بدّل إلى a b c" : "بدّل إلى أ ب ت";
     $("nfxMsg").innerHTML = msg || (this.state
-      ? "<b>نتفلكس جاهز.</b> اكتب واضغط «إرسال» والريموت يختار الحروف من لوحة نتفلكس. لا تحرّك المؤشّر أثناء الكتابة."
+      ? "<b>نتفلكس جاهز — اللوحة " + (this.state.layout === "ar" ? "عربية" : "إنجليزية") + ".</b> اكتب واضغط «إرسال» والريموت يختار الحروف من لوحة نتفلكس. لا تحرّك المؤشّر أثناء الكتابة."
       : "<b>الكتابة في نتفلكس:</b> افتح البحث، وضع المؤشّر على <b>زرّ تبديل اللغة</b> " +
         "(أعلى يمين لوحة الحروف)، ثم اختر ما تراه مكتوباً على حروف اللوحة:");
   },
@@ -2890,6 +2900,7 @@ function bind(){
     el.onclick = () => {
       buzz();
       const v = el.dataset.nfx;
+      if (v === "switch"){ if (nfx.state && !nfx.typing) nfx.type(NFX_SWITCH); return; }
       nfx.state = v === "reset" ? null : { layout: v, pos: "toggle" };
       nfx.render();
     };
