@@ -165,7 +165,9 @@ const RELAY_DOC =
   'else if(m.op==="close"){if(socks[m.id])try{socks[m.id].close()}catch(e){}}' +
   '});post({ev:"ready"});})()<\/script>';
 
-const relay = {
+// kind: "sandbox" إطارٌ معزول (الأصل)، أو "data" إطارٌ من رابط data: —
+// كلاهما أصلُه معتم، والثاني بديلٌ حيث يُحرَم المعزولُ من الشبكة المحلية.
+const makeRelay = (kind) => ({
   frame: null,
   ready: null,
   sockets: new Map(),
@@ -175,14 +177,18 @@ const relay = {
     if (this.ready) return this.ready;
     this.ready = new Promise((resolve, reject) => {
       const frame = document.createElement("iframe");
-      frame.setAttribute("sandbox", "allow-scripts"); // بلا allow-same-origin ⇒ أصل معتم
       frame.style.display = "none";
-      frame.srcdoc = RELAY_DOC;
+      if (kind === "data"){
+        frame.src = "data:text/html;charset=utf-8," + encodeURIComponent(RELAY_DOC);
+      } else {
+        frame.setAttribute("sandbox", "allow-scripts"); // بلا allow-same-origin ⇒ أصل معتم
+        frame.srcdoc = RELAY_DOC;
+      }
 
       const onMsg = (ev) => {
         if (ev.source !== frame.contentWindow) return;
         let m; try { m = JSON.parse(ev.data); } catch { return; }
-        if (m.ev === "ready"){ diag("جسر المقابس جاهز (أصل معتم)"); return resolve(); }
+        if (m.ev === "ready"){ diag("جسر المقابس جاهز (أصل معتم" + (kind === "data" ? " — إطار data" : "") + ")"); return resolve(); }
         const sock = this.sockets.get(m.id);
         if (sock) sock._handle(m);
       };
@@ -200,18 +206,22 @@ const relay = {
       this.frame.contentWindow.postMessage(JSON.stringify(msg), "*");
     }
   }
-};
+});
+const relay = makeRelay("sandbox");
+const relayData = makeRelay("data");
 
 // واجهة مطابقة لـ WebSocket، لكن الاتصال الفعلي يجري داخل الإطار
 class RelaySocket {
-  constructor(url){
+  constructor(url, mode){
     this.url = url;
     this.readyState = 0;
     this.onopen = this.onmessage = this.onclose = this.onerror = null;
-    this._id = "s" + (++relay.seq);
-    relay.sockets.set(this._id, this);
-    if (typeof window.__TV_PROXY__ !== "undefined"){
-      // خلف الخادم نفتح المقبس مباشرة — الخادم هو من يخاطب التلفزيون
+    const rl = this._relay = (mode === "data") ? relayData : relay;
+    this._id = "s" + (++rl.seq);
+    rl.sockets.set(this._id, this);
+    if (mode === "direct" || typeof window.__TV_PROXY__ !== "undefined"){
+      // خلف الخادم نفتح المقبس مباشرة — الخادم هو من يخاطب التلفزيون.
+      // وكذلك «الطريق المباشر»: بديلٌ حين يعجز الإطار المعزول عن الوصول
       this._direct = new WebSocket(url);
       this._direct.onopen    = () => this._handle({ ev: "open" });
       this._direct.onmessage = (e) => this._handle({ ev: "message", data: String(e.data) });
@@ -219,8 +229,8 @@ class RelaySocket {
       this._direct.onclose   = (e) => this._handle({ ev: "close", code: e.code, reason: e.reason });
       return;
     }
-    relay.init().then(
-      () => relay.post({ id: this._id, op: "open", url }),
+    rl.init().then(
+      () => rl.post({ id: this._id, op: "open", url }),
       (e) => this._handle({ ev: "close", code: 0, reason: e.message })
     );
   }
@@ -235,21 +245,21 @@ class RelaySocket {
       if (this.onerror) this.onerror();
     } else if (m.ev === "close"){
       this.readyState = 3;
-      relay.sockets.delete(this._id);
+      this._relay.sockets.delete(this._id);
       if (this.onclose) this.onclose({ code: m.code, reason: m.reason });
     }
   }
 
   send(data){
     if (this._direct) return this._direct.send(data);
-    relay.post({ id: this._id, op: "send", data });
+    this._relay.post({ id: this._id, op: "send", data });
   }
 
   close(){
     if (this._direct){ try { this._direct.close(); } catch {} }
-    else relay.post({ id: this._id, op: "close" });
+    else this._relay.post({ id: this._id, op: "close" });
     this.readyState = 3;
-    relay.sockets.delete(this._id);
+    this._relay.sockets.delete(this._id);
   }
 }
 
@@ -300,13 +310,26 @@ class WebOSRemote {
     diag("الصفحة مفتوحة عبر: " + location.protocol);
     diag("سيتم تجربة: " + urls.join("  ثم  "));
 
-    for (let i = 0; i < urls.length; i++){
-      const url = urls[i];
-      this._set("connecting", "جاري التجربة " + (i+1) + " من " + urls.length + "…");
-      diag("→ " + url);
+    // صفحةٌ على موقعٍ غير التلفزيون (التطبيق المثبَّت من Vercel): قد يعجز
+    // الإطار المعزول عن بلوغ الشبكة المحلية، فنجرّب بعده مقبساً مباشراً
+    // من الصفحة نفسها، ونفحص الوصول أولاً ليُعرف موضع العلّة من السجلّ.
+    const foreign = !this.viaServer && location.hostname !== ip;
+    const tries = [];
+    urls.forEach(u => {
+      tries.push({ url: u, mode: false });
+      if (foreign){ tries.push({ url: u, mode: "data" }); tries.push({ url: u, mode: "direct" }); }
+    });
+    if (foreign && location.protocol === "https:") await this._probe(ip);
+
+    for (let i = 0; i < tries.length; i++){
+      const url = tries[i].url;
+      this._directMode = tries[i].mode;
+      this._set("connecting", "جاري التجربة " + (i+1) + " من " + tries.length + "…");
+      diag("→ " + url + (!foreign ? "" : tries[i].mode === "direct" ? "  (مباشر من الصفحة)"
+           : tries[i].mode === "data" ? "  (عبر إطار data)" : "  (عبر الإطار المعزول)"));
       try {
         await this._open(url);
-        diag("✓ نجح الاتصال");
+        diag("✓ نجح الاتصال" + (tries[i].mode ? " بالطريق البديل: " + tries[i].mode : ""));
         return;
       } catch (e) {
         lastError = e;
@@ -319,10 +342,28 @@ class WebOSRemote {
   }
 
 
+  // فحصٌ تشخيصيّ: هل تبلغ هذه الصفحةُ التلفزيونَ أصلاً، وكم يستغرق الجواب؟
+  async _probe(ip){
+    const t0 = Date.now();
+    const took = () => (Date.now() - t0) + "ms";
+    try {
+      const ctl = new AbortController();
+      const timer = setTimeout(() => ctl.abort(), 4000);
+      await fetch("https://" + ip + ":3001/", { mode: "no-cors", cache: "no-store", signal: ctl.signal });
+      clearTimeout(timer);
+      diag("فحص الوصول: التلفزيون ردّ على HTTPS (" + took() + ") — الشهادة مقبولة والشبكة مفتوحة");
+    } catch (e){
+      diag("فحص الوصول: فشل بعد " + took() + " — " + (e && e.name) + ": " + (e && e.message));
+      diag(Date.now() - t0 >= 3900
+        ? "   (بلا جواب: التلفزيون مطفأ، أو المتصفح يحجب الشبكة المحلية عن هذا الموقع)"
+        : "   (رفضٌ سريع: غالباً شهادة التلفزيون غير مقبولة في هذا السياق)");
+    }
+  }
+
   _open(url){
     return new Promise((resolve, reject) => {
       let ws;
-      try { ws = new RelaySocket(url); } catch (e) { return reject(new Error("رابط غير صالح")); }
+      try { ws = new RelaySocket(url, this._directMode); } catch (e) { return reject(new Error("رابط غير صالح")); }
 
       // خلف الخادم نُمهله قليلاً: هو يفحص التلفزيون ويغلق القناة بسببٍ
       // مفهوم — «التلفزيون مطفأ» — وكانت المهلة القصيرة تسبقه، فيرى
@@ -571,7 +612,7 @@ class WebOSRemote {
       diag("محاولة قناة الأزرار " + (i+1) + "/" + candidates.length + ": " + url);
       let settled = false, openedAt = 0;
       try {
-        const ws = new RelaySocket(url);
+        const ws = new RelaySocket(url, this._directMode);
         ws.onopen = () => {
           settled = true;
           openedAt = Date.now();
@@ -1539,6 +1580,7 @@ diag("WebSocket متوفر: " + (typeof WebSocket !== "undefined" ? "نعم" : "
 try { localStorage.setItem("__t","1"); localStorage.removeItem("__t"); diag("التخزين المحلي: يعمل"); }
 catch { diag("التخزين المحلي: محظور ← بيطلب الإقران كل مرة"); }
 diag("المتصفح: " + navigator.userAgent);
+diag("وضع الفتح: " + (navigator.standalone ? "تطبيق مثبَّت على الشاشة الرئيسية" : "داخل المتصفح"));
 
 /**
  * نسخٌ يعمل على http.
