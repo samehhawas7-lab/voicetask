@@ -357,6 +357,12 @@ body{display:flex;flex-direction:column;height:100dvh;overflow:hidden;
 .numpad .key{height:60px;font-size:21px}
 .typing{display:flex;gap:8px;align-items:center;margin-bottom:12px}
 .typing input{flex:1;min-width:0}
+/* كتابة نتفلكس: شريطٌ يظهر تحت خانة الكتابة ما دام نتفلكس في الواجهة */
+.nfx{background:var(--surface);border:1px solid var(--line);border-radius:12px;
+  padding:10px 12px;margin:-4px 0 12px;font-size:12.5px;line-height:1.8;color:var(--muted)}
+.nfx b{color:var(--text)}
+.nfx-row{display:flex;gap:8px;margin-top:8px}
+.nfx-row .btn{flex:1;padding:10px 8px;font-size:13px}
 
 /* ---------- الإعداد ---------- */
 .setup{padding:20px 16px;overflow-y:auto;flex:1}
@@ -785,6 +791,16 @@ input::placeholder{color:#5c6579}
       <div class="typing">
         <input id="textInput" type="text" placeholder="اكتب بالعربي أو الإنجليزي…" autocomplete="off">
         <button class="btn" id="sendTextBtn">إرسال</button>
+      </div>
+      <div class="nfx" id="nfxBar" hidden>
+        <div id="nfxMsg"></div>
+        <div class="nfx-row" id="nfxSync">
+          <button class="btn ghost" data-nfx="ar">الظاهر: أ ب ت</button>
+          <button class="btn ghost" data-nfx="en">الظاهر: a b c</button>
+        </div>
+        <div class="nfx-row" id="nfxReset" hidden>
+          <button class="btn ghost" data-nfx="reset">إعادة ضبط موضع المؤشر</button>
+        </div>
       </div>
       <div class="numpad">
         <button class="key" data-btn="1">1</button>
@@ -2171,11 +2187,155 @@ tv.onVolume = (p) => {
   $("volLabel").innerHTML = '<span class="vol-badge">' + (muted ? "مكتوم" : p.volume) + '</span>';
 };
 
+// ============================================================
+// الكتابة في نتفلكس
+// نتفلكس يرسم لوحة حروفه بنفسه ويتجاهل لوحة النظام، فلا يصله insertText.
+// الحلّ: نمشي على لوحته بالأسهم ونضغط OK على كل حرف، كما تفعل اليد.
+// الإحداثيات: العمود ٠ هو أقصى اليمين على الشاشة، والصفّ ٠ أوّل صفّ حروف.
+// فوق الحروف ثلاثة أزرار عريضة: التبديل (يمين) ثم المسافة ثم المسح.
+// ============================================================
+const NFX_GRID = {
+  ar: ["ابتثجح", "خدذرزس", "شصضطظع", "غفقكلم", "نهةويى", "ء01234", "56789"],
+  en: ["fedcba", "lkjihg", "rqponm", "xwvuts", "4321zy", "098765"]
+};
+const NFX_FOLD = { "أ":"ا", "إ":"ا", "آ":"ا", "ٱ":"ا", "ؤ":"و", "ئ":"ي", "ک":"ك", "ی":"ي" };
+
+function nfxNormalize(text){
+  return String(text).toLowerCase()
+    .replace(/[ً-ْٰـ]/g, "")                       // التشكيل والتطويل
+    .replace(/[٠-٩]/g, d => String(d.charCodeAt(0) - 0x0660))
+    .replace(/[۰-۹]/g, d => String(d.charCodeAt(0) - 0x06F0))
+    .replace(/[أإآٱؤئکی]/g, c => NFX_FOLD[c])
+    .replace(/\s+/g, " ");
+}
+function nfxFind(layout, ch){
+  const rows = NFX_GRID[layout];
+  for (let r = 0; r < rows.length; r++){
+    const c = rows[r].indexOf(ch);
+    if (c >= 0) return { r, c };
+  }
+  return null;
+}
+
+// يحوّل نصاً إلى سلسلة أزرار. state = { layout:"ar"|"en", pos:"toggle"|{r,c} }
+// يرجّع { steps:[{btn,kind}], state, skipped } — دالّة صِرفة ليسهل اختبارها.
+function nfxPlan(text, state){
+  let layout = state.layout;
+  let pos = state.pos === "toggle" ? "toggle" : { r: state.pos.r, c: state.pos.c };
+  const steps = [], skipped = [];
+  const mv = (btn, n) => { for (let i = 0; i < n; i++) steps.push({ btn, kind: "move" }); };
+
+  // من زرّ التبديل إلى أوّل حرف: نزلةٌ ثم يمين. اليمين يحسم الحالة لو نزل
+  // المؤشّر على العمود المجاور، وهو عند الحافّة لا يفعل شيئاً.
+  const enterGrid = () => { mv("DOWN", 1); mv("RIGHT", 1); pos = { r: 0, c: 0 }; };
+  const goTo = (r, c) => {
+    if (pos === "toggle") enterGrid();
+    const dc = c - pos.c, dr = r - pos.r;
+    const horiz = () => mv(dc > 0 ? "LEFT" : "RIGHT", Math.abs(dc));
+    const vert  = () => mv(dr > 0 ? "DOWN" : "UP", Math.abs(dr));
+    // الصفّ الأخير في العربية ناقصٌ خانة، فلا نمرّ بالعمود الناقص أبداً
+    const shortRow = NFX_GRID[layout][pos.r].length < 6;
+    if (shortRow){ vert(); horiz(); } else { horiz(); vert(); }
+    pos = { r, c };
+  };
+  const goToggle = () => { if (pos !== "toggle"){ goTo(0, 0); mv("UP", 1); pos = "toggle"; } };
+
+  for (const ch of nfxNormalize(text)){
+    if (ch === " "){
+      goToggle();
+      mv("LEFT", 1); steps.push({ btn: "ENTER", kind: "enter" }); mv("RIGHT", 1);
+      continue;
+    }
+    let at = nfxFind(layout, ch);
+    if (!at){
+      const other = layout === "ar" ? "en" : "ar";
+      if (!nfxFind(other, ch)){ skipped.push(ch); continue; }
+      goToggle();
+      steps.push({ btn: "ENTER", kind: "toggle" });
+      layout = other;
+      at = nfxFind(layout, ch);
+    }
+    goTo(at.r, at.c);
+    steps.push({ btn: "ENTER", kind: "enter" });
+  }
+  return { steps, state: { layout, pos }, skipped };
+}
+
+const NFX_DELAY = { move: 180, enter: 320, toggle: 750 };
+
+const nfx = {
+  active: false,      // نتفلكس في الواجهة؟
+  pointerOk: true,    // قناة الأزرار مفتوحة؟ بدونها لا أسهم ولا كتابة هنا
+  state: null,        // null = موضع المؤشّر غير معروف
+  typing: false,
+  abort: false,
+
+  setApp(appId){
+    const on = /netflix/i.test(appId || "");
+    if (on !== this.active){ this.active = on; this.state = null; }
+    this.render();
+  },
+  unsync(){ if (this.state){ this.state = null; this.render(); } },
+  render(msg){
+    const bar = $("nfxBar");
+    if (!bar) return;
+    bar.hidden = !this.active;
+    if (!this.active) return;
+    if (!this.pointerOk){
+      $("nfxSync").hidden = $("nfxReset").hidden = true;
+      $("nfxMsg").innerHTML = "<b>الكتابة في نتفلكس غير متاحة:</b> نتفلكس لا يقبل النصّ إلا " +
+        "باختيار الحروف بالأسهم، وأزرار التنقّل معطّلة في هذا الاتصال.";
+      return;
+    }
+    $("nfxSync").hidden = !!this.state || this.typing;
+    $("nfxReset").hidden = !this.state || this.typing;
+    $("sendTextBtn").textContent = this.typing ? "إيقاف" : "إرسال";
+    $("nfxMsg").innerHTML = msg || (this.state
+      ? "<b>نتفلكس جاهز.</b> اكتب واضغط «إرسال» والريموت يختار الحروف من لوحة نتفلكس. لا تحرّك المؤشّر أثناء الكتابة."
+      : "<b>الكتابة في نتفلكس:</b> افتح البحث، وضع المؤشّر على <b>زرّ تبديل اللغة</b> " +
+        "(أعلى يمين لوحة الحروف)، ثم اختر ما تراه مكتوباً على حروف اللوحة:");
+  },
+  async type(text){
+    const plan = nfxPlan(text, this.state);
+    if (!plan.steps.length){ toast("لا حروف تُكتب في لوحة نتفلكس", true); return false; }
+    this.typing = true; this.abort = false;
+    try {
+      for (let i = 0; i < plan.steps.length; i++){
+        if (this.abort || !this.active) throw new Error("أُوقفت الكتابة");
+        const st = plan.steps[i];
+        tv.button(st.btn);
+        if (i % 4 === 0) this.render("يكتب في نتفلكس… " + Math.round(100 * i / plan.steps.length) + "٪");
+        await new Promise(r => setTimeout(r, NFX_DELAY[st.kind]));
+      }
+      this.state = plan.state;
+      if (plan.skipped.length) toast("رموز ليست في لوحة نتفلكس: " + plan.skipped.join(" "), true);
+      return true;
+    } catch (e){
+      this.state = null;              // انقطعنا في منتصف الطريق: الموضع لم يعد معروفاً
+      toast(e.message, true);
+      return false;
+    } finally {
+      this.typing = false;
+      this.render();
+    }
+  }
+};
+
+// أيّ زرّ تنقّل يضغطه المستخدم بيده يُضيّع علينا موضع المؤشّر
+{
+  const raw = tv.button.bind(tv);
+  tv.button = (name) => {
+    if (!nfx.typing && !/^(VOLUME|MUTE|CHANNEL)/.test(name)) nfx.unsync();
+    return raw(name);
+  };
+}
+
 tv.onApp = (appId) => {
   // نُبرز التطبيق الشغّال حالياً في شبكة التطبيقات بدل شريط منفصل
   document.querySelectorAll(".app").forEach(el => {
     el.style.borderColor = (el.dataset.appId === appId) ? "var(--accent)" : "";
   });
+  nfx.setApp(appId);
 };
 
 let installedApps = [];
@@ -2327,6 +2487,7 @@ tv.onApps = (points) => {
 tv.onPointer = (ok, reason) => {
   const bar = $("padWarn");
   bar.hidden = !!ok;
+  nfx.pointerOk = !!ok; nfx.render();
 
   // ما لا يعمل يجب أن يبدو معطّلاً، لا أن يوهم المستخدم بأنه صالح
   document.querySelectorAll("[data-btn]").forEach(el => el.classList.toggle("blocked", !ok));
@@ -2549,7 +2710,7 @@ function setupTouchpad(){
   const end = (e) => {
     if (!last) return;
     pad.classList.remove("active");
-    if (moved < 8){ buzz(); send("type:click\n\n"); }  // نقرة قصيرة = اختيار
+    if (moved < 8){ buzz(); nfx.unsync(); send("type:click\n\n"); }  // نقرة قصيرة = اختيار
     last = null;
     try { pad.releasePointerCapture(e.pointerId); } catch {}
   };
@@ -2713,11 +2874,26 @@ function bind(){
   $("sendTextBtn").onclick = () => {
     const input = $("textInput");
     const text = input.value;
+    if (nfx.typing){ nfx.abort = true; return; }
     if (!text) return;
+    if (nfx.active){
+      if (!nfx.pointerOk) return toast("أزرار التنقّل معطّلة، فلا كتابة في نتفلكس", true);
+      if (!nfx.state) return toast("حدّد موضع المؤشّر أولاً — انظر التعليمات تحت خانة الكتابة", true);
+      nfx.type(text).then(ok => { if (ok) input.value = ""; });
+      return;
+    }
     tv.request(SSAP.insert, { text: text, replace: false })
       .then(() => { input.value = ""; })
       .catch(e => toast(e.message, true));
   };
+  document.querySelectorAll("[data-nfx]").forEach(el => {
+    el.onclick = () => {
+      buzz();
+      const v = el.dataset.nfx;
+      nfx.state = v === "reset" ? null : { layout: v, pos: "toggle" };
+      nfx.render();
+    };
+  });
   $("textInput").addEventListener("keydown", e => {
     if (e.key === "Enter"){ e.preventDefault(); $("sendTextBtn").click(); }
   });
